@@ -94,6 +94,7 @@ add_library(app_services STATIC
     src/services/mock_services.cpp
     src/services/sqlite_account_service.cpp
     src/services/sqlite_backup_service.cpp
+    src/services/sqlite_report_service.cpp
     src/services/sqlite_catalog_service.cpp
     src/services/sqlite_inventory_service.cpp
     src/services/sqlite_shift_service.cpp
@@ -103,6 +104,7 @@ add_library(app_services STATIC
     include/app/services/mock_services.hpp
     include/app/services/sqlite_account_service.hpp
     include/app/services/sqlite_backup_service.hpp
+    include/app/services/sqlite_report_service.hpp
     include/app/services/sqlite_catalog_service.hpp
     include/app/services/sqlite_inventory_service.hpp
     include/app/services/sqlite_shift_service.hpp
