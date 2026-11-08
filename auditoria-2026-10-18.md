@@ -192,3 +192,43 @@ Desempeño: arranque lento (unos 7 min compilando y corriendo CTest sin cambios,
 - Verificación del conjunto: build sin advertencias, CTest **4/4** en Release y Debug (incluye BackupTest) y **`tests/test_i1_integration.py` aprobado con el ejecutable real**, que cierra el pendiente de B1 por el cambio en `main_app.cpp`.
 - `99b773a`: `.gitattributes` con `eol=lf`; solo los documentos tenían CRLF, sin cambios de contenido.
 - La copia del backend queda en la rama `backend/b2`, partiendo de `main`.
+
+---
+
+## Ronda 2 con caveman: B2, F1b e integración — 2026-11-08
+
+### B2 (Claude Code Terminal, opusplan, caveman)
+
+Plan revisado y aprobado con un cambio de fondo: pagos atribuidos al día de su venta (JOIN a `sales`), pagos huérfanos fuera del resumen; `payments_total` aprobado para que la interfaz no sume importes. Commit `e903633`.
+
+Verificación propia: build sin advertencias y CTest 5/5 en Release y Debug (ReportsTest 1.23 s / 6.43 s). Diff de 31 líneas en archivos existentes más 3 nuevos; consultas por rango y JOIN; permiso antes de validar la fecha; sin `float`, `double` ni `SUM()`. **Aceptado.**
+
+Límites declarados: sin anulaciones en el esquema (toda venta cuenta), horario de verano no manejado, solo resumen diario, rendimiento sin medir.
+
+### F1b (AntiGravity, Gemini 3.8 Flash, caveman)
+
+Commit `7aed41a`. Empezó a editar sin compilar antes, tal como pide la memoria operativa de `AGENTS.md`. Corrigió el panel (no la prueba) ante cada fallo de la prueba estricta. **Aceptado con observaciones menores.**
+
+Correcto: Cajero con permisos editables y nombre, descripción y Eliminar bloqueados; Dueño en solo lectura; columnas Nombre, Sistema y Permisos completas sin barra horizontal; casillas en una línea con el texto completo (capturas 09 y 10). La prueba se reforzó (`LVM_GETCOLUMNWIDTH`, `WS_HSCROLL`, casillas, Cajero y Dueño).
+
+Observaciones:
+- El encabezado de la columna Descripción se ve recortado («Descripci…») aunque la prueba dice exigir encabezado más 8 px; probablemente lo mide con la fuente de la lista, no con la del encabezado. Sobran unos 25 px a la derecha de la lista.
+- La persistencia del Cajero se verifica leyendo SQLite tras guardar, no cerrando y reabriendo la app como se pidió.
+- La alineación del glifo solo se comprueba en etiquetas multilínea (hoy ninguna) y se omite si no detecta el glifo; la detección por píxeles es débil.
+- En Touch, Nombre y Descripción tienen el texto alineado arriba en cajas de 48 px y las filas de la lista de roles siguen en unos 24 px.
+
+### Integración
+
+`8644088`: merge de `backend/b2` sin conflictos. Verificación del conjunto: build sin advertencias, CTest 5/5 en Release y Debug, y `test_i1_integration.py`, `test_f1_roles_panel.py` y `test_fe08_fe09_visual_integration.py` aprobados con el ejecutable real.
+
+### Comparación con la ronda 1 (sin caveman)
+
+| | Ronda 1 | Ronda 2 (caveman) |
+|---|---|---|
+| Claude, plan a entrega | B1: unos 30 min, bloque grande | B2: unos 10 min, bloque más pequeño |
+| Claude, calidad del informe | Exacto (contó mal los `TEST_CHECK`) | Exacto y completo |
+| Gemini, hasta primera edición | F1: unos 9 min (compiló sin cambios) | F1b: unos 2 min |
+| Gemini, total | F1: unos 45 min | F1b: unos 45 min (más ciclos de prueba estricta) |
+| Gemini, informe | Afirmación falsa de «sin recorte» | Coherente con las capturas, salvo detalles menores |
+
+Conclusión provisional: la mejora visible viene de la memoria operativa de `AGENTS.md`, los prompts acotados y las pruebas estrictas; no hay evidencia separable de ahorro por caveman con dos bloques de tamaño distinto.

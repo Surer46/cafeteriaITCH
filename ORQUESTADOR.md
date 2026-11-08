@@ -7,13 +7,13 @@ Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo
 ## Estado
 
 - **Puertas:** I1 cerrada (revalidada con el ejecutable real tras integrar B1). I2: software cerrado; falta QA humano (0/7 en `frontend/qa-visual.md`), impresora térmica 55/80, monitor táctil y DPI 125/150/200. I3–I7 abiertas. **No iniciar I3 hasta el QA humano.**
-- **Pantallas reales:** Venta, Caja y turnos, Usuarios y cuentas, Configuración (impresión), Roles y permisos (F1). El resto de las 16 subsecciones son marcadores de posición.
-- **Backend real nuevo:** respaldo seguro y restauración (B1, migración 008, permiso `backup.restore` solo Dueño).
+- **Pantallas reales:** Venta, Caja y turnos, Usuarios y cuentas, Configuración (impresión), Roles y permisos (F1/F1b). El resto de las 16 subsecciones son marcadores de posición.
+- **Backend real nuevo:** respaldo seguro y restauración (B1, migración 008, `backup.restore` solo Dueño) y reportes diarios (B2, `payments_total` y `payments_mismatch_cents`).
 - **Estimación de release** (dada el 2026-10-19): piloto en 4–6 semanas y 1.0 en 8–12, si se resuelven la sección 9 de `specs.md` y los datos de la PC de caja e impresora.
 
 ## Ronda en curso
 
-Ronda 2 (`prompts-2026-11-08-ronda2.md`), primera con caveman: B2 (reportes, Claude) en paralelo con F1b (correcciones de roles, Gemini); F2 (Bitácora) después de auditar F1b. Después: F3 (UI de Respaldos, depende de B1) y F4 (UI de Reportes, depende de B2). Plan de reparto en `coordinacion-agentes.md`.
+Ronda 2 cerrada e integrada (`8644088`): B2 (reportes reales) y F1b (Cajero editable, columnas y casillas) aceptados. Listo para enviar: **F2** (Bitácora), ya escrito en `prompts-2026-11-08-ronda2.md`. Después: F3 (UI de Respaldos, B1 listo) y F4 (UI de Reportes, B2 listo). Backend sin bloque asignado: candidatos en «Pendientes conocidos». Worktree del backend en la rama `backend/b3`, partiendo de `main`.
 
 ## Decisiones del usuario
 
@@ -40,9 +40,12 @@ Ronda 2 (`prompts-2026-11-08-ronda2.md`), primera con caveman: B2 (reportes, Cla
 
 - **Claude Code Terminal (opusplan):** B1 sin caveman: plan sólido, informe exacto (salvo contar 80 `TEST_CHECK` en lugar de 102) y límites declarados con honestidad. Revisar su plan antes de aprobar: aportó 5 ajustes útiles. Puede reescribir finales de línea (ya resuelto con `.gitattributes`).
 - **AntiGravity (Gemini 3.8 Flash high):** rápido en cableado de UI. Patrones: compila y corre pruebas sin haber editado (unos 7 min en F1); bloques de razonamiento de 7–9 min; exagera en informes («sin recorte» falso en F1, captura 08 inválida en 2026-10-14); fija anchos a ojo; sus pruebas miden solo lo que le es fácil (F1: botones sí, columnas no). Con aserciones estrictas y prompts pequeños funciona bien (prompts A y C). Pierde «», ≥ y ▾ al pegar: escribir sus prompts sin esos caracteres.
-- **Caveman:** su README mide ~3 % de ahorro de salida (ruido). Comparar la ronda 2 contra la ronda 1 (B1/F1 sin caveman): tiempos, lecturas y calidad de la entrega.
+- **Caveman:** su README mide ~3 % de ahorro de salida (ruido). Ronda 2 comparada en `auditoria-2026-10-18.md`: la mejora visible vino de la memoria operativa, los prompts acotados y las pruebas estrictas; sin evidencia separable de caveman. El orquestador no lo usa (decisión del usuario).
 
 ## Pendientes conocidos (no asignados)
+
+- Candidatos de backend para B3: build `build_hooks` con `-DCAFETERIA_TEST_HOOKS=ON` para el requerimiento 8 de I2; retención y limpieza de `backups/`; persistir `get_developer_server_config`; conciliación del corte de turno (I4, depende en parte de la sección 9).
+- F1b menores: encabezado «Descripción» recortado, filas de la lista de roles sin altura táctil, texto arriba en campos de 48 px en Touch.
 
 - Sección 9 de `specs.md`: 10 decisiones de negocio abiertas (bloquean I3/I4).
 - Datos de la PC de caja e impresora (bloquean el empaquetado y el cierre de I2). Sin instalador todavía.
