@@ -1,6 +1,7 @@
 #include "app/services/mock_services.hpp"
 #include "app/services/sqlite_account_service.hpp"
 #include "app/services/sqlite_backup_service.hpp"
+#include "app/services/sqlite_report_service.hpp"
 #include "app/services/sqlite_catalog_service.hpp"
 #include "app/services/sqlite_inventory_service.hpp"
 #include "app/services/sqlite_shift_service.hpp"
@@ -796,6 +797,8 @@ contracts::Result<contracts::DailySalesReportDto> MockReportService::get_daily_s
     report.cash_amount = contracts::Money::from_major_minor(2000, 0);
     report.card_amount = contracts::Money::from_major_minor(930, 0);
     report.transfer_amount = contracts::Money::zero();
+    report.payments_total = contracts::Money::from_major_minor(2930, 0);
+    report.payments_mismatch_cents = 0;
     return contracts::Result<contracts::DailySalesReportDto>::ok(report);
 }
 
@@ -878,7 +881,7 @@ ServiceRegistry ServiceRegistry::create_sqlite_registry(storage::SqliteDatabase&
     reg.backup_service = std::make_shared<SqliteBackupService>(
         db, account_svc, config_dir, migrations_dir,
         [weak_sale]() { if (auto s = weak_sale.lock()) s->invalidate_session_state(); });
-    reg.report_service = nullptr;
+    reg.report_service = std::make_shared<SqliteReportService>(db, account_svc);
     reg.print_config_service = std::make_shared<SqlitePrintConfigService>(db, account_svc, config_dir);
     return reg;
 }
