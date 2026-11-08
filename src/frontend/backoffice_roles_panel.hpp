@@ -12,6 +12,8 @@
 
 namespace app::frontend {
 
+class CardPanel;
+
 class BackofficeRolesPanel : public wxPanel {
 public:
     BackofficeRolesPanel(
@@ -25,6 +27,9 @@ private:
     void setup_ui();
     void load_permissions();
     void build_permission_matrix();
+    void update_permission_matrix_layout();
+    void auto_size_columns();
+    void on_size(wxSizeEvent& event);
     void on_role_selected(wxListEvent& event);
     void on_role_deselected(wxListEvent& event);
     void on_new_role(wxCommandEvent& event);
@@ -43,10 +48,12 @@ private:
     wxStaticText* lbl_warning_{nullptr};
 
     // Columna izquierda: lista de roles
+    CardPanel* left_card_{nullptr};
     wxListCtrl* list_roles_{nullptr};
     wxStaticText* lbl_roles_count_{nullptr};
 
     // Columna derecha: formulario y permisos
+    CardPanel* right_card_{nullptr};
     wxStaticText* lbl_editor_title_{nullptr};
     wxStaticText* lbl_system_notice_{nullptr};
     wxTextCtrl* txt_name_{nullptr};
@@ -65,6 +72,7 @@ private:
     long selected_index_{-1};
     bool is_creating_new_{false};
     bool can_manage_{false};
+    bool in_size_event_{false};
 };
 
 } // namespace app::frontend

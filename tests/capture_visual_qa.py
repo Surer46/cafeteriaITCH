@@ -11,6 +11,7 @@ Genera capturas PNG de alta calidad de las vistas rediseñadas con el tema Cuper
 7. Panel de BackOffice > Configuración (80 mm)
 8. Panel de BackOffice > Configuración (55 mm)
 9. Panel de BackOffice > Roles y Permisos (BackofficeRolesPanel con lista y matriz)
+10. Panel de BackOffice > Roles y Permisos en perfil Touch (BackofficeRolesPanel ampliado)
 """
 
 import ctypes
@@ -56,6 +57,8 @@ user32.GetWindowRect.restype = wintypes.BOOL
 WM_SETTEXT = 0x000C
 WM_CLOSE = 0x0010
 BM_CLICK = 0x00F5
+WM_LBUTTONDOWN = 0x0201
+WM_LBUTTONUP = 0x0202
 
 class BITMAPINFOHEADER(ctypes.Structure):
     _fields_ = [
@@ -121,6 +124,16 @@ def send_click_button(hwnd):
 
 def post_click_button(hwnd):
     user32.PostMessageW(hwnd, BM_CLICK, 0, 0)
+
+def select_list_item(hwnd_list, row_index):
+    """Envía clic de ratón a la fila indicada del SysListView32."""
+    y = 35 + row_index * 22
+    x = 40
+    lparam = (y << 16) | (x & 0xFFFF)
+    user32.PostMessageW(hwnd_list, WM_LBUTTONDOWN, 1, lparam)
+    time.sleep(0.05)
+    user32.PostMessageW(hwnd_list, WM_LBUTTONUP, 0, lparam)
+    time.sleep(0.3)
 
 def capture_window(hwnd, output_path):
     user32.SetForegroundWindow(hwnd)
@@ -344,14 +357,56 @@ def main():
             time.sleep(0.8)
             capture_window(hwnd_main, os.path.join(out_dir, "06_backoffice_users_panel.png"))
 
-            # CAPTURA 9: BackOffice > Roles y permisos
+            # CAPTURA 9: BackOffice > Roles y permisos (con Cajero seleccionado)
             main_ctrls = get_child_controls(hwnd_main)
             btns = [(h, txt) for (h, cls, txt) in main_ctrls if cls.lower() == "button"]
             btn_roles = next((h for (h, t) in btns if "Roles y permisos" in t), None)
             if btn_roles:
                 send_click_button(btn_roles)
                 time.sleep(0.8)
+                lists = [h for (h, cls, txt) in get_child_controls(hwnd_main) if "list" in cls.lower()]
+                if lists:
+                    select_list_item(lists[0], 0)
+                    time.sleep(0.5)
                 capture_window(hwnd_main, os.path.join(out_dir, "09_backoffice_roles_panel.png"))
+
+                # CAPTURA 10: BackOffice > Roles y permisos en Perfil Touch (con Cajero seleccionado)
+                hdr_ctrls = get_child_controls(hwnd_main)
+                btn_touch = next((h for (h, cls, txt) in hdr_ctrls if cls.lower() == "button" and ("Touch" in txt or "Estándar" in txt)), None)
+                if btn_touch:
+                    send_click_button(btn_touch)
+                    time.sleep(0.8)
+                    t_ctrls = get_child_controls(hwnd_main)
+                    t_btns = [(h, txt) for (h, cls, txt) in t_ctrls if cls.lower() == "button"]
+                    btn_bo_t = next((h for (h, t) in t_btns if "BackOffice" in t), None)
+                    if btn_bo_t:
+                        send_click_button(btn_bo_t)
+                        time.sleep(0.6)
+                        t_ctrls = get_child_controls(hwnd_main)
+                        t_btns = [(h, txt) for (h, cls, txt) in t_ctrls if cls.lower() == "button"]
+                        btn_roles_t = next((h for (h, t) in t_btns if "Roles y permisos" in t), None)
+                        if btn_roles_t:
+                            send_click_button(btn_roles_t)
+                            time.sleep(0.8)
+                            t_lists = [h for (h, cls, txt) in get_child_controls(hwnd_main) if "list" in cls.lower()]
+                            if t_lists:
+                                select_list_item(t_lists[0], 0)
+                                time.sleep(0.5)
+                            capture_window(hwnd_main, os.path.join(out_dir, "10_backoffice_roles_panel_touch.png"))
+
+                    # Regresar a perfil Estándar
+                    hdr_ctrls2 = get_child_controls(hwnd_main)
+                    btn_touch2 = next((h for (h, cls, txt) in hdr_ctrls2 if cls.lower() == "button" and ("Touch" in txt or "Estándar" in txt)), None)
+                    if btn_touch2:
+                        send_click_button(btn_touch2)
+                        time.sleep(0.8)
+                        # Re-navegar a BackOffice para continuar el flujo normal de capturas
+                        b_ctrls = get_child_controls(hwnd_main)
+                        b_btns = [(h, txt) for (h, cls, txt) in b_ctrls if cls.lower() == "button"]
+                        btn_bo_back = next((h for (h, t) in b_btns if "BackOffice" in t), None)
+                        if btn_bo_back:
+                            send_click_button(btn_bo_back)
+                            time.sleep(0.6)
 
             # CAPTURA 7 & 8: BackOffice > Configuración (80 mm y 55 mm)
             main_ctrls = get_child_controls(hwnd_main)
