@@ -1,0 +1,23 @@
+# Compilaciones (cualquier agente)
+build_*/
+build/
+
+# Datos operativos y de prueba: SQLite y configuración por puesto
+data/
+qa_visual/data/
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+station_*.cfg
+*.cfg.tmp
+
+# Respaldos generados
+*.bak
+backups/
+
+# Herramientas y sistema
+.vscode/
+.idea/
+*.log
+Thumbs.db
