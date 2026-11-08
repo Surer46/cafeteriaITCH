@@ -2,6 +2,7 @@
 #include "sqlite3.h"
 #include <iostream>
 #include <atomic>
+#include <cstdlib>
 
 namespace app::storage {
 
@@ -253,6 +254,139 @@ contracts::OperationResult SqliteDatabase::backup_to(const std::filesystem::path
 
     sqlite3_close_v2(dest_db);
     return contracts::OperationResult::ok();
+}
+
+namespace {
+
+// Ejecuta una consulta de un solo valor; devuelve false si falla o no hay fila.
+bool query_single_text(sqlite3* db, const char* sql, std::string& out) {
+    sqlite3_stmt* st = nullptr;
+    if (sqlite3_prepare_v2(db, sql, -1, &st, nullptr) != SQLITE_OK) {
+        if (st) sqlite3_finalize(st);
+        return false;
+    }
+    bool ok = false;
+    if (sqlite3_step(st) == SQLITE_ROW) {
+        const unsigned char* t = sqlite3_column_text(st, 0);
+        out = t ? reinterpret_cast<const char*>(t) : "";
+        ok = true;
+    }
+    sqlite3_finalize(st);
+    return ok;
+}
+
+sqlite3* open_readonly(const std::filesystem::path& p, std::string& err) {
+    sqlite3* h = nullptr;
+    std::string utf8 = p.u8string();
+    int rc = sqlite3_open_v2(utf8.c_str(), &h, SQLITE_OPEN_READONLY, nullptr);
+    if (rc != SQLITE_OK) {
+        err = h ? sqlite3_errmsg(h) : "No se pudo abrir el archivo";
+        if (h) sqlite3_close_v2(h);
+        return nullptr;
+    }
+    return h;
+}
+
+} // namespace
+
+contracts::Result<BackupFileInfo> SqliteDatabase::inspect_file(const std::filesystem::path& file_path) {
+    std::error_code ec;
+    if (!std::filesystem::is_regular_file(file_path, ec)) {
+        return contracts::Result<BackupFileInfo>::fail(contracts::ErrorCode::NotFound, "El archivo de respaldo no existe");
+    }
+    std::string err;
+    sqlite3* h = open_readonly(file_path, err);
+    if (!h) {
+        return contracts::Result<BackupFileInfo>::fail(contracts::ErrorCode::StorageFailure,
+                                                       "No se pudo abrir el respaldo en solo lectura: " + err);
+    }
+    BackupFileInfo info;
+    std::string text;
+    if (!query_single_text(h, "PRAGMA integrity_check;", text)) {
+        info.integrity_message = "El archivo no es una base SQLite legible";
+        sqlite3_close_v2(h);
+        return contracts::Result<BackupFileInfo>::ok(info);
+    }
+    info.integrity_message = text;
+    info.integrity_ok = (text == "ok");
+    if (!info.integrity_ok) {
+        sqlite3_close_v2(h);
+        return contracts::Result<BackupFileInfo>::ok(info);
+    }
+
+    if (query_single_text(h, "PRAGMA page_size;", text)) {
+        info.page_size = std::strtoll(text.c_str(), nullptr, 10);
+    }
+
+    static const char* kExpected[] = {
+        "schema_migrations", "users", "roles", "permissions", "role_permissions",
+        "audit_events", "sales", "products", "ingredients"
+    };
+    info.has_expected_tables = true;
+    for (const char* t : kExpected) {
+        std::string sql = std::string("SELECT name FROM sqlite_master WHERE type='table' AND name='") + t + "';";
+        if (!query_single_text(h, sql.c_str(), text)) {
+            info.has_expected_tables = false;
+            info.missing_table = t;
+            break;
+        }
+    }
+    if (info.has_expected_tables) {
+        if (query_single_text(h, "SELECT COALESCE(MAX(version), 0) FROM schema_migrations;", text)) {
+            info.schema_version = static_cast<int>(std::strtol(text.c_str(), nullptr, 10));
+        }
+        if (query_single_text(h,
+                "SELECT COUNT(*) FROM users u JOIN roles r ON u.role_id = r.id "
+                "WHERE (r.name = 'Dueño' OR r.id = 'role-owner') AND u.is_active = 1;", text)) {
+            info.has_active_owner = std::strtoll(text.c_str(), nullptr, 10) > 0;
+        }
+    }
+    sqlite3_close_v2(h);
+    return contracts::Result<BackupFileInfo>::ok(info);
+}
+
+contracts::OperationResult SqliteDatabase::restore_from(const std::filesystem::path& src_path) {
+    if (!db_) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState, "Base de datos no inicializada");
+    }
+    if (sqlite3_get_autocommit(db_) == 0) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState,
+                                                "No se puede restaurar con una transacción abierta");
+    }
+    std::string err;
+    sqlite3* src = open_readonly(src_path, err);
+    if (!src) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::StorageFailure,
+                                                "No se pudo abrir el origen de restauración: " + err);
+    }
+    sqlite3_backup* b = sqlite3_backup_init(db_, "main", src, "main");
+    if (!b) {
+        std::string e = sqlite3_errmsg(db_);
+        sqlite3_close_v2(src);
+        return contracts::OperationResult::fail(contracts::ErrorCode::StorageFailure,
+                                                "Error al iniciar la restauración: " + e);
+    }
+    int rc = sqlite3_backup_step(b, -1);
+    int fin = sqlite3_backup_finish(b);
+    std::string e = sqlite3_errmsg(db_);
+    sqlite3_close_v2(src);
+    if (rc != SQLITE_DONE || fin != SQLITE_OK) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::StorageFailure,
+                                                "Error al copiar el respaldo sobre la base viva: " + e);
+    }
+    execute("PRAGMA foreign_keys = ON;");
+    return contracts::OperationResult::ok();
+}
+
+contracts::Result<std::int64_t> SqliteDatabase::page_size() {
+    if (!db_) {
+        return contracts::Result<std::int64_t>::fail(contracts::ErrorCode::InvalidState, "Base de datos no inicializada");
+    }
+    std::string text;
+    if (!query_single_text(db_, "PRAGMA page_size;", text)) {
+        return contracts::Result<std::int64_t>::fail(contracts::ErrorCode::StorageFailure, "No se pudo leer page_size");
+    }
+    return contracts::Result<std::int64_t>::ok(std::strtoll(text.c_str(), nullptr, 10));
 }
 
 contracts::Result<SqliteStatement> SqliteDatabase::prepare(const std::string& sql) {

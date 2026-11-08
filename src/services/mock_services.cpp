@@ -825,6 +825,16 @@ contracts::OperationResult MockBackupService::set_backup_enabled(bool enabled) {
     return contracts::OperationResult::ok();
 }
 
+contracts::Result<contracts::BackupVerificationDto> MockBackupService::verify_backup(const std::string&) {
+    return contracts::Result<contracts::BackupVerificationDto>::fail(
+        contracts::ErrorCode::InvalidState, "Servicio simulado: no verifica respaldos reales");
+}
+
+contracts::Result<contracts::RestoreResultDto> MockBackupService::restore_from_backup(const std::string&) {
+    return contracts::Result<contracts::RestoreResultDto>::fail(
+        contracts::ErrorCode::InvalidState, "Servicio simulado: no restaura datos reales");
+}
+
 contracts::Result<contracts::BackupServerConfigDto> MockBackupService::get_developer_server_config() {
     return contracts::Result<contracts::BackupServerConfigDto>::ok(dev_config_);
 }
@@ -849,11 +859,11 @@ ServiceRegistry ServiceRegistry::create_mock_registry() {
 }
 
 ServiceRegistry ServiceRegistry::create_sqlite_registry(storage::SqliteDatabase& db,
-                                                          const std::string& config_dir) {
+                                                          const std::string& config_dir,
+                                                          const std::string& migrations_dir) {
     ServiceRegistry reg;
     auto account_svc = std::make_shared<SqliteAccountService>(db);
     reg.account_service = account_svc;
-    reg.backup_service = std::make_shared<SqliteBackupService>(db, account_svc);
     auto catalog_svc = std::make_shared<SqliteCatalogService>(db, account_svc);
     reg.catalog_service = catalog_svc;
     reg.inventory_service = std::make_shared<SqliteInventoryService>(db, account_svc);
@@ -861,7 +871,13 @@ ServiceRegistry ServiceRegistry::create_sqlite_registry(storage::SqliteDatabase&
     reg.shift_service = shift_svc;
     auto cart_svc = std::make_shared<SqliteCartService>(db, account_svc, catalog_svc);
     reg.cart_service = cart_svc;
-    reg.sale_service = std::make_shared<SqliteSaleService>(db, account_svc, cart_svc, shift_svc);
+    auto sale_svc = std::make_shared<SqliteSaleService>(db, account_svc, cart_svc, shift_svc);
+    reg.sale_service = sale_svc;
+    // Tras restaurar, el estado en memoria derivado de la base se invalida.
+    std::weak_ptr<SqliteSaleService> weak_sale = sale_svc;
+    reg.backup_service = std::make_shared<SqliteBackupService>(
+        db, account_svc, config_dir, migrations_dir,
+        [weak_sale]() { if (auto s = weak_sale.lock()) s->invalidate_session_state(); });
     reg.report_service = nullptr;
     reg.print_config_service = std::make_shared<SqlitePrintConfigService>(db, account_svc, config_dir);
     return reg;

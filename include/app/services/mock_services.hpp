@@ -191,6 +191,8 @@ public:
     contracts::Result<contracts::BackupStatusDto> get_status() override;
     contracts::OperationResult trigger_local_backup(const std::string& destination_path) override;
     contracts::OperationResult set_backup_enabled(bool enabled) override;
+    contracts::Result<contracts::BackupVerificationDto> verify_backup(const std::string& path) override;
+    contracts::Result<contracts::RestoreResultDto> restore_from_backup(const std::string& path) override;
     contracts::Result<contracts::BackupServerConfigDto> get_developer_server_config() override;
     contracts::OperationResult update_developer_server_config(const contracts::BackupServerConfigDto& config) override;
 
@@ -234,7 +236,8 @@ struct ServiceRegistry {
 
     static ServiceRegistry create_mock_registry();
     static ServiceRegistry create_sqlite_registry(storage::SqliteDatabase& db,
-                                                   const std::string& config_dir = "");
+                                                   const std::string& config_dir = "",
+                                                   const std::string& migrations_dir = "");
 };
 
 } // namespace app::services

@@ -789,6 +789,12 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::get_sale_by
     return contracts::Result<contracts::SaleConfirmationDto>::ok(dto);
 }
 
+void SqliteSaleService::invalidate_session_state() {
+    std::lock_guard<std::mutex> lock(last_confirmed_mutex_);
+    last_confirmed_folio_.clear();
+    last_confirmed_user_id_.clear();
+}
+
 contracts::Result<contracts::TicketDto> SqliteSaleService::get_ticket(const std::string& folio) {
     if (!account_service_ || !account_service_->is_authenticated()) {
         return contracts::Result<contracts::TicketDto>::fail(

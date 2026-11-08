@@ -345,8 +345,16 @@ void test_owner_persistence_and_auth() {
         if (fs::exists(backup_file)) {
             fs::remove(backup_file);
         }
+        // La identidad Desarrollador no tiene backup.manage: el servicio debe negar el respaldo local
+        auto dev_bkp = backup_service.trigger_local_backup(backup_file);
+        TEST_CHECK(!dev_bkp.is_success() && dev_bkp.error_code() == ErrorCode::Forbidden,
+                   "Desarrollador sin backup.manage no debe poder ejecutar respaldo local");
+        TEST_CHECK(!fs::exists(backup_file), "No debe crearse archivo cuando se niega el permiso");
+
+        // El Dueño sí tiene backup.manage
+        account_service2->set_current_user_for_testing(user);
         auto bkp_res = backup_service.trigger_local_backup(backup_file);
-        TEST_CHECK(bkp_res.is_success(), "Respaldo local debe ser exitoso");
+        TEST_CHECK(bkp_res.is_success(), "Respaldo local debe ser exitoso: " + bkp_res.error_message());
         TEST_CHECK(fs::exists(backup_file), "El archivo de respaldo snapshot debe existir en disco");
         TEST_CHECK(fs::file_size(backup_file) > 0, "El archivo de respaldo snapshot no debe estar vacío");
 

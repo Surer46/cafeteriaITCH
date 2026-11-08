@@ -44,6 +44,24 @@ target_compile_definitions(test_storage PRIVATE
 )
 add_test(NAME StorageTest COMMAND test_storage)
 
+# Test B1/I5: respaldo local seguro y restauración
+add_executable(test_backup
+    test_backup.cpp
+)
+target_link_libraries(test_backup PRIVATE
+    app_storage
+    app_services
+    app_contracts
+    app_crypto
+    sqlite3
+)
+add_dependencies(test_backup copy_migrations)
+target_compile_definitions(test_backup PRIVATE
+    MIGRATIONS_DIR_PATH="${CMAKE_CURRENT_BINARY_DIR}/migrations"
+    SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations"
+)
+add_test(NAME BackupTest COMMAND test_backup)
+
 # Ejecutable aislado de integración para reintento real de idempotencia a nivel de servicio
 add_executable(test_idempotency_runner
     test_idempotency_runner.cpp
@@ -85,7 +103,7 @@ if(WIN32)
             file(COPY ${WX_TEST_DLLS} DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
         endif()
     endif()
-    set_tests_properties(ContractsTest StorageTest PROPERTIES
+    set_tests_properties(ContractsTest StorageTest BackupTest PROPERTIES
         ENVIRONMENT "PATH=${CMAKE_CURRENT_BINARY_DIR};${CMAKE_BINARY_DIR};${wxWidgets_LIB_DIR};${COMPILER_BIN_DIR};$ENV{PATH}"
     )
     if(wxWidgets_FOUND)

@@ -138,7 +138,7 @@ public:
         // 4. Crear servicios conectados a SQLite, inyectando el directorio efectivo del puesto
         // para que SqlitePrintConfigService use la ruta ya resuelta (respeta --data-dir y
         // CAFETERIA_DATA_DIR) en lugar de releer getenv o usar cwd.
-        auto registry = services::ServiceRegistry::create_sqlite_registry(db_, data_dir.u8string());
+        auto registry = services::ServiceRegistry::create_sqlite_registry(db_, data_dir.u8string(), mig_dir.u8string());
         auto account_service = registry.account_service;
 
         // 5. Verificar si existe cuenta Dueño (primer inicio obligatorio)
