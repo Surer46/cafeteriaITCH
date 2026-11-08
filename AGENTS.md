@@ -32,3 +32,16 @@
 - Las pruebas deben ejecutarse en Debug y Release. No usar `assert` como única verificación: puede desaparecer con `NDEBUG`. CTest debe localizar migraciones mediante ruta absoluta configurada o copia controlada al directorio de pruebas, no según el directorio desde donde se invoque.
 - Probar la puerta I1 con el ejecutable real: ventana nativa, SQLite local, alta del Dueño, cierre y reapertura con datos persistidos. Los mocks no satisfacen I1.
 - En cada entrega indicar archivos modificados, comandos ejecutados, resultados de compilación/pruebas y límites de lo verificado. No afirmar que un flujo funciona solo porque existe código o porque pasó una prueba de otro lenguaje.
+
+## Memoria operativa (compartida por todos los agentes)
+
+Datos ya verificados. Úsalos en lugar de explorar el entorno. Mantener breve: cada línea se carga en cada sesión de cada agente.
+
+- **Toolchain (Windows):** anteponer al `PATH` `D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll`. GCC 16.1 (MinGW), CMake, Ninja y wxWidgets 3.3.3 (`wxWidgets_ROOT_DIR=D:/Temp/wxwidgets`, `wxWidgets_LIB_DIR=D:/Temp/wxwidgets/lib/gcc1610_x64_dll`, `wxWidgets_CONFIGURATION=mswu`). No buscar otros compiladores.
+- **Copias de trabajo (git):** `main` en `D:\Cafetería_ITCH` es del frontend (AntiGravity); el backend (Claude Code Terminal) trabaja en el worktree `D:\Cafeteria_ITCH_backend`, rama `backend/<bloque>`. Los agentes no hacen commits. Propiedad de archivos y protocolo en `coordinacion-agentes.md`.
+- **Compilación:** frontend usa `build_release` y `build_debug`; backend usa `build_be_release` y `build_be_debug`. Ya están configurados: basta `cmake --build <dir> --parallel 2` y `ctest --test-dir <dir> --output-on-failure`.
+- **No compilar ni correr pruebas antes de editar:** la línea base del commit actual ya está verificada por el orquestador.
+- **Pruebas:** CTest = ContractsTest, StorageTest, BackupTest, TicketPrintingTest. GUI (solo el agente de frontend, nunca dos a la vez): `tests/test_i1_integration.py`, `tests/test_i2_integration.py`, `tests/test_fe08_fe09_visual_integration.py`, `tests/test_f1_roles_panel.py`; capturas con `tests/capture_visual_qa.py` en `qa_visual/screenshots/`.
+- **Medir, no estimar:** alturas, anchos y recortes se comprueban con `GetWindowRect`, `GetTextExtent` o `LVM_GETCOLUMNWIDTH`, no a ojo. Prohibido relajar un umbral de prueba para que pase.
+- **Hora local:** las fechas se guardan como `YYYY-MM-DD HH:MM:SS` en hora local.
+- **Ganchos de prueba:** `CAFETERIA_SIMULATE_PRINT_ERROR` solo existe si se compila con `-DCAFETERIA_TEST_HOOKS=ON`; los builds habituales lo tienen apagado.
