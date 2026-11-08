@@ -1,0 +1,13 @@
+# Un solo formato de fin de línea en el repositorio, sin importar qué agente edite.
+* text=auto eol=lf
+
+# Binarios
+*.png binary
+*.jpg binary
+*.ico binary
+*.ttf binary
+*.otf binary
+*.db binary
+*.a binary
+*.exe binary
+*.dll binary
