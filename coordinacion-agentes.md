@@ -19,12 +19,14 @@ Vigente desde el 2026-11-08. Complementa `AGENTS.md`; si hay conflicto, manda `A
 | Pruebas C++ | Claude Code Terminal | `tests/test_*.cpp` |
 | Interfaz | AntiGravity | `src/frontend/`, `assets/` |
 | Pruebas GUI y capturas | AntiGravity | `tests/*.py`, `qa_visual/` |
-| `CMakeLists.txt` | Claude Code Terminal | AntiGravity pide los cambios en su entrega; no lo edita |
+| `CMakeLists.txt` | Claude Code Terminal | Única excepción: AntiGravity puede añadir sus propios archivos nuevos de `src/frontend/` a la lista de fuentes de `app_desktop`, y nada más |
 | Documentación de estado | Orquestador | `specs.md`, `*/plan.md`, `*/task.md`, `auditoria-*.md`, `coordinacion-agentes.md` |
 
 La interfaz consume contratos; nunca los cambia. Si AntiGravity necesita un método nuevo, lo pide en su entrega y el orquestador lo encarga a Claude Code Terminal.
 
 ## Compilación y pruebas sin choques
+
+- Cada agente trabaja en su propia copia: Claude Code Terminal en `D:\Cafeteria_ITCH_backend` (git worktree, rama `backend/<bloque>`); AntiGravity en `D:\Cafetería_ITCH` (rama `main`). Así un archivo a medias de uno no rompe la compilación del otro. El orquestador integra la rama del backend en `main` al aceptar cada bloque.
 
 - Claude Code Terminal compila en `build_be_debug` y `build_be_release` y solo ejecuta CTest.
 - AntiGravity compila en `build_debug` y `build_release` y es el único que ejecuta pruebas GUI (`tests/*.py`), porque abren ventanas y toman el foco.
@@ -36,7 +38,8 @@ La interfaz consume contratos; nunca los cambia. Si AntiGravity necesita un mét
 1. El orquestador escribe un prompt pequeño en `prompts-<agente>-AAAA-MM-DD.md`, sin «», ≥ ni ▾ (se pierden al pegar).
 2. Claude Code Terminal recibe trabajo de backend en modo plan: el plan de Opus se revisa antes de que Sonnet ejecute.
 3. Cada entrega lista archivos, comandos con código de salida, resultados y límites.
-4. El orquestador audita y registra el resultado. Nada se marca `[x]` sin auditoría.
+4. El orquestador audita (con `git diff` desde el último commit aceptado) y registra el resultado. Nada se marca `[x]` sin auditoría.
+5. Los agentes **no hacen commits**. El orquestador hace un commit por bloque aceptado, así cada auditoría parte de una línea base limpia.
 
 ## Skill caveman
 
