@@ -163,3 +163,32 @@ Observaciones:
 - El reporte decía 80 `TEST_CHECK`; el archivo tiene 102.
 - Pendiente: prueba I1 con el ejecutable real tras integrar en `main` (B1 tocó `main_app.cpp`).
 - No implementado: retención y limpieza de `backups/`, cifrado y envío remoto (fuera de alcance).
+
+---
+
+## Bloque F1 (AntiGravity, Gemini 3.8 Flash) e integración — 2026-11-08
+
+F1 trabajado en `main` (`D:\Cafetería_ITCH`) en paralelo con B1. Sin la skill caveman (línea base).
+
+Verificación propia: `cmake --build build_release|build_debug` (código 0, 0 advertencias), CTest 3/3 en ambos, `tests/test_f1_roles_panel.py` y `tests/test_fe08_fe09_visual_integration.py` aprobados en Release y Debug. Captura 09 inspeccionada.
+
+Resultado: **aceptado con correcciones pendientes (F1b)**. Commit `4104d29`.
+
+Correcto:
+- Panel sobre `IAccountService` sin SQL ni permisos calculados en la interfaz; `role-dev` y `backup.dev_config` ocultos; solo lectura sin `roles.manage`.
+- La prueba GUI verifica persistencia tras reabrir, exclusiones y botones de roles de sistema deshabilitados.
+- `CMakeLists.txt`: solo se añadieron sus dos archivos, según la excepción acordada.
+- El script temporal `tests/scratch_check_rect.py` se borró antes de la entrega.
+
+Falso en el informe: «geometría estricta sin recorte». En la captura 09, las columnas de «Roles Registrados» están recortadas (Descrip…, Si…, Pe) y hay barra horizontal: anchos fijos a ojo de 68/78/38/42 px (`backoffice_roles_panel.cpp:146-149`), contra lo pedido. Las etiquetas de permisos se envuelven a unos 270 px aunque sobra espacio, y la casilla queda alineada con la segunda línea. La prueba solo mide recorte en botones, no en columnas ni casillas.
+
+Error del orquestador: el prompt F1 pidió roles de sistema en solo lectura. El servicio permite editar los permisos del Cajero (`role-cashier`, `is_system = 1`) y solo protege Dueño y Desarrollador; `specs.md` dice que el Dueño configura los permisos. Pendiente de decisión del usuario.
+
+Desempeño: arranque lento (unos 7 min compilando y corriendo CTest sin cambios, más 2 min de razonamiento antes de escribir). Dos fallos de su prueba GUI resueltos con diagnóstico, sin relajar umbrales. Unos 45 minutos en total.
+
+### Integración en `main`
+
+- `eff0fba`: merge de `backend/b1` sin conflictos.
+- Verificación del conjunto: build sin advertencias, CTest **4/4** en Release y Debug (incluye BackupTest) y **`tests/test_i1_integration.py` aprobado con el ejecutable real**, que cierra el pendiente de B1 por el cambio en `main_app.cpp`.
+- `99b773a`: `.gitattributes` con `eol=lf`; solo los documentos tenían CRLF, sin cambios de contenido.
+- La copia del backend queda en la rama `backend/b2`, partiendo de `main`.
