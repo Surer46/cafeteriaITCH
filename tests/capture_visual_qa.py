@@ -8,6 +8,9 @@ Genera capturas PNG de alta calidad de las vistas rediseñadas con el tema Cuper
 4. Diálogo de Impresión (TicketPrintDialog con pregunta explícita)
 5. Panel de Caja y Turnos (CashShiftPanel con estado y fondo inicial)
 6. Panel de BackOffice (BackofficeUsersPanel con cuentas y roles)
+7. Panel de BackOffice > Configuración (80 mm)
+8. Panel de BackOffice > Configuración (55 mm)
+9. Panel de BackOffice > Roles y Permisos (BackofficeRolesPanel con lista y matriz)
 """
 
 import ctypes
@@ -340,6 +343,15 @@ def main():
             send_click_button(btn_bo)
             time.sleep(0.8)
             capture_window(hwnd_main, os.path.join(out_dir, "06_backoffice_users_panel.png"))
+
+            # CAPTURA 9: BackOffice > Roles y permisos
+            main_ctrls = get_child_controls(hwnd_main)
+            btns = [(h, txt) for (h, cls, txt) in main_ctrls if cls.lower() == "button"]
+            btn_roles = next((h for (h, t) in btns if "Roles y permisos" in t), None)
+            if btn_roles:
+                send_click_button(btn_roles)
+                time.sleep(0.8)
+                capture_window(hwnd_main, os.path.join(out_dir, "09_backoffice_roles_panel.png"))
 
             # CAPTURA 7 & 8: BackOffice > Configuración (80 mm y 55 mm)
             main_ctrls = get_child_controls(hwnd_main)

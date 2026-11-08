@@ -143,3 +143,23 @@ Observaciones menores:
 Desempeño del agente: alcance respetado, informe exacto en esta ocasión y casilla marcada correctamente.
 
 Estado: los pendientes de software de la auditoría del 2026-10-18 quedan cerrados. I2 sigue **parcial solo por hardware** (impresora térmica 55/80 y monitor táctil), DPI 125/150/200 y aceptación humana (0/7 en `frontend/qa-visual.md`). No avanzar a I3 hasta el QA humano.
+
+---
+
+## Bloque B1 (Claude Code Terminal, opusplan) — 2026-11-08
+
+Primer bloque con dos agentes en paralelo (ver `coordinacion-agentes.md`). Trabajado en el worktree `D:\Cafeteria_ITCH_backend`, rama `backend/b1`, commit `3931ba6`. Sin la skill caveman (línea base para comparar).
+
+Plan revisado antes de ejecutar; aprobado con la opción A y cinco ajustes: `main_app.cpp` pasa `migrations_dir` en el mismo bloque; rechazo previo por `page_size`; rechazo de origen sin Dueño activo; invalidación del estado en memoria; auditoría `BACKUP_RESTORE_FAILED`. Los cinco quedaron implementados y probados.
+
+Verificación propia: `cmake --build build_be_release|build_be_debug --clean-first` (código 0, 0 advertencias) y `ctest` 4/4 en ambos (BackupTest 4.12 s Release, 15.90 s Debug). Revisé el diff sin ruido de fin de línea (`git diff --ignore-cr-at-eol`): 627 líneas añadidas y 25 quitadas en 12 archivos más 2 nuevos; en `src/frontend/` solo la línea autorizada de `main_app.cpp`.
+
+Resultado: **aceptado**.
+
+Observaciones:
+- `BACKUP_RESTORED` guarda como actor el usuario de la sesión previa, que puede no existir en la base restaurada (`audit_events.user_id` no tiene clave foránea, así que no falla). Trazabilidad mejorable más adelante.
+- La recuperación desde el respaldo previo tras un fallo a mitad de copia está implementada, pero no probada: requeriría inyección de fallos.
+- Claude reescribió los archivos con otro fin de línea (diff de archivo completo). Se corregirá con `.gitattributes` al integrar.
+- El reporte decía 80 `TEST_CHECK`; el archivo tiene 102.
+- Pendiente: prueba I1 con el ejecutable real tras integrar en `main` (B1 tocó `main_app.cpp`).
+- No implementado: retención y limpieza de `backups/`, cifrado y envío remoto (fuera de alcance).

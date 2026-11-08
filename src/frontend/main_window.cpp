@@ -1,5 +1,6 @@
 #include "src/frontend/main_window.hpp"
 #include "src/frontend/backoffice_users_panel.hpp"
+#include "src/frontend/backoffice_roles_panel.hpp"
 #include "src/frontend/backoffice_print_config_panel.hpp"
 #include "src/frontend/pos_panel.hpp"
 #include "src/frontend/cash_shift_panel.hpp"
@@ -136,6 +137,8 @@ void MainWindow::update_content_view() {
         });
     } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Usuarios y cuentas") {
         current_view_ = new BackofficeUsersPanel(content_container_, services_.account_service);
+    } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Roles y permisos") {
+        current_view_ = new BackofficeRolesPanel(content_container_, services_.account_service);
     } else if (current_section_ == SectionId::BackOffice && (current_subsection_ == "Configuración" || current_subsection_ == "Impresión")) {
         current_view_ = new BackofficePrintConfigPanel(content_container_, services_);
     } else {
