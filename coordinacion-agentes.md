@@ -40,6 +40,10 @@ La interfaz consume contratos; nunca los cambia. Si AntiGravity necesita un mét
 3. Cada entrega lista archivos, comandos con código de salida, resultados y límites.
 4. El orquestador audita (con `git diff` desde el último commit aceptado) y registra el resultado. Nada se marca `[x]` sin auditoría.
 5. Los agentes **no hacen commits**. El orquestador hace un commit por bloque aceptado, así cada auditoría parte de una línea base limpia.
+6. **Regla de dos pasadas (decisión del usuario, 2026-11-08):** si AntiGravity no cierra un detalle de interfaz tras dos pasadas sobre el mismo tema, el detalle se asigna a Claude Code Terminal, sin una tercera pasada de Gemini.
+   - Claude lo trabaja en su worktree. Puede editar los archivos del frontend afectados, nunca otros, y solo si ningún bloque de Gemini en curso toca esos mismos archivos.
+   - Claude compila y corre CTest, pero no ejecuta pruebas GUI. El orquestador las corre al integrar y le devuelve los fallos.
+   - El script de capturas lo sigue manteniendo Gemini; el orquestador regenera la captura afectada al integrar.
 
 ## Skill caveman
 

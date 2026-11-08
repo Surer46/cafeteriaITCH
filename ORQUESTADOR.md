@@ -19,6 +19,7 @@ Ronda 2 cerrada e integrada (`8644088`): B2 (reportes reales) y F1b (Cajero edit
 
 - 2026-11-08: el Dueño edita los permisos del Cajero; no puede renombrarlo ni eliminarlo. Dueño en solo lectura. Desarrollador nunca visible (registrado en `specs.md` §9.5).
 - 2026-11-08: Claude Code Terminal con `opusplan` como backend; AntiGravity como frontend; skill caveman en ambos (solo estilo).
+- 2026-11-08: regla de dos pasadas. Un detalle de interfaz que Gemini no cierra en dos pasadas va a Claude Code Terminal (detalles en `coordinacion-agentes.md`, protocolo punto 6). Primer caso: B3a, detalles del panel de roles tras F1 y F1b.
 - El usuario quiere ver los movimientos de los agentes: no enviar prompts por `agy -p`; el usuario pega los prompts en terminales interactivas.
 
 ## Git e integración
