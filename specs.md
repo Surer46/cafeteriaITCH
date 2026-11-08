@@ -191,6 +191,7 @@ La división detallada y ejecutable del trabajo está en [`frontend/plan.md`](fr
 3. ¿Qué métodos de pago se deben poder registrar? ¿Se permiten pagos mixtos, impuestos, descuentos manuales y devoluciones? ¿Cómo se redondea? Ninguno de estos métodos implica procesamiento electrónico en esta etapa.
 4. ¿Se permite vender sin existencia o autorizar sobreventa? ¿Cómo se calculan mermas, recetas, combos y productos por peso?
 5. ¿Qué permisos iniciales y roles adicionales al Dueño se necesitan para empezar? El Dueño podrá configurarlos después. ¿Quién puede cambiar precios, anular ventas, ajustar inventario y cerrar caja?
+   - **Decidido 2026-11-08:** el Dueño puede editar los permisos del rol de sistema Cajero (`role-cashier`), pero no renombrarlo ni eliminarlo. El rol Dueño queda en solo lectura y el rol Desarrollador nunca se muestra. Siguen abiertas las preguntas de quién cambia precios, anula ventas, ajusta inventario y cierra caja.
 6. ¿Hay datos existentes para importar y formatos obligatorios de ticket, reportes y corte?
 7. ¿Cuál es la configuración exacta de la PC de caja (RAM real —estimada en 4 a 6 GB—, HDD/SSD, sistema operativo y resolución) y cuántos productos y ventas históricas se esperan?
 8. ¿Cómo se valúan ingredientes comprados a precios distintos: promedio ponderado, primeras entradas/primeras salidas u otro método? ¿Se requiere mostrar costo y margen estimados por platillo/bebida?
