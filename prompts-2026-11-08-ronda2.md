@@ -1,6 +1,6 @@
 # Prompts del 2026-11-08 — ronda 2 (con caveman)
 
-Línea base: commit `f622425` en `main`. Reglas en `coordinacion-agentes.md`.
+Línea base: commit `eeed1aa` en `main`. Reglas en `coordinacion-agentes.md`.
 
 - **B2** (Claude Code Terminal) y **F1b** (AntiGravity) corren en paralelo: no comparten archivos.
 - **F2** (AntiGravity) se envía solo después de auditar F1b, porque usa la misma copia de trabajo.
@@ -14,7 +14,7 @@ Copiar solo el bloque de texto de cada prompt.
 ## B2 — Claude Code Terminal (worktree `D:\Cafeteria_ITCH_backend`, rama `backend/b2`)
 
 ```text
-Agente de backend de Cafeteria ITCH II. Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b2 (ya creada desde main f622425). Mismas reglas que B1: tus archivos son contratos, servicios, almacenamiento, migraciones y tests/test_*.cpp; no toques src/frontend/, tests/*.py ni documentos de estado; no hagas commits. Compila en build_be_debug y build_be_release (ya configurados). No ejecutes pruebas GUI.
+Agente de backend de Cafeteria ITCH II. Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b2 (ya creada desde main eeed1aa). Mismas reglas que B1: tus archivos son contratos, servicios, almacenamiento, migraciones y tests/test_*.cpp; no toques src/frontend/, tests/*.py ni documentos de estado; no hagas commits. Compila en build_be_debug y build_be_release (ya configurados). No ejecutes pruebas GUI.
 
 Presenta primero un plan corto para revision.
 
