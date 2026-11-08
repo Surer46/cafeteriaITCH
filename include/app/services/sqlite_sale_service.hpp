@@ -32,6 +32,9 @@ public:
     contracts::Result<contracts::TicketDto> get_ticket(const std::string& folio) override;
     contracts::Result<std::vector<contracts::TicketSummaryDto>> get_recent_tickets(int limit = 50) override;
 
+    // Descarta el estado en memoria derivado de ventas (p. ej. tras restaurar la base).
+    void invalidate_session_state();
+
 private:
     contracts::OperationResult check_permission_or_fail(std::string_view perm) const;
     std::string generate_next_folio();

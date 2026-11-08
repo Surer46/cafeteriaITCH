@@ -47,6 +47,16 @@ private:
     sqlite3_stmt* stmt_{nullptr};
 };
 
+struct BackupFileInfo {
+    bool integrity_ok{false};
+    std::string integrity_message;
+    int schema_version{0};
+    std::int64_t page_size{0};
+    bool has_expected_tables{false};
+    std::string missing_table;
+    bool has_active_owner{false};
+};
+
 class SqliteDatabase {
 public:
     SqliteDatabase();
@@ -68,6 +78,15 @@ public:
     contracts::OperationResult rollback_transaction();
 
     contracts::OperationResult backup_to(const std::filesystem::path& dest_path);
+
+    // Inspección de solo lectura de un archivo de respaldo; no modifica nada.
+    static contracts::Result<BackupFileInfo> inspect_file(const std::filesystem::path& file_path);
+
+    // Copia el archivo sobre esta conexión viva con sqlite3_backup.
+    // Falla sin tocar nada si hay una transacción abierta.
+    contracts::OperationResult restore_from(const std::filesystem::path& src_path);
+
+    contracts::Result<std::int64_t> page_size();
 
     contracts::Result<SqliteStatement> prepare(const std::string& sql);
 
