@@ -4,6 +4,7 @@
 #include "src/frontend/backoffice_print_config_panel.hpp"
 #include "src/frontend/pos_panel.hpp"
 #include "src/frontend/cash_shift_panel.hpp"
+#include "src/frontend/audit_log_panel.hpp"
 #include "src/frontend/theme.hpp"
 #include <wx/statline.h>
 
@@ -135,6 +136,8 @@ void MainWindow::update_content_view() {
         current_view_ = new CashShiftPanel(content_container_, services_, [this]() {
             update_header_status();
         });
+    } else if (current_section_ == SectionId::CashAndReports && current_subsection_ == "Bitácora") {
+        current_view_ = new AuditLogPanel(content_container_, services_.account_service);
     } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Usuarios y cuentas") {
         current_view_ = new BackofficeUsersPanel(content_container_, services_.account_service);
     } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Roles y permisos") {

@@ -12,6 +12,7 @@ Genera capturas PNG de alta calidad de las vistas rediseñadas con el tema Cuper
 8. Panel de BackOffice > Configuración (55 mm)
 9. Panel de BackOffice > Roles y Permisos (BackofficeRolesPanel con lista y matriz)
 10. Panel de BackOffice > Roles y Permisos en perfil Touch (BackofficeRolesPanel ampliado)
+11. Panel de Caja y Reportes > Bitácora (AuditLogPanel con filtros, lista y detalle)
 """
 
 import ctypes
@@ -303,6 +304,19 @@ def main():
 
         # CAPTURA 1: Panel de Caja y Turnos (Abierto con movimientos)
         capture_window(hwnd_main, os.path.join(out_dir, "05_cash_shift_panel.png"))
+
+        # CAPTURA 11: Caja y Reportes > Bitácora
+        caja_ctrls = get_child_controls(hwnd_main)
+        caja_btns = [(h, txt) for (h, cls, txt) in caja_ctrls if cls.lower() == "button"]
+        btn_bitacora = next((h for (h, t) in caja_btns if "Bitácora" in t), None)
+        if btn_bitacora:
+            send_click_button(btn_bitacora)
+            time.sleep(0.8)
+            lists = [h for (h, cls, txt) in get_child_controls(hwnd_main) if "list" in cls.lower()]
+            if lists:
+                select_list_item(lists[0], 0)
+                time.sleep(0.4)
+            capture_window(hwnd_main, os.path.join(out_dir, "11_audit_log_panel.png"))
 
         # Ir a Punto de Venta
         main_ctrls = get_child_controls(hwnd_main)

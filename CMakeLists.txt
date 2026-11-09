@@ -181,6 +181,8 @@ if(wxWidgets_FOUND)
         src/frontend/pos_panel.hpp
         src/frontend/cash_shift_panel.cpp
         src/frontend/cash_shift_panel.hpp
+        src/frontend/audit_log_panel.cpp
+        src/frontend/audit_log_panel.hpp
         src/frontend/theme.cpp
         src/frontend/theme.hpp
         src/frontend/app.rc
