@@ -95,3 +95,45 @@ Si un comando falla dos veces con el mismo error sin cambiar codigo, detente y r
 
 Entrega corta: archivos, comandos con codigo de salida, el fallo de la prueba antes del arreglo y su resultado despues, y limites de lo verificado.
 ```
+
+---
+
+## B4 — Claude Code Terminal (enviar cuando B3b esté aceptado; rama `backend/b4`)
+
+Origen: `auditoria-general-2026-11-12.md`, apartado B. Aprobado por el usuario el 2026-11-12. El cliente no ha definido el tipo de versión móvil; estos ajustes sirven para cualquiera.
+
+```text
+Bloque B4 de backend. Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b4. No hagas commits. No compiles ni corras pruebas antes de editar. Lee auditoria-general-2026-11-12.md, apartado B.
+
+Objetivo: cuatro ajustes de datos que hoy cuestan poco y con ventas acumuladas costarian mucho. No construyas sincronizacion, servidor ni nada de red.
+
+Archivos permitidos: src/domain/, src/storage/, src/services/, include/app/, migrations/ (solo archivos nuevos, a partir de 009), tests/test_*.cpp y CMakeLists.txt. No toques src/frontend/, tests/*.py ni migraciones ya aplicadas (001 a 008).
+
+Presenta primero un plan para revision. El plan debe resolver las dudas marcadas como DECIDIR antes de escribir codigo.
+
+1. Identificadores. Hoy cada servicio tiene su propia copia de generate_id (prefijo, milisegundos, contador que reinicia al arrancar): dos equipos pueden generar el mismo. Deja una sola funcion compartida que conserve el prefijo y use 128 bits aleatorios de una fuente adecuada (UUID v4 o equivalente). Los identificadores ya guardados no se tocan. DECIDIR: fuente de aleatoriedad en MinGW y fuera de Windows, sin meter dependencias de plataforma en el dominio.
+
+2. Fechas. Hoy cada servicio tiene su propia copia de current_timestamp y guarda hora local sin zona. La columna local existente y su formato YYYY-MM-DD HH:MM:SS NO cambian: la usan la interfaz, los tickets y el reporte diario. Agrega el instante en UTC en una columna nueva en las tablas de hechos (como minimo sales, payment_records, cash_movements, stock_movements, purchase_entries, shifts y audit_events) y escribela en cada alta. Una sola funcion compartida produce ambos valores del mismo instante. DECIDIR: que hacer con las filas anteriores (convertirlas con la zona del equipo al migrar, o dejarlas en NULL y documentarlo); justifica la opcion.
+
+3. Ultima modificacion. Agrega updated_at a products, ingredients, recipes y a las demas tablas de catalogo que se editan (revisa cuales), y actualizalo en cada cambio desde los servicios. Filas existentes: igual a created_at.
+
+4. Folio. Hoy es V-10001, secuencia unica local calculada con COUNT: dos cajas generarian el mismo. Los folios nuevos deben incluir el codigo de la caja del turno. Los folios ya emitidos no cambian y deben seguir reimprimiendose. DECIDIR: formato exacto; no puede romper la busqueda por folio ni el ancho del ticket de 55 mm. Busca en tests/*.py si alguna prueba GUI depende del formato V-numero y reportalo en la entrega, sin editar esas pruebas.
+
+Reglas: migraciones nuevas versionadas e idempotentes; dinero y cantidades sin float ni double; no relajar pruebas existentes.
+
+Pruebas CTest nuevas, sin depender solo de assert:
+- 100000 identificadores generados sin repeticion, y formato con prefijo;
+- base creada con migraciones 001 a 008 y con datos, migrada a la nueva version: datos intactos, columnas nuevas presentes, y volver a migrar no cambia nada;
+- una venta nueva guarda hora local y UTC del mismo instante;
+- editar un producto cambia updated_at y no created_at;
+- folios de dos cajas distintas no chocan; un folio antiguo V-numero sigue recuperable por get_ticket.
+
+Verificacion, con PATH = D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll al inicio:
+   cmake --build build_be_debug --parallel 2
+   ctest --test-dir build_be_debug --output-on-failure
+   cmake --build build_be_release --parallel 2
+   ctest --test-dir build_be_release --output-on-failure
+No ejecutes pruebas GUI. Si un comando falla dos veces con el mismo error sin cambiar codigo, detente y reporta el error textual.
+
+Entrega: archivos, comandos con codigo de salida, decisiones tomadas, pruebas GUI que podrian verse afectadas por el folio, y limites de lo verificado.
+```
