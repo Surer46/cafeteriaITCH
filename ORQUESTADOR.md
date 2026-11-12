@@ -14,7 +14,7 @@ Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo
 ## Ronda en curso
 
 Ronda 3 cerrada e integrada el 2026-11-12 (`1bb0a4d`): **F2** (Bitácora, `1353162`) y **B3a** (panel de roles por regla de dos pasadas, `9ff0e9e`) aceptados; capturas 09/10 regeneradas. Worktree del backend en la rama `backend/b3b`, partiendo de `main`.
-Siguiente propuesto: **B3b** (Claude: utilidades compartidas de ajuste de columnas y campo centrado, aplicadas a Bitácora y Roles; tercera vez que falla en paneles distintos) y **F2b** (Gemini: resaltar la subsección activa; «Bitácora» no se marca). Pendientes de F2: Detalle a ~58 px con ~500 px libres, texto arriba en Usuario/Fechas (Estándar). Después F3 (UI Respaldos) y F4 (UI Reportes). Bloque grande de backend sin elegir (corte de turno I4 u otros pendientes técnicos).
+**Ronda 4 enviada** (`prompts-2026-11-12-ronda4.md`): **B3b** (Claude: `ui_helpers` con reparto de columnas y campo centrado, aplicado a Roles y Bitácora; endurece `test_f2_audit_log.py`) y **F2b** (Gemini: resaltado de subsección; causa probable `GetLabel().ToStdString()` contra UTF-8 en `subnav_bar.cpp`, falla con acentos; prueba nueva `test_f2b_subnav.py`). Excepción: ambos corren pruebas GUI comprobando antes `tasklist`. Al integrar: regenerar captura 11. Después F3 (UI Respaldos) y F4 (UI Reportes). Bloque grande de backend sin elegir (corte de turno I4 u otros pendientes técnicos).
 
 ## Decisiones del usuario
 
