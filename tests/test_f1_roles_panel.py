@@ -38,6 +38,7 @@ sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
 user32 = ctypes.WinDLL("user32", use_last_error=True)
 gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 
 class SIZE(ctypes.Structure):
     _fields_ = [("cx", wintypes.LONG), ("cy", wintypes.LONG)]
@@ -87,6 +88,21 @@ gdi32.SelectObject.restype = wintypes.HGDIOBJ
 gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
 gdi32.GetPixel.restype = wintypes.COLORREF
 
+user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+user32.ClientToScreen.restype = wintypes.BOOL
+kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+kernel32.OpenProcess.restype = wintypes.HANDLE
+kernel32.VirtualAllocEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t, wintypes.DWORD, wintypes.DWORD]
+kernel32.VirtualAllocEx.restype = wintypes.LPVOID
+kernel32.VirtualFreeEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t, wintypes.DWORD]
+kernel32.VirtualFreeEx.restype = wintypes.BOOL
+kernel32.WriteProcessMemory.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.LPCVOID, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+kernel32.WriteProcessMemory.restype = wintypes.BOOL
+kernel32.ReadProcessMemory.argtypes = [wintypes.HANDLE, wintypes.LPCVOID, wintypes.LPVOID, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+kernel32.ReadProcessMemory.restype = wintypes.BOOL
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
+
 try:
     user32.GetDpiForWindow.argtypes = [wintypes.HWND]
     user32.GetDpiForWindow.restype = wintypes.UINT
@@ -103,6 +119,20 @@ BS_AUTO3STATE = 0x0006
 BS_TOP = 0x0400
 LVM_GETCOLUMNWIDTH = 0x1000 + 29
 LVM_GETNEXTITEM = 0x1000 + 12
+LVM_GETITEMRECT = 0x1000 + 14
+LVM_GETHEADER = 0x1000 + 31
+LVIR_BOUNDS = 0
+WM_VSCROLL = 0x0115
+SB_LINEUP = 0
+SB_LINEDOWN = 1
+PROCESS_VM_OPERATION = 0x0008
+PROCESS_VM_READ = 0x0010
+PROCESS_VM_WRITE = 0x0020
+PROCESS_QUERY_INFORMATION = 0x0400
+MEM_COMMIT_RESERVE = 0x3000
+MEM_RELEASE = 0x8000
+PAGE_READWRITE = 0x04
+CLR_INVALID = 0xFFFFFFFF
 
 WM_SETFOCUS = 0x0007
 WM_SETTEXT = 0x000C
@@ -207,15 +237,56 @@ def send_click_button(hwnd):
 def post_click_button(hwnd):
     user32.PostMessageW(hwnd, BM_CLICK, 0, 0)
 
+def remote_get_item_rect(hwnd_list, index, code=LVIR_BOUNDS):
+    """LVM_GETITEMRECT entre procesos: el RECT debe vivir en la memoria de la app, no en la de la prueba.
+    Cualquier fallo de OpenProcess/VirtualAllocEx/WriteProcessMemory/ReadProcessMemory FALLA la prueba
+    (nunca se omite la comprobación). La memoria remota se libera siempre con VirtualFreeEx."""
+    pid = get_window_pid(hwnd_list)
+    access = PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_QUERY_INFORMATION
+    hproc = kernel32.OpenProcess(access, False, pid)
+    if not hproc:
+        raise AssertionError(f"LVM_GETITEMRECT: OpenProcess({pid}) falló (error {ctypes.get_last_error()})")
+    remote = None
+    try:
+        size = ctypes.sizeof(wintypes.RECT)
+        remote = kernel32.VirtualAllocEx(hproc, None, size, MEM_COMMIT_RESERVE, PAGE_READWRITE)
+        if not remote:
+            raise AssertionError(f"LVM_GETITEMRECT: VirtualAllocEx falló (error {ctypes.get_last_error()})")
+        rect_in = wintypes.RECT(code, 0, 0, 0)  # LVM_GETITEMRECT recibe el código en rc.left
+        written = ctypes.c_size_t(0)
+        if not kernel32.WriteProcessMemory(hproc, remote, ctypes.byref(rect_in), size, ctypes.byref(written)) or written.value != size:
+            raise AssertionError(f"LVM_GETITEMRECT: WriteProcessMemory falló (error {ctypes.get_last_error()}, escritos {written.value}/{size})")
+        ok = user32.SendMessageW(hwnd_list, LVM_GETITEMRECT, index, remote)
+        if not ok:
+            raise AssertionError(f"LVM_GETITEMRECT devolvió FALSE para el ítem {index}")
+        rect_out = wintypes.RECT()
+        read = ctypes.c_size_t(0)
+        if not kernel32.ReadProcessMemory(hproc, remote, ctypes.byref(rect_out), size, ctypes.byref(read)) or read.value != size:
+            raise AssertionError(f"LVM_GETITEMRECT: ReadProcessMemory falló (error {ctypes.get_last_error()}, leídos {read.value}/{size})")
+        return rect_out.left, rect_out.top, rect_out.right, rect_out.bottom
+    finally:
+        if remote:
+            if not kernel32.VirtualFreeEx(hproc, remote, 0, MEM_RELEASE):
+                print(f"  [AVISO] VirtualFreeEx falló (error {ctypes.get_last_error()}); memoria remota de 16 bytes sin liberar")
+        kernel32.CloseHandle(hproc)
+
 def select_list_item(hwnd_list, row_index):
-    """Envía clic de ratón a la fila indicada del SysListView32."""
-    y = 35 + row_index * 20
-    x = 40
+    """Envía clic de ratón al centro de la fila indicada del SysListView32 (posición real vía LVM_GETITEMRECT)."""
+    left, top, right, bottom = remote_get_item_rect(hwnd_list, row_index)
+    x = left + min(40, max(1, (right - left) // 2))
+    y = (top + bottom) // 2
     lparam = (y << 16) | (x & 0xFFFF)
     user32.PostMessageW(hwnd_list, WM_LBUTTONDOWN, 1, lparam)
     time.sleep(0.05)
     user32.PostMessageW(hwnd_list, WM_LBUTTONUP, 0, lparam)
     time.sleep(0.3)
+    sel = user32.SendMessageW(hwnd_list, LVM_GETNEXTITEM, -1, 0x0002)
+    assert sel == row_index, f"El clic no seleccionó la fila {row_index} (seleccionada: {sel})"
+
+def get_client_size(hwnd):
+    r = wintypes.RECT()
+    assert user32.GetClientRect(hwnd, ctypes.byref(r)), "GetClientRect falló"
+    return r.right - r.left, r.bottom - r.top
 
 def get_window_dpi(hwnd):
     if HAS_GET_DPI:
@@ -230,39 +301,115 @@ def get_window_dpi(hwnd):
     return 96
 
 def verify_list_columns(hwnd_list, profile_name):
-    """Verifica anchos de columna LVM_GETCOLUMNWIDTH >= max_text + 8 y ausencia de WS_HSCROLL."""
+    """Anchos de columna: encabezado medido con la fuente REAL del encabezado, contenido con la de la lista,
+    sin WS_HSCROLL y sin holgura desaprovechada contra el área cliente (sin barra vertical)."""
     style = user32.GetWindowLongW(hwnd_list, GWL_STYLE)
     assert (style & WS_HSCROLL) == 0, f"Lista tiene barra horizontal WS_HSCROLL visible a 1216x759 en {profile_name}"
 
-    col_widths = [user32.SendMessageW(hwnd_list, LVM_GETCOLUMNWIDTH, i, 0) for i in range(4)]
+    hdr = user32.SendMessageW(hwnd_list, LVM_GETHEADER, 0, 0)
+    assert hdr, f"LVM_GETHEADER no devolvió el encabezado de la lista en {profile_name}"
 
-    # Col 0: Nombre (Cajero, Dueño, etc.)
-    ext_h0, _ = measure_text_extent(hwnd_list, "Nombre")
+    col_widths = [user32.SendMessageW(hwnd_list, LVM_GETCOLUMNWIDTH, i, 0) for i in range(4)]
+    titles = ["Nombre", "Descripción", "Sistema", "Permisos"]
+    for i, title in enumerate(titles):
+        hdr_ext, _ = measure_text_extent(hdr, title)
+        assert hdr_ext > 0, f"No se pudo medir el encabezado '{title}' con la fuente del encabezado en {profile_name}"
+        assert col_widths[i] >= hdr_ext + 8, (
+            f"Encabezado '{title}' recortado: columna {col_widths[i]}px < {hdr_ext + 8}px "
+            f"(texto {hdr_ext}px con la fuente del encabezado) en {profile_name}")
+
+    # Col 0: Nombre (contenido con la fuente de la lista)
     ext_cajero, _ = measure_text_extent(hwnd_list, "Cajero")
     ext_dueno, _ = measure_text_extent(hwnd_list, "Dueño")
-    max_col0 = max(ext_h0, ext_cajero, ext_dueno)
+    max_col0 = max(ext_cajero, ext_dueno)
     assert col_widths[0] >= max_col0 + 8, f"Columna 0 ('Nombre') {col_widths[0]}px < {max_col0 + 8}px en {profile_name}"
 
     # Col 2: Sistema
-    ext_h2, _ = measure_text_extent(hwnd_list, "Sistema")
     ext_si, _ = measure_text_extent(hwnd_list, "Sí")
-    max_col2 = max(ext_h2, ext_si)
-    assert col_widths[2] >= max_col2 + 8, f"Columna 2 ('Sistema') {col_widths[2]}px < {max_col2 + 8}px en {profile_name}"
+    assert col_widths[2] >= ext_si + 8, f"Columna 2 ('Sistema') {col_widths[2]}px < {ext_si + 8}px en {profile_name}"
 
     # Col 3: Permisos
-    ext_h3, _ = measure_text_extent(hwnd_list, "Permisos")
     ext_num, _ = measure_text_extent(hwnd_list, "16")
-    max_col3 = max(ext_h3, ext_num)
-    assert col_widths[3] >= max_col3 + 8, f"Columna 3 ('Permisos') {col_widths[3]}px < {max_col3 + 8}px en {profile_name}"
+    assert col_widths[3] >= ext_num + 8, f"Columna 3 ('Permisos') {col_widths[3]}px < {ext_num + 8}px en {profile_name}"
 
-    # Col 1: Descripción (debe tener al menos el ancho del encabezado + 8 px)
-    ext_h1, _ = measure_text_extent(hwnd_list, "Descripción")
-    assert col_widths[1] >= ext_h1 + 8, f"Columna 1 ('Descripción') {col_widths[1]}px < encabezado {ext_h1 + 8}px en {profile_name}"
+    # Holgura: la suma de columnas debe usar el área cliente (sin barra vertical) con a lo sumo 8 px libres
+    client_w, _ = get_client_size(hwnd_list)
+    total = sum(col_widths)
+    assert total <= client_w, f"Columnas ({total}px) exceden el área cliente ({client_w}px) en {profile_name}"
+    assert client_w - total <= 8, (
+        f"Espacio sobrante sin aprovechar: {client_w - total}px > 8px (columnas {total}px, cliente {client_w}px) en {profile_name}")
 
-    print(f"  [{profile_name}] Columnas medidas: N={col_widths[0]}px, D={col_widths[1]}px, S={col_widths[2]}px, P={col_widths[3]}px (sin WS_HSCROLL)")
+    print(f"  [{profile_name}] Columnas medidas: N={col_widths[0]}px, D={col_widths[1]}px, S={col_widths[2]}px, P={col_widths[3]}px "
+          f"(cliente {client_w}px, holgura {client_w - total}px, sin WS_HSCROLL)")
+
+def ensure_checkbox_visible(h_cb):
+    """Desplaza (WM_VSCROLL) la ventana con scroll que contiene la casilla hasta dejarla completamente visible.
+    Si no lo logra, FALLA: una casilla fuera de vista no se puede medir con GetPixel."""
+    parent = user32.GetParent(h_cb)
+    assert parent, "La casilla no tiene ventana padre"
+    for _ in range(400):
+        _, ct, _, cb, _, _ = get_rect(h_cb)
+        rc = wintypes.RECT()
+        assert user32.GetClientRect(parent, ctypes.byref(rc)), "GetClientRect del padre falló"
+        pt = wintypes.POINT(0, 0)
+        assert user32.ClientToScreen(parent, ctypes.byref(pt)), "ClientToScreen del padre falló"
+        top, bottom = pt.y, pt.y + rc.bottom
+        if ct >= top and cb <= bottom:
+            time.sleep(0.12)
+            return
+        user32.SendMessageW(parent, WM_VSCROLL, SB_LINEDOWN if cb > bottom else SB_LINEUP, 0)
+        time.sleep(0.02)
+    raise AssertionError(f"No se pudo traer a la vista la casilla '{get_ctrl_text(h_cb)[:25]}' con WM_VSCROLL")
+
+def measure_checkbox_glyph_and_text(h_cb, txt, cw, ch):
+    """Devuelve ((glifo_top, glifo_bottom), (texto_top, texto_bottom)) en filas del control, o None en cada
+    rango no detectado. Se compara contra el color de fondo REAL del control, nunca contra blanco.
+    Fondo: píxel libre a la derecha del texto; si no lo hay, una esquina sin glifo ni texto; si no hay ninguno, FALLA."""
+    longest = max(txt.split('\n'), key=len)
+    tw, _ = measure_text_extent(h_cb, longest)
+    hdc = user32.GetDC(h_cb)
+    assert hdc, f"GetDC falló para la casilla '{txt[:25]}'"
+    try:
+        def px(x, y):
+            if x < 0 or y < 0 or x >= cw or y >= ch:
+                return None
+            v = gdi32.GetPixel(hdc, x, y)
+            return None if v == CLR_INVALID else v
+
+        candidates = []
+        if cw - 3 > tw + 24:                          # a la derecha del texto
+            candidates += [(cw - 3, 2), (cw - 3, ch // 2), (cw - 3, ch - 3)]
+        if ch >= 24:                                  # esquina inferior izquierda (bajo el glifo, sin texto)
+            candidates.append((3, ch - 3))
+        candidates += [(cw - 3, 2), (cw - 3, ch - 3)]  # esquinas derechas
+        bg = None
+        for (x, y) in candidates:
+            v = px(x, y)
+            if v is not None:
+                bg = v
+                break
+        assert bg is not None, f"Casilla '{txt[:25]}': no hay ningún píxel libre para el color de fondo (¿fuera de vista?)"
+
+        # Glifo: columnas 0..15, primeras filas del control
+        glyph_rows = []
+        for y in range(0, min(ch, 24)):
+            if any((px(x, y) is not None and px(x, y) != bg) for x in range(0, 16)):
+                glyph_rows.append(y)
+        glyph = (glyph_rows[0], glyph_rows[-1]) if glyph_rows else None
+
+        # Tinta de la primera línea de texto: a la derecha del glifo, dentro de una altura de línea
+        _, line_h = measure_text_extent(h_cb, longest)
+        text_rows = []
+        for y in range(0, min(ch, max(line_h, 1) + 2)):
+            if any((px(x, y) is not None and px(x, y) != bg) for x in range(18, min(cw - 4, tw + 22))):
+                text_rows.append(y)
+        text = (text_rows[0], text_rows[-1]) if text_rows else None
+        return glyph, text
+    finally:
+        user32.ReleaseDC(h_cb, hdc)
 
 def verify_permission_checkboxes(parent_hwnd, profile_name):
-    """Verifica que cada casilla tenga BS_TOP, texto visible y glifo alineado con la primera línea."""
+    """Verifica que cada casilla tenga BS_TOP, texto visible y glifo alineado con la primera línea (TODAS)."""
     ctrls = get_child_controls(parent_hwnd)
     cb_ctrls = [
         (h, txt) for (h, cls, txt) in ctrls
@@ -277,26 +424,22 @@ def verify_permission_checkboxes(parent_hwnd, profile_name):
         style = user32.GetWindowLongW(h_cb, GWL_STYLE)
         assert (style & BS_TOP) == BS_TOP, f"Casilla '{txt[:25]}' sin estilo BS_TOP (style={hex(style)})"
 
-        # 2. Glifo alineado con la primera línea (tolerancia <= 3 px)
-        # En controles multilínea, el glifo no debe estar centrado verticalmente
-        lines = txt.count('\n') + 1
-        if lines > 1:
-            hdc = user32.GetDC(h_cb)
-            glyph_top = -1
-            for y in range(0, min(ch, 20)):
-                for x in range(3, 12):
-                    pixel = gdi32.GetPixel(hdc, x, y)
-                    # Detectar borde oscuro del glifo
-                    if pixel != 0xFFFFFF and pixel != -1:
-                        glyph_top = y
-                        break
-                if glyph_top >= 0:
-                    break
-            user32.ReleaseDC(h_cb, hdc)
-            if glyph_top >= 0:
-                assert glyph_top <= 4, f"Glifo de casilla '{txt[:20]}' no alineado con primera línea: y={glyph_top} > 4 (tolerancia 3px)"
+        # 2. Glifo alineado con la primera línea (tolerancia <= 3 px) en TODAS las casillas.
+        #    Si no se detecta el glifo, la prueba FALLA.
+        ensure_checkbox_visible(h_cb)
+        cl, ct, cr, cb, cw, ch = get_rect(h_cb)
+        glyph, text_ink = measure_checkbox_glyph_and_text(h_cb, txt, cw, ch)
+        assert glyph is not None, f"Glifo de la casilla '{txt[:25]}' NO detectado en {profile_name} (no se omite la comprobación)"
+        assert text_ink is not None, f"Tinta del texto de la casilla '{txt[:25]}' NO detectada en {profile_name} (no se omite la comprobación)"
+        glyph_center = (glyph[0] + glyph[1]) / 2.0
+        text_center = (text_ink[0] + text_ink[1]) / 2.0
+        assert abs(glyph_center - text_center) <= 3, (
+            f"Glifo de casilla '{txt[:20]}' no alineado con la primera línea: centro del glifo {glyph_center:.1f} "
+            f"(filas {glyph[0]}-{glyph[1]}) vs centro del texto {text_center:.1f} (filas {text_ink[0]}-{text_ink[1]}); "
+            f"diferencia {abs(glyph_center - text_center):.1f}px > 3px en {profile_name}")
 
         # 3. Texto completo visible
+        lines = txt.count('\n') + 1
         if lines == 1:
             tw, th = measure_text_extent(h_cb, txt)
             assert cw >= tw + 16, f"Casilla '{txt}' recortada: {cw}px < {tw+16}px en {profile_name}"
@@ -305,7 +448,70 @@ def verify_permission_checkboxes(parent_hwnd, profile_name):
             tw1, th1 = measure_text_extent(h_cb, first_line)
             assert ch >= lines * th1, f"Casilla multilínea '{first_line[:20]}' altura insuficiente: {ch}px < {lines * th1}px"
 
-    print(f"  [{profile_name}] {len(cb_ctrls)} casillas de permisos verificadas con BS_TOP y alineación en línea 1.")
+    print(f"  [{profile_name}] {len(cb_ctrls)} casillas de permisos verificadas con BS_TOP y centro del glifo a <= 3 px del centro del texto de la primera línea.")
+
+def ink_vertical_extent(h_edit, text):
+    """Rango vertical (coordenadas de pantalla) de los píxeles de texto de un campo Edit.
+    Fondo: píxel libre a la derecha del texto. FALLA si no hay texto, fondo o tinta."""
+    l, t, r, b, w, h = get_rect(h_edit)
+    tw, _ = measure_text_extent(h_edit, text)
+    assert 0 < tw < w - 16, f"Texto '{text}' ({tw}px) no cabe en el campo ({w}px) para medir centrado"
+    hdc = user32.GetDC(h_edit)
+    assert hdc, "GetDC del campo falló"
+    try:
+        bg = None
+        for (x, y) in ((w - 4, h // 2), (w - 4, 2), (w - 4, h - 3)):
+            v = gdi32.GetPixel(hdc, x, y)
+            if v != CLR_INVALID:
+                bg = v
+                break
+        assert bg is not None, "Sin píxel de fondo medible en el campo"
+        first = last = None
+        for y in range(h):
+            for x in range(0, min(w - 8, tw + 12)):
+                v = gdi32.GetPixel(hdc, x, y)
+                if v != CLR_INVALID and v != bg:
+                    if first is None:
+                        first = y
+                    last = y
+                    break
+        assert first is not None, f"No se detectó texto '{text}' en el campo (¿vacío o fuera de vista?)"
+        return t + first, t + last
+    finally:
+        user32.ReleaseDC(h_edit, hdc)
+
+def verify_touch_roles_list_and_fields(hwnd_main, hwnd_list, texts=("Supervisor Táctil", "Prueba de centrado")):
+    """Touch: filas de la lista >= 40 px; Nombre y Descripción editables y centrados verticalmente (tol. 3 px)."""
+    for row in (0, 1):
+        _, top, _, bottom = remote_get_item_rect(hwnd_list, row)
+        assert bottom - top >= 40, f"Fila {row} de la lista de roles en Touch mide {bottom - top}px < 40px"
+    print("  [Touch] Filas de la lista de roles >= 40 px (LVM_GETITEMRECT).")
+
+    ctrls = get_child_controls(hwnd_main)
+    btn_new = next((h for (h, cls, txt) in ctrls if cls.lower() == "button" and txt == "Nuevo rol"), None)
+    assert btn_new is not None, "Botón 'Nuevo rol' no encontrado en Touch"
+    send_click_button(btn_new)
+    time.sleep(0.5)
+
+    edits = [h for (h, cls, txt) in get_child_controls(hwnd_main) if cls.lower() == "edit"]
+    assert len(edits) >= 2, f"Campos Nombre/Descripción no encontrados en Touch ({len(edits)})"
+    for h_edit, text, label in ((edits[0], texts[0], "Nombre"), (edits[1], texts[1], "Descripción")):
+        assert user32.IsWindowEnabled(h_edit) == 1, f"Campo {label} debe estar habilitado para un rol nuevo en Touch"
+        set_text(h_edit, text)
+        time.sleep(0.3)
+        assert get_ctrl_text(h_edit) == text, f"Campo {label} no conservó el texto escrito en Touch"
+
+        container = user32.GetParent(h_edit)
+        assert container, f"Campo {label} sin contenedor"
+        _, ct, _, cb, _, ch_cont = get_rect(container)
+        assert ch_cont >= 48, f"Contenedor de {label} en Touch mide {ch_cont}px < 48px"
+        ink_top, ink_bottom = ink_vertical_extent(h_edit, text)
+        ink_center = (ink_top + ink_bottom) / 2.0
+        box_center = (ct + cb) / 2.0
+        assert abs(ink_center - box_center) <= 3, (
+            f"Texto de {label} no centrado verticalmente: centro de tinta {ink_center:.1f} vs contenedor {box_center:.1f} "
+            f"(diferencia {abs(ink_center - box_center):.1f}px > 3px)")
+    print("  [Touch] Nombre y Descripción editables y centrados verticalmente (tolerancia 3 px).")
 
 def run_f1_test_for_binary(exe_path, work_dir, config_name):
     print(f"\n=======================================================")
@@ -532,6 +738,7 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert len(t_lists) >= 1, "Lista de roles no encontrada en Touch"
         verify_list_columns(t_lists[0], "Touch")
         verify_permission_checkboxes(hwnd_main1, "Touch")
+        verify_touch_roles_list_and_fields(hwnd_main1, t_lists[0])
 
         # En Touch: Verificar que todos los botones de acción del panel tengan al menos 48 px de alto
         touch_ctrls = get_child_controls(hwnd_main1)
@@ -703,9 +910,13 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert len(lists2) >= 1, "Lista de roles no encontrada en sesión 2"
         hwnd_list2 = lists2[0][0]
 
-        # 2.1 Verificar persistencia en Cajero (fila 0)
+        # 2.1 Verificar persistencia en Cajero (fila 0): primero otra fila y luego Cajero, para que la
+        #     selección y la lectura de la casilla sean de la selección real y no del estado inicial.
+        select_list_item(hwnd_list2, 1)
+        time.sleep(0.3)
         select_list_item(hwnd_list2, 0)
         time.sleep(0.5)
+        assert user32.SendMessageW(hwnd_list2, LVM_GETNEXTITEM, -1, 0x0002) == 0, "Cajero (fila 0) no quedó seleccionado tras reabrir"
 
         p2_c_ctrls = get_child_controls(hwnd_main2)
         p2_c_edits = [h for (h, cls, txt) in p2_c_ctrls if cls.lower() == "edit"]
@@ -724,7 +935,12 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         cb2_audit = next((h for (h, cls, txt) in p2_c_ctrls if cls.lower() == "button" and "Consulta de bitácora" in txt), None)
         assert cb2_audit is not None, "Casilla 'Consulta de bitácora' no encontrada para Cajero"
         assert user32.SendMessageW(cb2_audit, BM_GETCHECK, 0, 0) == 1, "Permiso 'audit.view' asignado a Cajero debe permanecer marcado tras reapertura"
-        print("[OK] Cajero: Permisos modificados persisten íntegros tras reinicio.")
+        con_c2 = sqlite3.connect(db_path)
+        cur_c2 = con_c2.cursor()
+        cur_c2.execute("SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-cashier' AND permission_id = 'audit.view';")
+        assert cur_c2.fetchone()[0] == 1, "Tras reabrir, SQLite no conserva 'audit.view' del Cajero"
+        con_c2.close()
+        print("[OK] Cajero: Permisos modificados persisten íntegros tras reinicio (UI tras reselección + SQLite).")
 
         # 2.2 Verificar Dueño en solo lectura (fila 1)
         select_list_item(hwnd_list2, 1)
