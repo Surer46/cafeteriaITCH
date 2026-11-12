@@ -25,6 +25,9 @@ Ronda 3 cerrada e integrada el 2026-11-12 (`1bb0a4d`): **F2** (Bitácora, `13531
 
 - 2026-11-12: los permisos de un rol se activan con interruptores (estilo ajustes de teléfono) en lugar de casillas, más grandes en Touch. Bloque **F5** para Gemini, prompt al final de `prompts-2026-11-12-ronda4.md`; enviar tras aceptar F2b e integrar B3b (`c71d586`, pendiente de merge en `main`). Además cada permiso lleva título y descripción en lenguaje llano, separador entre permisos y agrupación por las cuatro secciones de la barra lateral (el Dueño es una persona mayor): bloque **B4a** (Claude, migración 009 con `title`, `section`, `sort_order`), que debe integrarse antes de F5. B4 usa migraciones desde 010 y va después de B4a.
 
+- 2026-11-12: títulos y descripciones de los 20 permisos aprobados por el usuario (tabla en el prompt B4a).
+- 2026-11-12: salió Gemini 4 Hydrogen en AntiGravity. Recomendación del orquestador: no cambiar a mitad de F2b; probarlo en F5 como ensayo y comparar contra el perfil de 3.8 Flash (exageración en informes, anchos a ojo, pruebas débiles). Pendiente de que el usuario confirme.
+
 ## Git e integración
 
 - `main` en `D:\Cafetería_ITCH`; worktree del backend en `D:\Cafeteria_ITCH_backend` (rama `backend/<bloque>`). Al aceptar un bloque de backend: commit en su rama, `git merge` en `main`, verificar el conjunto (build, CTest, I1) y luego `git merge --ff-only main` en el worktree con la rama siguiente.
