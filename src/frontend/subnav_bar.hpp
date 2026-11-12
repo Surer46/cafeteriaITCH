@@ -19,7 +19,13 @@ public:
     std::string active_subsection() const { return current_subsection_; }
 
 private:
+    struct SubnavItem {
+        wxButton* button{nullptr};
+        std::string name;
+    };
+
     void rebuild_buttons();
+    void update_button_styles();
     void on_button_clicked(const std::string& name);
 
     OnSubsectionChangedCallback callback_;
@@ -27,7 +33,7 @@ private:
     bool can_view_dev_server_{false};
     std::string current_subsection_;
     wxBoxSizer* buttons_sizer_{nullptr};
-    std::vector<wxButton*> buttons_;
+    std::vector<SubnavItem> items_;
 };
 
 } // namespace app::frontend

@@ -23,7 +23,7 @@ void SubnavBar::set_section(SectionId section, bool can_view_dev_server) {
 
 void SubnavBar::rebuild_buttons() {
     buttons_sizer_->Clear(true);
-    buttons_.clear();
+    items_.clear();
 
     std::vector<std::string> sub_names;
     switch (current_section_) {
@@ -61,45 +61,40 @@ void SubnavBar::rebuild_buttons() {
     for (const auto& name : sub_names) {
         auto* btn = new wxButton(this, wxID_ANY, wxString::FromUTF8(name.c_str()),
                                  wxDefaultPosition, wxSize(-1, btn_h));
-        
-        bool is_active = (name == current_subsection_);
-        if (is_active) {
-            btn->SetBackgroundColour(Theme::ColorSurface);
-            btn->SetForegroundColour(Theme::ColorBrand);
-            btn->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-        } else {
-            btn->SetBackgroundColour(Theme::ColorBorderSubtle);
-            btn->SetForegroundColour(Theme::ColorTextSecondary);
-            btn->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
-        }
 
         btn->Bind(wxEVT_BUTTON, [this, name](wxCommandEvent&) {
             on_button_clicked(name);
         });
 
         buttons_sizer_->Add(btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxTOP | wxBOTTOM, 6);
-        buttons_.push_back(btn);
+        items_.push_back({btn, name});
     }
 
     buttons_sizer_->AddStretchSpacer(1);
+    update_button_styles();
     Layout();
+}
+
+void SubnavBar::update_button_styles() {
+    for (const auto& item : items_) {
+        if (!item.button) continue;
+        bool is_active = (item.name == current_subsection_);
+        if (is_active) {
+            item.button->SetBackgroundColour(Theme::ColorSurface);
+            item.button->SetForegroundColour(Theme::ColorBrand);
+            item.button->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+        } else {
+            item.button->SetBackgroundColour(Theme::ColorBorderSubtle);
+            item.button->SetForegroundColour(Theme::ColorTextSecondary);
+            item.button->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
+        }
+        item.button->Refresh();
+    }
 }
 
 void SubnavBar::on_button_clicked(const std::string& name) {
     current_subsection_ = name;
-    for (auto* btn : buttons_) {
-        bool is_active = (btn->GetLabel().ToStdString() == name);
-        if (is_active) {
-            btn->SetBackgroundColour(Theme::ColorSurface);
-            btn->SetForegroundColour(Theme::ColorBrand);
-            btn->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-        } else {
-            btn->SetBackgroundColour(Theme::ColorBorderSubtle);
-            btn->SetForegroundColour(Theme::ColorTextSecondary);
-            btn->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
-        }
-        btn->Refresh();
-    }
+    update_button_styles();
 
     if (callback_) {
         callback_(name);
