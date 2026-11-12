@@ -23,7 +23,7 @@ Ronda 3 cerrada e integrada el 2026-11-12 (`1bb0a4d`): **F2** (Bitácora, `13531
 - 2026-11-08: regla de dos pasadas. Un detalle de interfaz que Gemini no cierra en dos pasadas va a Claude Code Terminal (detalles en `coordinacion-agentes.md`, protocolo punto 6). Primer caso: B3a, detalles del panel de roles tras F1 y F1b.
 - El usuario quiere ver los movimientos de los agentes: no enviar prompts por `agy -p`; el usuario pega los prompts en terminales interactivas.
 
-- 2026-11-12: los permisos de un rol se activan con interruptores (estilo ajustes de teléfono) en lugar de casillas, más grandes en Touch. Bloque **F5** para Gemini, prompt al final de `prompts-2026-11-12-ronda4.md`; enviar tras aceptar F2b e integrar B3b (`c71d586`, pendiente de merge en `main`).
+- 2026-11-12: los permisos de un rol se activan con interruptores (estilo ajustes de teléfono) en lugar de casillas, más grandes en Touch. Bloque **F5** para Gemini, prompt al final de `prompts-2026-11-12-ronda4.md`; enviar tras aceptar F2b e integrar B3b (`c71d586`, pendiente de merge en `main`). Además cada permiso lleva título y descripción en lenguaje llano, separador entre permisos y agrupación por las cuatro secciones de la barra lateral (el Dueño es una persona mayor): bloque **B4a** (Claude, migración 009 con `title`, `section`, `sort_order`), que debe integrarse antes de F5. B4 usa migraciones desde 010 y va después de B4a.
 
 ## Git e integración
 

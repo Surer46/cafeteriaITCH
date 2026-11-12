@@ -98,7 +98,61 @@ Entrega corta: archivos, comandos con codigo de salida, el fallo de la prueba an
 
 ---
 
-## B4 — Claude Code Terminal (enviar cuando B3b esté aceptado; rama `backend/b4`)
+## B4a — Claude Code Terminal (enviar ya; rama `backend/b4a`, parte de `backend/b3b`)
+
+Origen: petición del usuario del 2026-11-12. Bloque pequeño que desbloquea F5.
+
+```text
+Bloque B4a de backend, pequeno. Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b4a. No hagas commits. No compiles ni corras pruebas antes de editar. No hace falta plan previo: es mecanico.
+
+Objetivo: cada permiso tendra titulo corto, descripcion en lenguaje llano, grupo y orden, para que el panel de roles los muestre a una persona mayor con poca familiaridad con la tecnologia. Los textos ya estan decididos; copialos tal cual, con sus acentos.
+
+Archivos permitidos: migrations/009_permission_titles.sql (nuevo), include/app/contracts/dto.hpp, src/services/ (servicio de cuentas real y su mock), tests/test_*.cpp. No toques src/frontend/ ni tests/*.py. No edites migraciones 001 a 008.
+
+1. Migracion 009, idempotente: agrega a permissions las columnas title (texto), section (texto) y sort_order (entero), y actualiza las 21 filas con la tabla de abajo, incluida la descripcion nueva. No cambies los id ni role_permissions.
+
+2. PermissionDto gana title, section y sort_order. list_permissions los devuelve ordenados por sort_order. Mantiene las reglas actuales: backup.dev_config no se lista para el Dueno. El campo module se conserva. El mock devuelve los mismos textos.
+
+3. Si la interfaz actual deja de compilar por el cambio del DTO, no la edites: reportalo. No deberia pasar: solo se agregan campos.
+
+4. CTest: tras migrar, los 21 permisos tienen title, section y sort_order no vacios; los title son unicos; section es uno de los cuatro valores; list_permissions sale en orden; migrar dos veces no cambia nada; los permisos asignados a role-owner y role-cashier no cambian.
+
+Tabla (id | section | orden | title | description):
+pos.sell | Punto de Venta | 10 | Vender y cobrar | Registrar ventas y cobrarlas en la caja.
+pos.visual_catalog | Punto de Venta | 20 | Usar el catálogo con fotos | Elegir productos desde las tarjetas con imagen, como en un menú.
+pos.notes | Punto de Venta | 30 | Escribir notas en un pedido | Añadir indicaciones a un producto, por ejemplo: sin azúcar.
+pos.reprint | Punto de Venta | 40 | Reimprimir tickets | Volver a imprimir el ticket de una venta ya cobrada.
+pos.cancel_order | Punto de Venta | 50 | Cancelar un pedido sin cobrar | Vaciar el pedido en curso antes de cobrarlo.
+pos.void_sale | Punto de Venta | 60 | Anular una venta cobrada | Cancelar una venta que ya se cobró. Queda registrado quién lo hizo y por qué.
+inventory.view | Inventario | 110 | Ver existencias | Consultar cuánto hay de cada producto e ingrediente.
+inventory.manage_products | Inventario | 120 | Administrar productos y recetas | Crear, cambiar o dar de baja productos, sus precios y sus recetas.
+inventory.restock | Inventario | 130 | Registrar compras | Anotar lo que se compra y cuánto costó, para sumarlo al inventario.
+inventory.adjust | Inventario | 140 | Registrar mermas y ajustes | Anotar pérdidas, traslados y correcciones del inventario.
+inventory.manage_thresholds | Inventario | 150 | Definir avisos de poco inventario | Fijar la cantidad mínima de cada ingrediente para que el sistema avise.
+inventory.promotions | Inventario | 160 | Administrar promociones y combos | Crear y cambiar promociones y combos.
+shift.operate | Caja y Reportes | 210 | Abrir y cerrar caja | Abrir turno, registrar entradas y salidas de dinero y hacer el corte.
+reports.view | Caja y Reportes | 220 | Ver reportes | Consultar los reportes de ventas e inventario.
+audit.view | Caja y Reportes | 230 | Ver la bitácora | Consultar el historial de lo que cada persona hizo en el sistema.
+users.manage | BackOffice | 310 | Administrar cuentas | Crear cuentas de usuario, cambiarlas o desactivarlas.
+roles.manage | BackOffice | 320 | Administrar roles y permisos | Crear roles y decidir qué puede hacer cada uno.
+config.manage | BackOffice | 330 | Cambiar la configuración | Ajustar opciones del negocio, como la impresora y el tamaño del ticket.
+backup.manage | BackOffice | 340 | Hacer respaldos | Activar y ejecutar copias de seguridad de la información.
+backup.restore | BackOffice | 350 | Restaurar un respaldo | Recuperar la información desde una copia. Reemplaza los datos actuales.
+backup.dev_config | BackOffice | 990 | Configurar el servidor de respaldos | Configuración técnica del servidor remoto (exclusivo Desarrollador).
+
+Verificacion, con PATH = D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll al inicio:
+   cmake --build build_be_debug --parallel 2
+   ctest --test-dir build_be_debug --output-on-failure
+   cmake --build build_be_release --parallel 2
+   ctest --test-dir build_be_release --output-on-failure
+No ejecutes pruebas GUI. Si un comando falla dos veces con el mismo error sin cambiar codigo, detente y reporta el error textual.
+
+Entrega corta: archivos, comandos con codigo de salida y limites.
+```
+
+---
+
+## B4 — Claude Code Terminal (enviar cuando B4a esté aceptado; rama `backend/b4`)
 
 Origen: `auditoria-general-2026-11-12.md`, apartado B. Aprobado por el usuario el 2026-11-12. El cliente no ha definido el tipo de versión móvil; estos ajustes sirven para cualquiera.
 
@@ -107,7 +161,7 @@ Bloque B4 de backend. Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b4
 
 Objetivo: cuatro ajustes de datos que hoy cuestan poco y con ventas acumuladas costarian mucho. No construyas sincronizacion, servidor ni nada de red.
 
-Archivos permitidos: src/domain/, src/storage/, src/services/, include/app/, migrations/ (solo archivos nuevos, a partir de 009), tests/test_*.cpp y CMakeLists.txt. No toques src/frontend/, tests/*.py ni migraciones ya aplicadas (001 a 008).
+Archivos permitidos: src/domain/, src/storage/, src/services/, include/app/, migrations/ (solo archivos nuevos, a partir de 010; la 009 es de B4a), tests/test_*.cpp y CMakeLists.txt. No toques src/frontend/, tests/*.py ni migraciones ya aplicadas (001 a 009).
 
 Presenta primero un plan para revision. El plan debe resolver las dudas marcadas como DECIDIR antes de escribir codigo.
 
@@ -123,7 +177,7 @@ Reglas: migraciones nuevas versionadas e idempotentes; dinero y cantidades sin f
 
 Pruebas CTest nuevas, sin depender solo de assert:
 - 100000 identificadores generados sin repeticion, y formato con prefijo;
-- base creada con migraciones 001 a 008 y con datos, migrada a la nueva version: datos intactos, columnas nuevas presentes, y volver a migrar no cambia nada;
+- base creada con migraciones 001 a 009 y con datos, migrada a la nueva version: datos intactos, columnas nuevas presentes, y volver a migrar no cambia nada;
 - una venta nueva guarda hora local y UTC del mismo instante;
 - editar un producto cambia updated_at y no created_at;
 - folios de dos cajas distintas no chocan; un folio antiguo V-numero sigue recuperable por get_ticket.
@@ -140,9 +194,9 @@ Entrega: archivos, comandos con codigo de salida, decisiones tomadas, pruebas GU
 
 ---
 
-## F5 — AntiGravity (enviar cuando F2b esté aceptado y B3b integrado en `main`)
+## F5 — AntiGravity (enviar cuando F2b esté aceptado y B3b y B4a integrados en `main`)
 
-Origen: petición del usuario del 2026-11-12. Los permisos de un rol se activan con interruptores en lugar de casillas, más grandes en Touch, para crear un rol rápido.
+Origen: peticiones del usuario del 2026-11-12. Los permisos de un rol se activan con interruptores en lugar de casillas, más grandes en Touch. Cada permiso muestra título y descripción y va separado del siguiente, porque el Dueño es una persona mayor con poca familiaridad con la tecnología. Títulos, descripciones, grupo y orden vienen del servicio (B4a).
 
 ```text
 Bloque F5. No compiles ni corras pruebas antes de editar. No hagas commits.
@@ -167,10 +221,12 @@ No toques ui_helpers.*, otros paneles, contratos ni servicios. Usa ui_helpers ta
    - sin animacion ni temporizadores (PC de pocos recursos). Dibujo con doble bufer, sin parpadeo.
 
 2. Panel de roles:
-   - cada permiso es una fila: texto a la izquierda (puede ocupar varias lineas) e interruptor a la derecha, centrado verticalmente respecto a la fila;
+   - el usuario principal es una persona mayor con poca familiaridad con la tecnologia: prioriza texto grande, mucho aire y nada de jerga. La lista no debe verse apretada;
+   - cada permiso es una fila con dos textos a la izquierda y el interruptor a la derecha, centrado verticalmente respecto a la fila. Arriba el TITULO (PermissionDto.title) en negrita y color de texto principal, con la fuente de cuerpo o mayor, nunca menor; debajo la DESCRIPCION (PermissionDto.description) en color secundario, que puede ocupar varias lineas. No inventes ni cambies textos: usa los del servicio;
+   - agrupa los permisos bajo cuatro encabezados, los mismos de la barra lateral y en ese orden: Punto de Venta, Inventario, Caja y Reportes, BackOffice. El grupo y el orden vienen en PermissionDto.section y PermissionDto.sort_order; quita el mapa get_module_display_name;
+   - separador visible entre cada permiso: una linea horizontal de 1 px con Theme::ColorBorderSubtle a todo el ancho de la fila, con al menos 10 px de aire arriba y abajo del texto (14 en Touch). Entre un grupo y el siguiente deja al menos 20 px de espacio adicional antes del encabezado;
    - un clic o toque en cualquier punto de la fila cambia el interruptor;
-   - alto minimo de fila: 36 en Estandar, 56 en Touch; linea separadora discreta entre filas;
-   - los encabezados de modulo se conservan;
+   - alto minimo de fila: 52 en Estandar, 68 en Touch;
    - rol Dueno: interruptores deshabilitados. Rol Cajero: editables. Roles propios: editables. Sin cambios en nombres, textos, permisos ni reglas;
    - el boton Guardar sigue visible sin desplazarse; a su lado muestra cuantos permisos estan activados (por ejemplo: 6 de 20 permisos);
    - role-dev y backup.dev_config siguen sin aparecer.
@@ -178,11 +234,14 @@ No toques ui_helpers.*, otros paneles, contratos ni servicios. Usa ui_helpers ta
 3. tests/test_f1_roles_panel.py: sustituye las comprobaciones de casillas por las equivalentes de interruptor. Nada de lo que hoy se comprueba puede perderse (persistencia en SQLite y tras reabrir, Cajero editable, Dueno en solo lectura, columnas, filas Touch, campos centrados, geometria a 960x600). Nuevas aserciones, midiendo y no a ojo:
    - hay un interruptor por permiso visible (20 para el Dueno);
    - tamano del interruptor al menos 44 x 24 en Estandar y 60 x 32 en Touch (GetWindowRect);
-   - alto de fila al menos 36 en Estandar y 56 en Touch;
+   - alto de fila al menos 52 en Estandar y 68 en Touch;
+   - cada fila muestra titulo y descripcion no vacios, iguales a los de la tabla permissions de SQLite para ese permiso; el titulo queda encima de la descripcion y ninguno se recorta ni se solapa con el interruptor;
+   - hay exactamente cuatro encabezados de grupo, con los nombres y el orden de la barra lateral;
+   - entre cada par de permisos consecutivos del mismo grupo se detecta por pixeles una linea separadora horizontal; falla si falta alguna;
    - centro vertical del interruptor a 3 px o menos del centro de su fila;
    - borde derecho de todos los interruptores alineado (diferencia de 2 px o menos) y ninguno recortado por el area visible;
    - posicion de la perilla leida por pixeles: a la derecha si BM_GETCHECK dice activado, a la izquierda si no; falla si no se detecta la perilla;
-   - clic en el interruptor cambia el estado; clic sobre el texto de la fila tambien; Espacio con el foco tambien;
+   - clic en el interruptor cambia el estado; clic sobre el titulo y sobre la descripcion tambien; Espacio con el foco tambien;
    - con el rol Dueno, un clic no cambia el estado;
    - el contador junto a Guardar coincide con el numero de interruptores activados.
 
