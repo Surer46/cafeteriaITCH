@@ -73,6 +73,7 @@ private:
     bool is_creating_new_{false};
     bool can_manage_{false};
     bool in_size_event_{false};
+    bool in_col_resize_{false};
 };
 
 } // namespace app::frontend
