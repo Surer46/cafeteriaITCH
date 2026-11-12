@@ -13,8 +13,7 @@ Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo
 
 ## Ronda en curso
 
-Ronda 3 cerrada e integrada el 2026-11-12 (`1bb0a4d`): **F2** (Bitácora, `1353162`) y **B3a** (panel de roles por regla de dos pasadas, `9ff0e9e`) aceptados; capturas 09/10 regeneradas. Worktree del backend en la rama `backend/b3b`, partiendo de `main`.
-**Ronda 4 enviada** (`prompts-2026-11-12-ronda4.md`): **B3b** (Claude: `ui_helpers` con reparto de columnas y campo centrado, aplicado a Roles y Bitácora; endurece `test_f2_audit_log.py`) y **F2b** (Gemini: resaltado de subsección; causa probable `GetLabel().ToStdString()` contra UTF-8 en `subnav_bar.cpp`, falla con acentos; prueba nueva `test_f2b_subnav.py`). Excepción: ambos corren pruebas GUI comprobando antes `tasklist`. Al integrar: regenerar captura 11. Después F3 (UI Respaldos) y F4 (UI Reportes). Bloque grande de backend sin elegir (corte de turno I4 u otros pendientes técnicos).
+Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilidades `ui_helpers`) y **F2b** (`dba641a`, resaltado de subsección) aceptados; capturas 10 y 11 regeneradas. En cola, prompts en `prompts-2026-11-12-ronda4.md`: **B4a** (Claude, títulos de permisos, migración 009; rama `backend/b4a` ya al día con `main`) -> **F5** (Gemini, interruptores; requiere B4a integrado) y **B4** (Claude, ajustes de datos, migraciones desde 010; tras B4a). Después F3 (UI Respaldos) y F4 (UI Reportes).
 
 ## Decisiones del usuario
 
@@ -50,6 +49,8 @@ Ronda 3 cerrada e integrada el 2026-11-12 (`1bb0a4d`): **F2** (Bitácora, `13531
 - **Caveman:** su README mide ~3 % de ahorro de salida (ruido). Ronda 2 comparada en `auditoria-2026-10-18.md`: la mejora visible vino de la memoria operativa, los prompts acotados y las pruebas estrictas; sin evidencia separable de caveman. El orquestador no lo usa (decisión del usuario).
 
 ## Pendientes conocidos (no asignados)
+
+- Pruebas GUI intermitentes (2026-11-12): `test_i1_integration` y `test_f2_audit_log` fallaron una vez por tiempo de espera tras el inicio de sesión y pasaron al repetir. Investigar cómo envían el inicio de sesión (foco o tiempos fijos) antes de fiarse de una sola pasada. Al auditar, repetir a solas antes de culpar a un bloque.
 
 - Candidatos de backend para B3: build `build_hooks` con `-DCAFETERIA_TEST_HOOKS=ON` para el requerimiento 8 de I2; retención y limpieza de `backups/`; persistir `get_developer_server_config`; conciliación del corte de turno (I4, depende en parte de la sección 9).
 - F1b menores: encabezado «Descripción» recortado, filas de la lista de roles sin altura táctil, texto arriba en campos de 48 px en Touch.

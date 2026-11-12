@@ -247,3 +247,24 @@ Conclusión provisional: la mejora visible viene de la memoria operativa de `AGE
 - Verificación integrada en `main`: build 0 advertencias, CTest 5/5 en Release y Debug, `test_i1_integration`, `test_f1_roles_panel`, `test_f2_audit_log`, `test_fe08_fe09_visual_integration` y `capture_visual_qa` exit 0. Capturas 09 y 10 regeneradas: encabezado «Descripción» completo.
 - No verificado: `test_i2_integration.py` no se repitió (B3a no toca venta ni caja). DPI 125/150/200 sin probar.
 - Observación cosmética (Touch): el campo deshabilitado se ve como un recuadro gris dentro del contenedor blanco con borde.
+
+## Ronda 4 — B3b y F2b (auditado el 2026-11-12)
+
+**B3b (Claude Code Terminal):** aceptado en `c71d586`, integrado en `af4e4bc`.
+
+- Alcance: `src/frontend/ui_helpers.{hpp,cpp}` (nuevos), `CMakeLists.txt` (solo esas dos fuentes), `backoffice_roles_panel.{cpp,hpp}`, `audit_log_panel.cpp`, `tests/test_f2_audit_log.py`.
+- Plan revisado antes de ejecutar, con tres ajustes aplicados: contenedor siempre que haya alto fijo (sin campo de prueba desechable), reparto de columnas idempotente sin estado por lista, y localización de campos por etiqueta en la prueba. Añadido `set_text_field_enabled` para el fondo del campo deshabilitado.
+- Prueba de Bitácora endurecida, ninguna aserción relajada: encabezado con su fuente, holgura ≤ 8 px, sin `WS_HSCROLL`, tres campos centrados (≤ 3 px) y falla si no hay tinta.
+- Medidas del orquestador (Release y Debug iguales): Estándar F=148 U=105 E=141 D=526 (cliente 922, holgura 2); Touch F=162 U=111 E=147 D=454 (cliente 876, holgura 2). Antes Detalle medía ~58 px.
+- No verificado: Bitácora con barra vertical visible; el color del campo deshabilitado no lo mide ninguna prueba (en la captura 10 el contenedor y el campo ya se ven del mismo gris).
+
+**F2b (AntiGravity):** aceptado en `dba641a`.
+
+- Alcance: `src/frontend/subnav_bar.{cpp,hpp}` y `tests/test_f2b_subnav.py` (nuevo).
+- Causa confirmada: `GetLabel().ToStdString()` contra el nombre UTF-8 no coincidía con acentos. Ahora cada botón guarda su nombre y `update_button_styles` pinta activo e inactivo.
+- Comprobación del orquestador: con el código anterior la prueba falla (`Clic en Catálogo visual ... 0 activos`); con el arreglo pasa en Release y Debug.
+
+**Verificación integrada en `main` (`af4e4bc`):** build 0 advertencias y CTest 5/5 en Release y Debug; `test_f1_roles_panel`, `test_f2b_subnav`, `test_fe08_fe09_visual_integration` y `capture_visual_qa` exit 0. Capturas 10 y 11 regeneradas: «Bitácora» resaltada, Detalle a todo el ancho, texto de filtros centrado.
+
+- **Intermitencia observada:** en la primera pasada `test_i1_integration` y `test_f2_audit_log` (sesión 3, Debug) fallaron por tiempo de espera: tras enviar el inicio de sesión, la ventana principal no apareció en 12–15 s. Repetidas a solas pasaron (I1 dos veces, F2 una). Ningún bloque de la ronda toca el inicio de sesión. Causa no determinada; sospecha: pérdida de foco del escritorio durante la prueba. Queda como pendiente.
+- No verificado: `test_i2_integration.py` no se repitió.
