@@ -70,6 +70,10 @@ gdi32.GetTextExtentPoint32W.argtypes = [wintypes.HDC, wintypes.LPCWSTR, ctypes.c
 gdi32.GetTextExtentPoint32W.restype = wintypes.BOOL
 gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
 gdi32.SelectObject.restype = wintypes.HGDIOBJ
+gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+gdi32.GetPixel.restype = wintypes.COLORREF
+user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+user32.GetClientRect.restype = wintypes.BOOL
 
 try:
     user32.GetDpiForWindow.argtypes = [wintypes.HWND]
@@ -82,6 +86,8 @@ GWL_STYLE = -16
 WS_HSCROLL = 0x00100000
 LVM_GETITEMCOUNT = 0x1000 + 4
 LVM_GETCOLUMNWIDTH = 0x1000 + 29
+LVM_GETHEADER = 0x1000 + 31
+CLR_INVALID = 0xFFFFFFFF
 CB_GETCOUNT = 0x0146
 CB_SETCURSEL = 0x014E
 CB_GETCURSEL = 0x0147
@@ -203,36 +209,120 @@ def make_password_hash(password):
     derived = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 100000)
     return f"pbkdf2_sha256$100000${salt.hex()}${derived.hex()}"
 
+def get_client_size(hwnd):
+    r = wintypes.RECT()
+    assert user32.GetClientRect(hwnd, ctypes.byref(r)), "GetClientRect falló"
+    return r.right - r.left, r.bottom - r.top
+
 def verify_list_columns(hwnd_list, profile_name):
-    """Verifica que las columnas de la lista de bitácora no se recorten y no tengan WS_HSCROLL."""
+    """Columnas de la bitácora: encabezado medido con la fuente REAL del encabezado, contenido con la de la lista,
+    sin WS_HSCROLL, suma <= área cliente y holgura <= 8 px (la columna Detalle absorbe el espacio restante)."""
     style = user32.GetWindowLongW(hwnd_list, GWL_STYLE)
     assert (style & WS_HSCROLL) == 0, f"Lista de bitácora tiene barra horizontal WS_HSCROLL visible a 1216x759 en {profile_name}"
 
+    hdr = user32.SendMessageW(hwnd_list, LVM_GETHEADER, 0, 0)
+    assert hdr, f"LVM_GETHEADER no devolvió el encabezado de la lista en {profile_name}"
+
     col_widths = [user32.SendMessageW(hwnd_list, LVM_GETCOLUMNWIDTH, i, 0) for i in range(4)]
+    titles = ["Fecha y hora", "Usuario", "Evento", "Detalle"]
+    for i, title in enumerate(titles):
+        hdr_ext, _ = measure_text_extent(hdr, title)
+        assert hdr_ext > 0, f"No se pudo medir el encabezado '{title}' con la fuente del encabezado en {profile_name}"
+        assert col_widths[i] >= hdr_ext + 8, (
+            f"Encabezado '{title}' recortado: columna {col_widths[i]}px < {hdr_ext + 8}px "
+            f"(texto {hdr_ext}px con la fuente del encabezado) en {profile_name}")
 
-    # Col 0: Fecha y hora (ej. '2026-11-08 17:30:15')
-    ext_h0, _ = measure_text_extent(hwnd_list, "Fecha y hora")
+    # Contenido (fuente de la lista)
     ext_date, _ = measure_text_extent(hwnd_list, "2026-11-08 12:00:00")
-    max_col0 = max(ext_h0, ext_date)
-    assert col_widths[0] >= max_col0 + 8, f"Columna 0 ('Fecha y hora') {col_widths[0]}px < {max_col0 + 8}px en {profile_name}"
-
-    # Col 1: Usuario (ej. 'admin_owner')
-    ext_h1, _ = measure_text_extent(hwnd_list, "Usuario")
+    assert col_widths[0] >= ext_date + 8, f"Columna 0 ('Fecha y hora') {col_widths[0]}px < {ext_date + 8}px en {profile_name}"
     ext_u, _ = measure_text_extent(hwnd_list, "admin_owner")
-    max_col1 = max(ext_h1, ext_u)
-    assert col_widths[1] >= max_col1 + 8, f"Columna 1 ('Usuario') {col_widths[1]}px < {max_col1 + 8}px en {profile_name}"
-
-    # Col 2: Evento (ej. 'LOGIN_SUCCESS', 'OWNER_CREATED')
-    ext_h2, _ = measure_text_extent(hwnd_list, "Evento")
+    assert col_widths[1] >= ext_u + 8, f"Columna 1 ('Usuario') {col_widths[1]}px < {ext_u + 8}px en {profile_name}"
     ext_ev, _ = measure_text_extent(hwnd_list, "LOGIN_SUCCESS")
-    max_col2 = max(ext_h2, ext_ev)
-    assert col_widths[2] >= max_col2 + 8, f"Columna 2 ('Evento') {col_widths[2]}px < {max_col2 + 8}px en {profile_name}"
+    assert col_widths[2] >= ext_ev + 8, f"Columna 2 ('Evento') {col_widths[2]}px < {ext_ev + 8}px en {profile_name}"
 
-    # Col 3: Detalle (mínimo el ancho del encabezado + 8 px)
-    ext_h3, _ = measure_text_extent(hwnd_list, "Detalle")
-    assert col_widths[3] >= ext_h3 + 8, f"Columna 3 ('Detalle') {col_widths[3]}px < encabezado {ext_h3 + 8}px en {profile_name}"
+    # Suma <= área cliente (sin barra vertical) y holgura <= 8 px
+    client_w, _ = get_client_size(hwnd_list)
+    total = sum(col_widths)
+    assert total <= client_w, f"Columnas ({total}px) exceden el área cliente ({client_w}px) en {profile_name}"
+    assert client_w - total <= 8, (
+        f"Espacio sobrante sin aprovechar: {client_w - total}px > 8px (columnas {total}px, cliente {client_w}px) en {profile_name}")
 
-    print(f"  [{profile_name}] Columnas medidas: F={col_widths[0]}px, U={col_widths[1]}px, E={col_widths[2]}px, D={col_widths[3]}px (sin WS_HSCROLL)")
+    print(f"  [{profile_name}] Columnas medidas: F={col_widths[0]}px, U={col_widths[1]}px, E={col_widths[2]}px, D={col_widths[3]}px "
+          f"(cliente {client_w}px, holgura {client_w - total}px, sin WS_HSCROLL)")
+
+def ink_vertical_extent(h_edit, text):
+    """Rango vertical (coordenadas de pantalla) de los píxeles de texto de un campo Edit.
+    Fondo: píxel libre a la derecha del texto. FALLA si no hay texto, fondo o tinta."""
+    l, t, r, b, w, h = get_rect(h_edit)
+    tw, _ = measure_text_extent(h_edit, text)
+    assert 0 < tw < w - 16, f"Texto '{text}' ({tw}px) no cabe en el campo ({w}px) para medir centrado"
+    hdc = user32.GetDC(h_edit)
+    assert hdc, "GetDC del campo falló"
+    try:
+        bg = None
+        for (x, y) in ((w - 4, h // 2), (w - 4, 2), (w - 4, h - 3)):
+            v = gdi32.GetPixel(hdc, x, y)
+            if v != CLR_INVALID:
+                bg = v
+                break
+        assert bg is not None, "Sin píxel de fondo medible en el campo"
+        first = last = None
+        for y in range(h):
+            for x in range(0, min(w - 8, tw + 12)):
+                v = gdi32.GetPixel(hdc, x, y)
+                if v != CLR_INVALID and v != bg:
+                    if first is None:
+                        first = y
+                    last = y
+                    break
+        assert first is not None, f"No se detectó texto '{text}' en el campo (¿vacío o fuera de vista?)"
+        return t + first, t + last
+    finally:
+        user32.ReleaseDC(h_edit, hdc)
+
+def find_filter_field(ctrls, label_text):
+    """Localiza el campo de un filtro por su contenedor: Edit cuyo padre (contenedor) es hermano de la etiqueta,
+    queda a su derecha (a lo sumo 24 px) y se solapa verticalmente con ella. Debe haber EXACTAMENTE uno."""
+    labels = [h for (h, cls, txt) in ctrls if cls.lower() == "static" and txt == label_text]
+    assert len(labels) == 1, f"Se esperaba una etiqueta '{label_text}' visible y hay {len(labels)}"
+    lbl = labels[0]
+    parent = user32.GetParent(lbl)
+    _, lt, lr, lb, _, _ = get_rect(lbl)
+    lcy = (lt + lb) / 2.0
+    matches = []
+    for (h, cls, txt) in ctrls:
+        if cls.lower() != "edit":
+            continue
+        cont = user32.GetParent(h)
+        if not cont or cont == parent or user32.GetParent(cont) != parent:
+            continue
+        cl, ct, cr, cb, _, _ = get_rect(cont)
+        if -1 <= cl - lr <= 24 and ct <= lcy <= cb:
+            matches.append((h, cont))
+    assert len(matches) == 1, f"Campo de '{label_text}': se esperaba exactamente un contenedor y hay {len(matches)}"
+    return matches[0]
+
+def verify_filter_fields(hwnd_main, profile_name, expected_h):
+    """Usuario, Fecha desde y Fecha hasta: contenedor >= expected_h px y texto centrado verticalmente (tol. 3 px)."""
+    ctrls = get_child_controls(hwnd_main)
+    samples = (("Usuario:", "admin_owner"), ("Fecha desde:", "2026-11-01"), ("Fecha hasta:", "2026-11-30"))
+    fields = [(label, sample) + find_filter_field(ctrls, label) for (label, sample) in samples]
+    assert len(fields) == 3, "Deben localizarse exactamente tres campos de filtro"
+    for label, sample, h_edit, cont in fields:
+        _, ct, _, cb, _, ch_cont = get_rect(cont)
+        assert ch_cont >= expected_h, f"Contenedor de '{label}' en {profile_name} mide {ch_cont}px < {expected_h}px"
+        set_text(h_edit, sample)
+        time.sleep(0.3)
+        try:
+            ink_top, ink_bottom = ink_vertical_extent(h_edit, sample)
+        finally:
+            set_text(h_edit, "")
+        ink_center = (ink_top + ink_bottom) / 2.0
+        box_center = (ct + cb) / 2.0
+        assert abs(ink_center - box_center) <= 3, (
+            f"Texto de '{label}' no centrado verticalmente en {profile_name}: centro de tinta {ink_center:.1f} vs "
+            f"contenedor {box_center:.1f} (diferencia {abs(ink_center - box_center):.1f}px > 3px)")
+    print(f"  [{profile_name}] Usuario, Fecha desde y Fecha hasta: contenedor >= {expected_h}px y texto centrado (tolerancia 3 px).")
 
 def run_f2_test_for_binary(exe_path, repo_root, config_name):
     print(f"\n=======================================================")
@@ -338,6 +428,7 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
 
         # 2.2: Verificar columnas y ausencia de WS_HSCROLL a 1216x759 en Estándar
         verify_list_columns(hwnd_list, "Estándar")
+        verify_filter_fields(hwnd_main2, "Estándar", 34)
 
         # 2.3: Seleccionar fila 0 y comprobar que el detalle completo aparece en txt_detail_
         select_list_item(hwnd_list, 0)
@@ -439,6 +530,7 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
         t_lists = [h for (h, cls, txt) in get_child_controls(hwnd_main2) if "list" in cls.lower()]
         assert len(t_lists) >= 1, "Lista no encontrada en Touch"
         verify_list_columns(t_lists[0], "Touch")
+        verify_filter_fields(hwnd_main2, "Touch", 48)
 
         touch_active_ctrls = get_child_controls(hwnd_main2)
         for h, cls, txt in touch_active_ctrls:

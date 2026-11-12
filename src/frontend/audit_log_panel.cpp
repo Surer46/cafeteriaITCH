@@ -1,5 +1,6 @@
 #include "src/frontend/audit_log_panel.hpp"
 #include "src/frontend/theme.hpp"
+#include "src/frontend/ui_helpers.hpp"
 #include <algorithm>
 #include <set>
 
@@ -74,10 +75,9 @@ void AuditLogPanel::setup_ui() {
     lbl_u->SetForegroundColour(Theme::ColorText);
     row1_sizer->Add(lbl_u, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
 
-    txt_user_ = new wxTextCtrl(main_card_, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(140, ctrl_h));
-    txt_user_->SetFont(Theme::get_font_body());
+    auto* user_field = ui::make_text_field(main_card_, txt_user_, ctrl_h, 140, Theme::get_font_body());
     txt_user_->SetHint(wxT("Username o ID"));
-    row1_sizer->Add(txt_user_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
+    row1_sizer->Add(user_field, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
 
     btn_search_ = new wxButton(main_card_, wxID_ANY, wxT("Buscar"));
     Theme::style_button_primary(btn_search_, btn_h);
@@ -96,20 +96,18 @@ void AuditLogPanel::setup_ui() {
     lbl_from->SetForegroundColour(Theme::ColorText);
     row2_sizer->Add(lbl_from, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
 
-    txt_date_from_ = new wxTextCtrl(main_card_, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(120, ctrl_h));
-    txt_date_from_->SetFont(Theme::get_font_body());
+    auto* from_field = ui::make_text_field(main_card_, txt_date_from_, ctrl_h, 120, Theme::get_font_body());
     txt_date_from_->SetHint(wxT("YYYY-MM-DD"));
-    row2_sizer->Add(txt_date_from_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
+    row2_sizer->Add(from_field, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
 
     auto* lbl_to = new wxStaticText(main_card_, wxID_ANY, wxT("Fecha hasta:"));
     lbl_to->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_to->SetForegroundColour(Theme::ColorText);
     row2_sizer->Add(lbl_to, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
 
-    txt_date_to_ = new wxTextCtrl(main_card_, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(120, ctrl_h));
-    txt_date_to_->SetFont(Theme::get_font_body());
+    auto* to_field = ui::make_text_field(main_card_, txt_date_to_, ctrl_h, 120, Theme::get_font_body());
     txt_date_to_->SetHint(wxT("YYYY-MM-DD"));
-    row2_sizer->Add(txt_date_to_, 0, wxALIGN_CENTER_VERTICAL);
+    row2_sizer->Add(to_field, 0, wxALIGN_CENTER_VERTICAL);
 
     filters_box->Add(row2_sizer, 0, wxEXPAND | wxBOTTOM, 12);
     card_sizer->Add(filters_box, 0, wxEXPAND | wxALL, 12);
@@ -125,6 +123,11 @@ void AuditLogPanel::setup_ui() {
     list_events_->InsertColumn(2, wxT("Evento"), wxLIST_FORMAT_LEFT, 130);
     list_events_->InsertColumn(3, wxT("Detalle"), wxLIST_FORMAT_LEFT, 260);
 
+    // Recalcular al cambiar el tamaño de la lista o al aparecer/desaparecer la barra vertical.
+    list_events_->Bind(wxEVT_SIZE, [this](wxSizeEvent& e) {
+        e.Skip();
+        auto_size_columns();
+    });
     list_events_->Bind(wxEVT_LIST_ITEM_SELECTED, &AuditLogPanel::on_item_selected, this);
     list_events_->Bind(wxEVT_LIST_ITEM_DESELECTED, &AuditLogPanel::on_item_deselected, this);
     card_sizer->Add(list_events_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
@@ -303,66 +306,33 @@ void AuditLogPanel::load_events() {
 
     auto_size_columns();
     Layout();
+    // La barra vertical puede aparecer tras insertar filas: recalcular al asentarse el layout.
+    CallAfter([this]() { auto_size_columns(); });
 }
 
 void AuditLogPanel::auto_size_columns() {
     if (!list_events_) return;
 
-    int list_w = list_events_->GetClientSize().GetWidth();
-    if (list_w <= 50) {
-        list_w = list_events_->GetSize().GetWidth();
-    }
-    if (list_w <= 50) return;
-
-    int w_hdr0 = 0, w_hdr1 = 0, w_hdr2 = 0, w_hdr3 = 0, th = 0;
-    list_events_->GetTextExtent(wxT("Fecha y hora"), &w_hdr0, &th);
-    list_events_->GetTextExtent(wxT("Usuario"), &w_hdr1, &th);
-    list_events_->GetTextExtent(wxT("Evento"), &w_hdr2, &th);
-    list_events_->GetTextExtent(wxT("Detalle"), &w_hdr3, &th);
-
-    int max_w0 = w_hdr0;
-    int max_w1 = w_hdr1;
-    int max_w2 = w_hdr2;
-    int max_w3 = w_hdr3;
-
-    int tw = 0;
+    int tw = 0, th = 0;
+    int max_w0 = 0, max_w1 = 0, max_w2 = 0;
     for (const auto& evt : current_events_) {
         list_events_->GetTextExtent(wxString::FromUTF8(evt.created_at.c_str()), &tw, &th);
-        if (tw > max_w0) max_w0 = tw;
+        max_w0 = std::max(max_w0, tw);
 
         std::string user_disp = evt.username.empty() ? evt.user_id : evt.username;
         list_events_->GetTextExtent(wxString::FromUTF8(user_disp.c_str()), &tw, &th);
-        if (tw > max_w1) max_w1 = tw;
+        max_w1 = std::max(max_w1, tw);
 
         list_events_->GetTextExtent(wxString::FromUTF8(evt.event_type.c_str()), &tw, &th);
-        if (tw > max_w2) max_w2 = tw;
-
-        list_events_->GetTextExtent(wxString::FromUTF8(evt.details.c_str()), &tw, &th);
-        if (tw > max_w3) max_w3 = tw;
+        max_w2 = std::max(max_w2, tw);
     }
 
-    int col0 = max_w0 + 16;
-    int col1 = max_w1 + 16;
-    int col2 = max_w2 + 16;
-
-    int remaining = list_w - col0 - col1 - col2 - 4;
-    int min_col3 = w_hdr3 + 12;
-    int col3 = std::max(min_col3, remaining);
-
-    int ideal_col3 = max_w3 + 16;
-    if (col0 + col1 + col2 + ideal_col3 + 4 <= list_w) {
-        col3 = ideal_col3;
-    }
-
-    if (col0 + col1 + col2 + col3 > list_w - 2) {
-        col3 = list_w - col0 - col1 - col2 - 4;
-        if (col3 < min_col3) col3 = min_col3;
-    }
-
-    list_events_->SetColumnWidth(0, col0);
-    list_events_->SetColumnWidth(1, col1);
-    list_events_->SetColumnWidth(2, col2);
-    list_events_->SetColumnWidth(3, col3);
+    std::vector<ui::ColumnSpec> cols(4);
+    cols[0] = {wxT("Fecha y hora"), max_w0, -1, 16, 0};
+    cols[1] = {wxT("Usuario"), max_w1, -1, 16, 0};
+    cols[2] = {wxT("Evento"), max_w2, -1, 16, 0};
+    cols[3] = {wxT("Detalle"), 0, 0, 16, 0};
+    ui::distribute_list_columns(list_events_, cols, 3);  // Detalle toma todo el espacio restante
 }
 
 void AuditLogPanel::on_search_clicked(wxCommandEvent&) {
