@@ -2,18 +2,19 @@
 
 Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo compartido está en `AGENTS.md` (Memoria operativa) y `coordinacion-agentes.md`. Leerlo al inicio de cada sesión en lugar de reconstruir el contexto. Actualizarlo al cerrar cada ronda.
 
-Última actualización: 2026-11-08.
+Última actualización: 2026-11-12.
 
 ## Estado
 
 - **Puertas:** I1 cerrada (revalidada con el ejecutable real tras integrar B1). I2: software cerrado; falta QA humano (0/7 en `frontend/qa-visual.md`), impresora térmica 55/80, monitor táctil y DPI 125/150/200. I3–I7 abiertas. **No iniciar I3 hasta el QA humano.**
-- **Pantallas reales:** Venta, Caja y turnos, Usuarios y cuentas, Configuración (impresión), Roles y permisos (F1/F1b). El resto de las 16 subsecciones son marcadores de posición.
+- **Pantallas reales:** Venta, Caja y turnos, Usuarios y cuentas, Configuración (impresión), Roles y permisos (F1/F1b), Bitácora (F2). El resto de las 16 subsecciones son marcadores de posición.
 - **Backend real nuevo:** respaldo seguro y restauración (B1, migración 008, `backup.restore` solo Dueño) y reportes diarios (B2, `payments_total` y `payments_mismatch_cents`).
 - **Estimación de release** (dada el 2026-10-19): piloto en 4–6 semanas y 1.0 en 8–12, si se resuelven la sección 9 de `specs.md` y los datos de la PC de caja e impresora.
 
 ## Ronda en curso
 
-Ronda 2 cerrada e integrada (`8644088`): B2 (reportes reales) y F1b (Cajero editable, columnas y casillas) aceptados. Listo para enviar: **F2** (Bitácora), ya escrito en `prompts-2026-11-08-ronda2.md`. Después: F3 (UI de Respaldos, B1 listo) y F4 (UI de Reportes, B2 listo). Backend sin bloque asignado: candidatos en «Pendientes conocidos». Worktree del backend en la rama `backend/b3`, partiendo de `main`.
+Ronda 3 cerrada e integrada el 2026-11-12 (`1bb0a4d`): **F2** (Bitácora, `1353162`) y **B3a** (panel de roles por regla de dos pasadas, `9ff0e9e`) aceptados; capturas 09/10 regeneradas. Worktree del backend en la rama `backend/b3b`, partiendo de `main`.
+Siguiente propuesto: **B3b** (Claude: utilidades compartidas de ajuste de columnas y campo centrado, aplicadas a Bitácora y Roles; tercera vez que falla en paneles distintos) y **F2b** (Gemini: resaltar la subsección activa; «Bitácora» no se marca). Pendientes de F2: Detalle a ~58 px con ~500 px libres, texto arriba en Usuario/Fechas (Estándar). Después F3 (UI Respaldos) y F4 (UI Reportes). Bloque grande de backend sin elegir (corte de turno I4 u otros pendientes técnicos).
 
 ## Decisiones del usuario
 
@@ -58,6 +59,6 @@ Ronda 2 cerrada e integrada (`8644088`): B2 (reportes reales) y F1b (Cajero edit
 
 ## Reanudar agentes
 
-- AntiGravity: `agy` (nueva) o `agy --conversation=<id>`; historial anterior en la conversación `36c58871-cb3f-45c6-88ad-07be0a8992e5`; más antiguas `c94b5e25-55b3-490a-b547-abad9fb453b1` y `4c6c3e44-1c0a-40a4-8124-59943158b872`.
-- Claude Code Terminal: abrir en `D:\Cafeteria_ITCH_backend` con el modelo `opusplan`.
+- AntiGravity (actual, ronda 3): `agy --conversation=5cb24680-56c1-4cd1-9621-72c8ef342fbd`. Anteriores: `36c58871-cb3f-45c6-88ad-07be0a8992e5`, `c94b5e25-55b3-490a-b547-abad9fb453b1`, `4c6c3e44-1c0a-40a4-8124-59943158b872`.
+- Claude Code Terminal (actual, ronda 3): `claude --resume CafeCH`, abierto en `D:\Cafeteria_ITCH_backend` con el modelo `opusplan`.
 - QA manual aislado: `.\build_release\app_desktop.exe --data-dir="D:\Cafeteria_QA_Manual"`.

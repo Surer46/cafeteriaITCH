@@ -232,3 +232,18 @@ Observaciones:
 | Gemini, informe | Afirmación falsa de «sin recorte» | Coherente con las capturas, salvo detalles menores |
 
 Conclusión provisional: la mejora visible viene de la memoria operativa de `AGENTS.md`, los prompts acotados y las pruebas estrictas; no hay evidencia separable de ahorro por caveman con dos bloques de tamaño distinto.
+
+## Ronda 3 — B3a y F2 (auditado el 2026-11-12)
+
+**F2 (AntiGravity, Bitácora):** aceptado en `1353162`. Pendientes menores: columna Detalle a ~58 px con ~500 px libres, texto arriba en Usuario y fechas (Estándar), subsección «Bitácora» sin resaltar.
+
+**B3a (Claude Code Terminal, regla de dos pasadas):** aceptado en `9ff0e9e`, integrado en `1bb0a4d`.
+
+- Alcance: solo `src/frontend/backoffice_roles_panel.{cpp,hpp}` y `tests/test_f1_roles_panel.py`.
+- Panel: anchos calculados con la fuente real del encabezado (`ListView_GetHeader` + `WM_GETFONT`); Descripción toma el espacio restante; filas de 42 px en Touch con `wxImageList`; Nombre y Descripción centrados en contenedores de 48 px.
+- Prueba: ninguna aserción relajada. Encabezado medido con su fuente; holgura de columnas ≤ 8 px; glifo de casilla comparado por centros (≤ 3 px) en las 20 casillas y falla si no detecta glifo o tinta; persistencia del Cajero tras reabrir; fila ≥ 40 px y campos centrados (≤ 3 px) en Touch.
+- Primera ejecución del orquestador (2026-11-08): falló la aserción del glifo (`y=6 > 3`) porque comparaba bordes superiores; corregida por Claude a comparación de centros.
+- Verificación del orquestador en el worktree: build Release/Debug 0 advertencias, CTest 5/5 en ambos, `test_f1_roles_panel.py` exit 0 en Release y Debug. Medidas: Estándar N=74 D=101 S=75 P=84 (cliente 336, holgura 2); Touch N=76 D=124 S=78 P=86 (cliente 366, holgura 2); sin `WS_HSCROLL`.
+- Verificación integrada en `main`: build 0 advertencias, CTest 5/5 en Release y Debug, `test_i1_integration`, `test_f1_roles_panel`, `test_f2_audit_log`, `test_fe08_fe09_visual_integration` y `capture_visual_qa` exit 0. Capturas 09 y 10 regeneradas: encabezado «Descripción» completo.
+- No verificado: `test_i2_integration.py` no se repitió (B3a no toca venta ni caja). DPI 125/150/200 sin probar.
+- Observación cosmética (Touch): el campo deshabilitado se ve como un recuadro gris dentro del contenedor blanco con borde.
