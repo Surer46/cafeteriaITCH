@@ -1,8 +1,7 @@
 #include "src/frontend/backoffice_roles_panel.hpp"
 #include "src/frontend/theme.hpp"
+#include "src/frontend/ui_helpers.hpp"
 #include <algorithm>
-#include <wx/imaglist.h>
-#include <wx/settings.h>
 #include <sstream>
 #include <vector>
 
@@ -42,49 +41,6 @@ void apply_checkbox_top_alignment(wxCheckBox* cb) {
         ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
                        SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
     }
-#endif
-}
-
-// Ancho de un texto con la fuente REAL del encabezado de la lista (en Windows el encabezado
-// nativo no hereda la fuente de la lista). Fuera de Windows se usa la fuente de la lista.
-int header_text_width(wxListCtrl* list, const wxString& text) {
-#ifdef __WXMSW__
-    HWND hdr = ListView_GetHeader(static_cast<HWND>(list->GetHWND()));
-    if (hdr) {
-        HFONT font = reinterpret_cast<HFONT>(::SendMessageW(hdr, WM_GETFONT, 0, 0));
-        HDC dc = ::GetDC(hdr);
-        if (dc) {
-            HGDIOBJ old = font ? ::SelectObject(dc, font) : nullptr;
-            SIZE sz{0, 0};
-            ::GetTextExtentPoint32W(dc, text.wc_str(), static_cast<int>(text.length()), &sz);
-            if (old) ::SelectObject(dc, old);
-            ::ReleaseDC(hdr, dc);
-            return sz.cx;
-        }
-    }
-#endif
-    int w = 0, h = 0;
-    list->GetTextExtent(text, &w, &h);
-    return w;
-}
-
-int header_height(wxListCtrl* list) {
-#ifdef __WXMSW__
-    HWND hdr = ListView_GetHeader(static_cast<HWND>(list->GetHWND()));
-    RECT r{0, 0, 0, 0};
-    if (hdr && ::GetWindowRect(hdr, &r)) {
-        return static_cast<int>(r.bottom - r.top);
-    }
-#endif
-    return list->FromDIP(24);
-}
-
-bool has_vertical_scrollbar(wxListCtrl* list) {
-#ifdef __WXMSW__
-    return (::GetWindowLongPtr(static_cast<HWND>(list->GetHWND()), GWL_STYLE) & WS_VSCROLL) != 0;
-#else
-    (void)list;
-    return false;
 #endif
 }
 
@@ -233,9 +189,7 @@ void BackofficeRolesPanel::setup_ui() {
     list_roles_ = new wxListCtrl(left_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
     list_roles_->SetFont(Theme::get_font_body());
     if (Theme::is_touch()) {
-        // Filas de al menos 40 px en Touch: la altura de fila de SysListView32 sigue a la lista de imágenes
-        // (misma técnica que pos_panel.cpp).
-        list_roles_->AssignImageList(new wxImageList(1, 42), wxIMAGE_LIST_SMALL);
+        ui::apply_touch_row_height(list_roles_);
     }
     list_roles_->InsertColumn(0, wxT("Nombre"), wxLIST_FORMAT_LEFT, 110);
     list_roles_->InsertColumn(1, wxT("Descripción"), wxLIST_FORMAT_LEFT, 110);
@@ -245,7 +199,6 @@ void BackofficeRolesPanel::setup_ui() {
     // Si aparece o desaparece la barra vertical cambia el área cliente: recalcular anchos.
     list_roles_->Bind(wxEVT_SIZE, [this](wxSizeEvent& e) {
         e.Skip();
-        if (in_col_resize_) return;
         auto_size_columns();
     });
     list_roles_->Bind(wxEVT_LIST_ITEM_SELECTED, &BackofficeRolesPanel::on_role_selected, this);
@@ -283,43 +236,21 @@ void BackofficeRolesPanel::setup_ui() {
 
     right_sizer->Add(rhead_sizer, 0, wxEXPAND | wxALL, 10);
 
-    // En Touch cada campo va en un contenedor de 48 px con el texto centrado verticalmente
-    // (misma técnica de contenedor y espaciadores que la búsqueda de pos_panel.cpp).
-    // El wxTextCtrl se devuelve por referencia; Enable()/Disable() siguen actuando sobre él.
-    auto make_text_field = [](wxWindow* parent, wxTextCtrl*& out) -> wxWindow* {
-        if (!Theme::is_touch()) {
-            out = new wxTextCtrl(parent, wxID_ANY);
-            out->SetFont(Theme::get_font_body());
-            return out;
-        }
-        auto* box = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(-1, 48), wxBORDER_SIMPLE);
-        box->SetBackgroundColour(Theme::ColorSurface);
-        box->SetMinSize(wxSize(-1, 48));
-        out = new wxTextCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
-        out->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
-        out->SetBackgroundColour(Theme::ColorSurface);
-        auto* sz = new wxBoxSizer(wxVERTICAL);
-        sz->AddStretchSpacer(1);
-        sz->Add(out, 0, wxEXPAND | wxLEFT | wxRIGHT, 6);
-        sz->AddStretchSpacer(1);
-        box->SetSizer(sz);
-        wxTextCtrl* edit = out;
-        box->Bind(wxEVT_LEFT_DOWN, [edit](wxMouseEvent&) { edit->SetFocus(); });
-        return box;
-    };
-
+    // Touch: campos de 48 px con el texto centrado (fábrica común). Estándar: campo natural.
+    const int field_h = Theme::is_touch() ? 48 : 0;
+    const wxFont field_font = Theme::is_touch() ? Theme::get_font_body(wxFONTWEIGHT_MEDIUM) : Theme::get_font_body();
     auto* form_grid = new wxFlexGridSizer(2, 2, 8, 10);
     form_grid->AddGrowableCol(1, 1);
 
     auto* lbl_n = new wxStaticText(right_card_, wxID_ANY, wxT("Nombre:"));
     lbl_n->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     form_grid->Add(lbl_n, 0, wxALIGN_CENTER_VERTICAL);
-    form_grid->Add(make_text_field(right_card_, txt_name_), 1, wxEXPAND);
+    form_grid->Add(ui::make_text_field(right_card_, txt_name_, field_h, -1, field_font), 1, wxEXPAND);
 
     auto* lbl_d = new wxStaticText(right_card_, wxID_ANY, wxT("Descripción:"));
     lbl_d->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     form_grid->Add(lbl_d, 0, wxALIGN_CENTER_VERTICAL);
-    form_grid->Add(make_text_field(right_card_, txt_desc_), 1, wxEXPAND);
+    form_grid->Add(ui::make_text_field(right_card_, txt_desc_, field_h, -1, field_font), 1, wxEXPAND);
 
     right_sizer->Add(form_grid, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
@@ -496,37 +427,6 @@ void BackofficeRolesPanel::update_permission_matrix_layout() {
 
 void BackofficeRolesPanel::auto_size_columns() {
     if (!list_roles_) return;
-    in_col_resize_ = true;
-
-    // Ancho útil: área cliente SIN la barra vertical, tanto si ya está visible como si va a aparecer
-    // con las filas actuales (así nunca surge barra horizontal).
-    const int sb_w = wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, list_roles_);
-    const wxSize client = list_roles_->GetClientSize();
-    int full_w = client.GetWidth() + (has_vertical_scrollbar(list_roles_) ? sb_w : 0);
-    if (full_w <= 50) {
-        full_w = list_roles_->GetSize().GetWidth();
-    }
-    if (full_w <= 50) {
-        in_col_resize_ = false;
-        return;
-    }
-    int row_h = list_roles_->FromDIP(Theme::is_touch() ? 42 : 20);
-    if (list_roles_->GetItemCount() > 0) {
-        wxRect item_rect;
-        if (list_roles_->GetItemRect(0, item_rect) && item_rect.GetHeight() > 0) {
-            row_h = item_rect.GetHeight();
-        }
-    }
-    const int rows_h = header_height(list_roles_) + static_cast<int>(roles_.size()) * row_h;
-    const bool needs_vbar = client.GetHeight() > 0 && rows_h > client.GetHeight();
-    const int list_w = full_w - (needs_vbar ? sb_w : 0);
-
-    // Encabezados: fuente real del encabezado. Contenido: fuente de la lista.
-    const int hpad = list_roles_->FromDIP(20);
-    const int h0 = header_text_width(list_roles_, wxT("Nombre"));
-    const int h1 = header_text_width(list_roles_, wxT("Descripción"));
-    const int h2 = header_text_width(list_roles_, wxT("Sistema"));
-    const int h3 = header_text_width(list_roles_, wxT("Permisos"));
 
     int th = 0, tw = 0;
     int content0 = 0, sys_content0 = 0, content2 = 0, content3 = 0;
@@ -544,26 +444,12 @@ void BackofficeRolesPanel::auto_size_columns() {
 
     // Columna 0 con imagen de 1 px y reserva nativa de icono en Touch (como pos_panel).
     const int img_pad = Theme::is_touch() ? 1 + 6 : 0;
-    const int want0 = std::max(h0 + hpad, content0 + 16 + img_pad);
-    const int floor0 = std::max(h0 + hpad, sys_content0 + 16 + img_pad);
-    const int col2 = std::max(h2 + hpad, content2 + 18);
-    const int col3 = std::max(h3 + hpad, content3 + 18);
-    const int min1 = h1 + hpad;
-
-    const int budget = list_w - 2;
-    int col0 = want0;
-    // Un nombre muy largo no puede quitarle a Descripción el espacio de su encabezado.
-    if (budget - col0 - col2 - col3 < min1) {
-        col0 = std::max(floor0, budget - col2 - col3 - min1);
-    }
-    // Descripción toma todo el espacio restante (el contenido puede ir con puntos suspensivos).
-    const int col1 = std::max(min1, budget - col0 - col2 - col3);
-
-    list_roles_->SetColumnWidth(0, col0);
-    list_roles_->SetColumnWidth(1, col1);
-    list_roles_->SetColumnWidth(2, col2);
-    list_roles_->SetColumnWidth(3, col3);
-    in_col_resize_ = false;
+    std::vector<ui::ColumnSpec> cols(4);
+    cols[0] = {wxT("Nombre"), content0, sys_content0, 16, img_pad};
+    cols[1] = {wxT("Descripción"), 0, 0, 16, 0};
+    cols[2] = {wxT("Sistema"), content2, -1, 18, 0};
+    cols[3] = {wxT("Permisos"), content3, -1, 18, 0};
+    ui::distribute_list_columns(list_roles_, cols, 1);  // Descripción toma el espacio restante
 }
 
 void BackofficeRolesPanel::on_size(wxSizeEvent& event) {
@@ -666,8 +552,8 @@ void BackofficeRolesPanel::populate_role_details(long index) {
         lbl_system_notice_->Hide();
     }
 
-    txt_name_->Enable(can_edit_fields);
-    txt_desc_->Enable(can_edit_fields);
+    ui::set_text_field_enabled(txt_name_, can_edit_fields);
+    ui::set_text_field_enabled(txt_desc_, can_edit_fields);
     btn_save_->Enable(can_save);
     btn_delete_->Enable(can_delete);
 
@@ -688,8 +574,8 @@ void BackofficeRolesPanel::reset_form_to_empty() {
     lbl_form_feedback_->SetLabel(wxEmptyString);
     txt_name_->SetValue(wxEmptyString);
     txt_desc_->SetValue(wxEmptyString);
-    txt_name_->Enable(false);
-    txt_desc_->Enable(false);
+    ui::set_text_field_enabled(txt_name_, false);
+    ui::set_text_field_enabled(txt_desc_, false);
     btn_save_->Enable(false);
     btn_delete_->Enable(false);
 
@@ -725,8 +611,8 @@ void BackofficeRolesPanel::on_new_role(wxCommandEvent&) {
 
     txt_name_->SetValue(wxEmptyString);
     txt_desc_->SetValue(wxEmptyString);
-    txt_name_->Enable(true);
-    txt_desc_->Enable(true);
+    ui::set_text_field_enabled(txt_name_, true);
+    ui::set_text_field_enabled(txt_desc_, true);
 
     for (auto& [perm_id, cb] : perm_checkboxes_) {
         cb->SetValue(false);
