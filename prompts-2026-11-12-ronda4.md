@@ -137,3 +137,63 @@ No ejecutes pruebas GUI. Si un comando falla dos veces con el mismo error sin ca
 
 Entrega: archivos, comandos con codigo de salida, decisiones tomadas, pruebas GUI que podrian verse afectadas por el folio, y limites de lo verificado.
 ```
+
+---
+
+## F5 — AntiGravity (enviar cuando F2b esté aceptado y B3b integrado en `main`)
+
+Origen: petición del usuario del 2026-11-12. Los permisos de un rol se activan con interruptores en lugar de casillas, más grandes en Touch, para crear un rol rápido.
+
+```text
+Bloque F5. No compiles ni corras pruebas antes de editar. No hagas commits.
+
+Cambio pedido por el usuario: en BackOffice > Roles y permisos, cada permiso se activa con un interruptor deslizante (pastilla con perilla, como los ajustes de un telefono) en lugar de una casilla. En perfil Touch debe ser mas grande y comodo para recorrer la lista y guardar.
+
+Archivos que puedes editar, y ningun otro:
+- nuevos: src/frontend/toggle_switch.hpp y src/frontend/toggle_switch.cpp
+- CMakeLists.txt (solo agregar toggle_switch.cpp y .hpp a las fuentes de app_desktop)
+- src/frontend/backoffice_roles_panel.cpp y .hpp
+- tests/test_f1_roles_panel.py
+- tests/capture_visual_qa.py solo si las capturas 09 y 10 dejan de generarse
+No toques ui_helpers.*, otros paneles, contratos ni servicios. Usa ui_helpers tal como esta.
+
+1. Control ToggleSwitch (reutilizable, dibujado por la aplicacion sobre wxControl):
+   - tamano: 44 x 24 en Estandar y 60 x 32 en Touch, pasados por FromDIP;
+   - activado: pastilla con Theme::ColorBrand y perilla a la derecha; desactivado: pastilla gris y perilla a la izquierda. El estado no puede depender solo del color: la posicion de la perilla lo indica, y ademas dibuja una marca dentro de la perilla cuando esta activado;
+   - deshabilitado: colores atenuados y no responde;
+   - teclado: recibe foco con Tab, muestra el foco y cambia con Espacio;
+   - emite un evento al cambiar y expone GetValue y SetValue;
+   - en Windows responde a BM_GETCHECK y BM_SETCHECK con su estado, para que las pruebas y las herramientas de accesibilidad lo lean;
+   - sin animacion ni temporizadores (PC de pocos recursos). Dibujo con doble bufer, sin parpadeo.
+
+2. Panel de roles:
+   - cada permiso es una fila: texto a la izquierda (puede ocupar varias lineas) e interruptor a la derecha, centrado verticalmente respecto a la fila;
+   - un clic o toque en cualquier punto de la fila cambia el interruptor;
+   - alto minimo de fila: 36 en Estandar, 56 en Touch; linea separadora discreta entre filas;
+   - los encabezados de modulo se conservan;
+   - rol Dueno: interruptores deshabilitados. Rol Cajero: editables. Roles propios: editables. Sin cambios en nombres, textos, permisos ni reglas;
+   - el boton Guardar sigue visible sin desplazarse; a su lado muestra cuantos permisos estan activados (por ejemplo: 6 de 20 permisos);
+   - role-dev y backup.dev_config siguen sin aparecer.
+
+3. tests/test_f1_roles_panel.py: sustituye las comprobaciones de casillas por las equivalentes de interruptor. Nada de lo que hoy se comprueba puede perderse (persistencia en SQLite y tras reabrir, Cajero editable, Dueno en solo lectura, columnas, filas Touch, campos centrados, geometria a 960x600). Nuevas aserciones, midiendo y no a ojo:
+   - hay un interruptor por permiso visible (20 para el Dueno);
+   - tamano del interruptor al menos 44 x 24 en Estandar y 60 x 32 en Touch (GetWindowRect);
+   - alto de fila al menos 36 en Estandar y 56 en Touch;
+   - centro vertical del interruptor a 3 px o menos del centro de su fila;
+   - borde derecho de todos los interruptores alineado (diferencia de 2 px o menos) y ninguno recortado por el area visible;
+   - posicion de la perilla leida por pixeles: a la derecha si BM_GETCHECK dice activado, a la izquierda si no; falla si no se detecta la perilla;
+   - clic en el interruptor cambia el estado; clic sobre el texto de la fila tambien; Espacio con el foco tambien;
+   - con el rol Dueno, un clic no cambia el estado;
+   - el contador junto a Guardar coincide con el numero de interruptores activados.
+
+Verificacion:
+   cmake --build build_release --parallel 2
+   cmake --build build_debug --parallel 2
+   ctest --test-dir build_release --output-on-failure
+   ctest --test-dir build_debug --output-on-failure
+   python -u tests/test_f1_roles_panel.py
+   python -u tests/capture_visual_qa.py
+Antes de cada prueba GUI comprueba con tasklist que no haya ningun app_desktop.exe corriendo. Si un comando falla dos veces con el mismo error sin cambiar codigo, detente y reporta el error textual.
+
+Entrega corta: archivos, comandos con codigo de salida, medidas del interruptor y de las filas en ambos perfiles, capturas 09 y 10, y limites de lo verificado.
+```

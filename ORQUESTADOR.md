@@ -23,6 +23,8 @@ Ronda 3 cerrada e integrada el 2026-11-12 (`1bb0a4d`): **F2** (Bitácora, `13531
 - 2026-11-08: regla de dos pasadas. Un detalle de interfaz que Gemini no cierra en dos pasadas va a Claude Code Terminal (detalles en `coordinacion-agentes.md`, protocolo punto 6). Primer caso: B3a, detalles del panel de roles tras F1 y F1b.
 - El usuario quiere ver los movimientos de los agentes: no enviar prompts por `agy -p`; el usuario pega los prompts en terminales interactivas.
 
+- 2026-11-12: los permisos de un rol se activan con interruptores (estilo ajustes de teléfono) en lugar de casillas, más grandes en Touch. Bloque **F5** para Gemini, prompt al final de `prompts-2026-11-12-ronda4.md`; enviar tras aceptar F2b e integrar B3b (`c71d586`, pendiente de merge en `main`).
+
 ## Git e integración
 
 - `main` en `D:\Cafetería_ITCH`; worktree del backend en `D:\Cafeteria_ITCH_backend` (rama `backend/<bloque>`). Al aceptar un bloque de backend: commit en su rama, `git merge` en `main`, verificar el conjunto (build, CTest, I1) y luego `git merge --ff-only main` en el worktree con la rama siguiente.
