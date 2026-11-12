@@ -31,7 +31,9 @@ Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilid
 
 - `main` en `D:\Cafetería_ITCH`; worktree del backend en `D:\Cafeteria_ITCH_backend` (rama `backend/<bloque>`). Al aceptar un bloque de backend: commit en su rama, `git merge` en `main`, verificar el conjunto (build, CTest, I1) y luego `git merge --ff-only main` en el worktree con la rama siguiente.
 - `.gitattributes` fija `eol=lf`. Auditar con `git diff --ignore-cr-at-eol` contra el último commit aceptado.
-- Identidad git local: `oscarmichelmatosmay` / correo del usuario. Los commits llevan la línea `Co-Authored-By` de Claude.
+- Los commits llevan la línea `Co-Authored-By` de Claude.
+
+- **Historial reescrito el 2026-11-12** para publicar sin el correo personal: autor y confirmador pasan a `Surer46` con su correo privado de GitHub. Los identificadores de commit citados en este archivo y en las auditorías con fecha anterior ya no existen en el repositorio; el historial original está en `D:\Cafeteria_ITCH_antes_de_cambiar_correo.bundle` (solo en la PC original). Remoto: `origin` = `https://github.com/Surer46/cafeteriaITCH.git` (público). La identidad git local es ahora `Surer46`.
 
 ## Cómo auditar (lista corta)
 
