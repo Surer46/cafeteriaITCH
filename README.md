@@ -1,99 +1,87 @@
-# Cafetería ITCH II — Base Integrable (C++17 + wxWidgets + SQLite Embebido)
+# Cafetería ITCH II
 
-Este repositorio contiene la arquitectura inicial y primera base integrable de la aplicación de escritorio para la **Cafetería ITCH II**, cubriendo las tareas **FE-00**, **BE-00** y el inicio de **BE-01** según lo definido en [`specs.md`](specs.md), [`frontend/plan.md`](frontend/plan.md) y [`backend/plan.md`](backend/plan.md).
+Punto de venta de escritorio para cafetería: ventas, caja, inventario con recetas, reportes, cuentas y respaldos. Aplicación **nativa** en C++17 con wxWidgets y SQLite embebido, en un solo proceso, pensada para una PC modesta (Intel Core i5 de 2.ª generación, 4–6 GB de RAM). No usa navegador, Electron ni servidor de base de datos.
 
----
+La especificación completa está en [`specs.md`](specs.md); las reglas de trabajo, en [`AGENTS.md`](AGENTS.md).
 
-## 1. Estructura y Separación Arquitectónica en CMake
+## Avance
 
-El proyecto está organizado en bibliotecas desacopladas bajo un solo proceso nativo:
+**Al 2026-11-12: cerca del 42 % hacia la versión 1.0 y del 57 % hacia un piloto en caja.**
 
-- [`app_contracts`](include/app/contracts/): Contratos de intercambio C++17 independientes de GUI y SQL. Define:
-  - `Money`: manejo monetario en centavos enteros (`int64_t`), formateo con comas (`$2,930.00`), parsing seguro y operadores aritméticos sin coma flotante.
-  - `Result<T>` y `OperationResult`: resultados tipados con catálogo de `ErrorCode` (`Success`, `InvalidInput`, `Forbidden`, `NotFound`, `Conflict`, `InsufficientStock`, `StorageFailure`, `BackupFailure`, `ShiftClosed`, `InvalidState`).
-  - DTOs inmutables para producto, carrito, usuario, roles, turnos, alertas de inventario y respaldos.
-  - Fachadas abstractas puras: `IAccountService`, `ICatalogService`, `ICartService`, `ISaleService`, `IInventoryService`, `IShiftService`, `IReportService`, `IBackupService`.
-- [`app_domain`](include/app/domain/): Lógica de dominio pura:
-  - `UnitConverter`: dimensiones (`MASS`, `VOLUME`, `COUNT`), conversiones a unidades base enteras (`mg`, `ml`, `pz`), validación estricta de compatibilidad dimensional y cálculo de costo unitario por unidad base.
-- [`sqlite3`](third_party/sqlite/): Motor SQLite embebido (amalgamación C oficial v3.45.3) enlazado estáticamente sin necesidad de instalar servidores de base de datos.
-- [`app_storage`](include/app/storage/): Capa de persistencia local SQLite:
-  - `SqliteDatabase`: envoltorio RAII de `sqlite3*`, sentencias preparadas `SqliteStatement`, transacciones seguras (`BEGIN IMMEDIATE`, `COMMIT`, `ROLLBACK`) y pragmas obligatorios (`foreign_keys = ON`, `busy_timeout = 5000`, `journal_mode = WAL`).
-  - `MigrationRunner`: gestor de migraciones versionadas con tabla de control `schema_migrations`.
-  - [`migrations/001_initial_schema.sql`](migrations/001_initial_schema.sql): esquema relacional completo con 21 tablas, índices y restricciones, **sin credenciales de usuario ni contraseñas predeterminadas**.
-- [`app_services`](include/app/services/): Implementaciones de servicios y mocks desacoplados para pruebas y trabajo paralelo del frontend.
-- [`app_desktop`](src/frontend/): Aplicación nativa wxWidgets:
-  - Encabezado con identidad de la cafetería ("Cafetería ITCH II") y estado de caja/usuario en la esquina superior derecha.
-  - Sidebar con **exactamente cuatro secciones**: **Punto de Venta**, **Inventario**, **Caja y Reportes**, **BackOffice** (sin subsecciones en la barra lateral).
-  - Barra de subsecciones horizontal en el área superior central, bajo el título de la cafetería y sobre el área de contenido.
-  - Panel "CUENTA ACTUAL" en la esquina superior derecha del módulo de venta con botón "Cobrar" verde destacado.
-- [`tests`](tests/): Pruebas de contratos (`test_contracts.cpp`), almacenamiento/persistencia (`test_storage.cpp`) ejecutables con CTest, y verificación técnica (`verify_schema.py`).
+Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cierra con pruebas del ejecutable real y, donde aplica, revisión humana y hardware.
 
----
+| Etapa | Avance | Situación |
+|---|---|---|
+| **I1** Base nativa, SQLite y alta del Dueño | 100 % | Cerrada. |
+| **I2** Venta, cobro, caja e impresión | 85 % | Software terminado. Faltan la revisión visual humana (0 de 7 casos), la impresora térmica real (55 y 80 mm), el monitor táctil y el escalado de pantalla al 125, 150 y 200 %. |
+| **I3** Inventario, ingredientes y recetas | 0 % en pantallas | Bloqueada hasta la revisión humana de I2 y las decisiones de negocio de la sección 9 de `specs.md`. Parte del backend ya existe (unidades, recetas, compras básicas). |
+| **I4** Corte de turno y reportes | 35 % | Listos: resumen diario real, pantalla de Caja y turnos, Bitácora. Faltan la conciliación del corte y la pantalla de Reportes. |
+| **I5** Respaldos y restauración | 45 % | Respaldo consistente y restauración con pruebas. Faltan su pantalla, la limpieza de respaldos viejos y el servidor externo opcional. |
+| **I6** Usuarios, roles y permisos | 85 % | Pantallas de Usuarios y de Roles. En curso: permisos con título, descripción e interruptores. |
+| **I7** Perfil táctil, instalador y entrega | 10 % | Existe el perfil táctil. No hay instalador; faltan los datos de la PC de caja. |
 
-## 2. Requisitos y Dependencias del Sistema
+### Pantallas reales hoy
 
-- **Estándar:** C++17
-- **Compilador:** GCC 9+, Clang 10+ o MSVC 2019/2022
-- **Sistema de construcción:** CMake 3.16 o superior
-- **Biblioteca gráfica:** wxWidgets 3.2+
-- **Almacenamiento:** SQLite embebido (incluido en `third_party/sqlite/`)
+Venta, cobro y ticket; Caja y turnos; Bitácora; Usuarios y cuentas; Roles y permisos; Configuración de impresión. Las demás subsecciones son marcadores de posición.
 
----
+### Lo que frena la entrega
 
-## 3. Instrucciones de Compilación y Pruebas
+1. Revisión visual humana de I2 (casos en `frontend/qa-visual.md`).
+2. Decisiones de negocio abiertas en la sección 9 de `specs.md` (sobreventa, anulaciones, quién cierra caja, valuación de costos).
+3. Datos de la PC de caja y de la impresora térmica.
 
-### Configuración del SDK de wxWidgets
-El SDK de wxWidgets es totalmente configurable y no depende de rutas fijas del sistema:
-- **Opción A (Línea de comandos de CMake):**
-  ```powershell
-  cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release -DwxWidgets_ROOT_DIR="C:/ruta/a/wxwidgets"
-  ```
-- **Opción B (Variables de entorno):**
-  Defina `WXWIN` o `WXWIDGETS_ROOT` apuntando al directorio raíz del SDK de wxWidgets:
-  ```powershell
-  $env:WXWIN = "C:\ruta\a\wxwidgets"
-  cmake -B build -G "Ninja" -DCMAKE_BUILD_TYPE=Release
-  ```
-- **Opción C (Linux / Paquete de sistema):**
-  En sistemas Linux, instale `libwxgtk3.2-dev` o equivalente; CMake lo detecta automáticamente mediante `wx-config`.
+## Arquitectura
 
-### Ejecución de Pruebas con CTest
-El sistema copia automáticamente las DLLs de runtime (`libgcc`, `libstdc++`, `libwinpthread` y wxWidgets) y configura las propiedades del entorno de prueba, por lo que CTest es completamente reproducible y no requiere preparar manualmente el `PATH`:
+Un solo proceso con capas separadas; la interfaz nunca escribe SQL ni calcula importes.
+
+| Capa | Ubicación | Contenido |
+|---|---|---|
+| Contratos | [`include/app/contracts/`](include/app/contracts/) | `Money` en centavos enteros, `Result<T>`, DTO y fachadas de servicios. |
+| Dominio | `src/domain/` | Unidades (masa, volumen, piezas) y costos sin coma flotante. |
+| Almacenamiento | `src/storage/`, [`migrations/`](migrations/) | SQLite con claves foráneas y WAL; migraciones versionadas. |
+| Servicios | `src/services/` | Cuentas, catálogo, carrito, ventas, inventario, turnos, reportes, respaldos. Comprueban permisos en cada operación. |
+| Interfaz | [`src/frontend/`](src/frontend/) | Paneles wxWidgets. Cuatro secciones en la barra lateral: Punto de Venta, Inventario, Caja y Reportes, BackOffice. |
+
+Reglas que no se negocian: dinero en centavos enteros; la venta confirmada se guarda en una sola transacción y no se duplica por doble clic; no hay cuentas ni contraseñas predeterminadas; la base local es la única fuente de datos y una falla de red nunca bloquea ventas.
+
+## Compilar y probar
+
+Requisitos: compilador C++17, CMake 3.16 o superior, Ninja y wxWidgets 3.2 o superior. SQLite viene incluido en `third_party/sqlite/`. Entorno verificado: Windows, GCC 16.1 (MinGW-w64), wxWidgets 3.3.3.
+
 ```powershell
-# Debug
-ctest --test-dir build_debug --output-on-failure
-
-# Release
+cmake -B build_release -G Ninja -DCMAKE_BUILD_TYPE=Release -DwxWidgets_ROOT_DIR="C:/ruta/a/wxwidgets" -DwxWidgets_LIB_DIR="C:/ruta/a/wxwidgets/lib/gcc_x64_dll" -DwxWidgets_CONFIGURATION=mswu
+cmake --build build_release --parallel 2
 ctest --test-dir build_release --output-on-failure
 ```
 
-### Configuración de Ganchos de Prueba (`CAFETERIA_TEST_HOOKS`)
-Por defecto, la opción está desactivada (`OFF`) para que el ejecutable de producción no contenga ganchos de simulación de errores de hardware. Para activar los ganchos durante pruebas de integración automatizadas:
+Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
+
+- **CTest (5):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`.
+- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`.
+- **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
+
+Ejecutar con una carpeta de datos aparte:
+
 ```powershell
-cmake -B build_debug -DCAFETERIA_TEST_HOOKS=ON
-cmake --build build_debug
+.\build_release\app_desktop.exe --data-dir="D:\Cafeteria_QA_Manual"
 ```
 
-### Opciones de Ejecución de la Aplicación de Escritorio
-- **Directorio de datos aislado/portable:**
-  Es posible especificar una ruta de datos independiente (útil para pruebas o instalaciones portables) mediante el argumento `--data-dir`:
-  ```powershell
-  ./app_desktop.exe --data-dir="D:/MisDatos/cafeteria"
-  ```
-  O mediante la variable de entorno:
-  ```powershell
-  $env:CAFETERIA_DATA_DIR = "D:\MisDatos\cafeteria"
-  ./app_desktop.exe
-  ```
+## Retomar el trabajo en otra PC
 
----
+1. Clonar el repositorio y traer también las ramas `backend/*`.
+2. Instalar el compilador y wxWidgets, y ajustar las rutas de la sección «Memoria operativa» de `AGENTS.md` si cambian.
+3. Configurar `build_release` y `build_debug` (frontend) y, en la copia de trabajo del backend, `build_be_release` y `build_be_debug`.
+4. Crear la copia de trabajo del backend: `git worktree add ..\Cafeteria_ITCH_backend backend/b4a`.
+5. Leer [`ORQUESTADOR.md`](ORQUESTADOR.md): contiene el estado, las decisiones tomadas y los bloques en cola. Los prompts pendientes están en `prompts-2026-11-12-ronda4.md`.
 
-## 4. Estado de Verificación y Puerta I1
+Las conversaciones de los agentes no viajan con el repositorio; todo lo necesario para continuar está en esos archivos.
 
-- **Entorno verificado:**
-  - Compilador: GCC 16.1.0 MinGW-W64 MSVCRT x86_64
-  - CMake 3.30+ con generador Ninja
-  - wxWidgets 3.3.3 DLL x64
-- **Puerta de Integración I1 (Aceptada):**
-  - **Pruebas automáticas (CTest):** `ContractsTest` y `StorageTest` 100% aprobadas en Debug y Release.
-  - **Ejecución integrada con ejecutable nativo:** Verificado el ciclo de vida completo en `build_debug/app_desktop.exe` y `build_release/app_desktop.exe` (alta inicial de Dueño obligatoria, cancelación, persistencia en SQLite, login subsecuente, rechazo de contraseñas incorrectas y ocultamiento de vistas técnicas no autorizadas).
+## Documentos
+
+| Archivo | Contenido |
+|---|---|
+| [`specs.md`](specs.md) | Especificación funcional y técnica. |
+| [`frontend/plan.md`](frontend/plan.md), [`backend/plan.md`](backend/plan.md) | Listas de trabajo por capa. |
+| [`coordinacion-agentes.md`](coordinacion-agentes.md) | Reparto de archivos y protocolo entre agentes. |
+| [`auditoria-2026-10-18.md`](auditoria-2026-10-18.md) | Auditorías de cada bloque entregado. |
+| [`auditoria-general-2026-11-12.md`](auditoria-general-2026-11-12.md) | Revisión de alcance y preparación para una versión móvil. |
