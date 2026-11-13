@@ -327,3 +327,44 @@ Conclusión provisional: la mejora visible viene de la memoria operativa de `AGE
 - No verificado: flujo real en el ejecutable ni pruebas GUI con B4; rendimiento con muchas ventas.
 
 **Verificación integrada en `main` (`3bbf40b`, F5 + B4):** build sin advertencias y CTest 5/5 en Release y Debug; `test_i1_integration` exit 0 en ambos, a 100 % de escalado. No se corrieron tras integrar: `test_i2_integration` (fallo esperado por el folio), `test_f1_roles_panel`, `test_f2_audit_log`, `test_f2b_subnav` ni `test_fe08_fe09_visual_integration`.
+
+## Ronda 5 — F6 (AntiGravity, modo Orchestrator (Argon)) — auditado el 2026-11-13
+
+**F6:** cambio aceptado, pero `test_i2_integration` NO queda verificada en verde. Primer bloque en el modo Orchestrator (Argon).
+
+- Alcance: solo `tests/test_i2_integration.py`: búsqueda parametrizada por el folio real (`folio1`) en lugar del texto fijo `V-10001`, y aserción nueva de formato `V-<1 a 4 A-Z0-9>-<5 dígitos>` y de folios distintos entre ventas. Ninguna otra aserción tocada. Correcto por lectura.
+- Se detuvo por su cuenta al detectar el escalado a 125 % y no ejecutó pruebas hasta que el usuario lo puso a 100 %.
+- Su informe: las seis pruebas GUI pasan a la primera en Release y Debug a 100 %.
+- **Verificación del orquestador: `test_i2_integration` falla 3 de 3** (dos veces desde su consola y una desde la terminal interactiva del usuario), siempre en el requerimiento 4 y 7, antes de llegar a las líneas de F6: tras pulsar Imprimir, `cancel_system_print_dialog_by_pid` no encuentra el diálogo (devuelve `None`) y el aviso «Impresión Cancelada» nunca aparece (tiempo de espera de 6 s).
+- Causa probable: en esta PC (Windows 11) el diálogo de impresión se abre en un proceso aparte, `PrintDialog.exe` (arrancó durante la ejecución), y la prueba solo busca un diálogo `#32770` dentro del proceso de la aplicación. Impresora predeterminada: una impresora virtual protegida de OneNote. Además la prueba imprime «detectado y cancelado» aunque el identificador sea `None`: no lo comprueba.
+- No se pudo conciliar con el informe de Gemini, que da I2 por aprobada minutos antes (su salida completa no era visible). Tampoco se verificó I2 de forma independiente en F0. Hasta aclararlo, **I2 no cuenta como verificada en esta PC**; las otras cinco pruebas no se repitieron en esta auditoría.
+- Siguiente: bloque de diagnóstico para Gemini (ejecutar I2 a solas, mostrar la salida completa, comprobar el identificador del diálogo y localizarlo también cuando lo aloja `PrintDialog.exe`).
+- Actualización: el usuario cambió la impresora predeterminada a Microsoft Print to PDF y la prueba falla igual (5 de 5 en total). La impresora predeterminada queda descartada como causa. Enviado el bloque F6b a Gemini (diagnóstico con datos y arreglo de la detección del diálogo).
+
+## Ronda 5 — B5 (Claude Code Terminal) — auditado el 2026-11-13
+
+**B5:** aceptado en `39ac304`, integrado en `a013186`. Primer bloque de backend de I3.
+
+- Alcance: migraciones 011 (actor en movimientos y compras, índices, triggers de existencias no negativas) y 012 (valuación); `stock_valuation` (dominio) y `stock_ledger` (servicios), nuevos; contratos de inventario y catálogo; servicios de inventario, catálogo, ventas y respaldo; mock; `sqlite_database`; `tests/test_storage.cpp` y `tests/test_backup.cpp`. Nada en frontend, `tests/*.py`, crypto ni migraciones 001 a 010.
+- Contratos: solo adiciones (el diff de `include/app/contracts/` no quita ninguna línea). Nuevos: `register_waste`, `register_adjustment`, `list_stock_movements`, `list_purchase_entries`, `get_ingredient_cost`, `get_recipe_costing` y sus DTO.
+- Promedio móvil (decisión del usuario): revisado `stock_valuation.cpp`. Enteros de 128 bits, sin `float` ni `double`; compra suma el costo; salida resta en proporción; existencia 0 deja valuación exactamente 0; último promedio conservado; reglas (a) a (d) del anexo implementadas. `stock_ledger.cpp` es la única escritura de `current_stock` en `src/` (comprobado con búsqueda) y la usan compra, merma, ajuste y venta.
+- Costos solo por `get_ingredient_cost` y `get_recipe_costing`, ambos con `inventory.manage_products`. `get_recipe` devuelve 0 en el campo obsoleto a quien no tiene el permiso.
+- Comprobación independiente del orquestador (Python sobre SQLite en memoria, migraciones 001 a 012): ingrediente con compras de 1000 a 5000 centavos y 1000 a 10000 centavos y existencia 1200 queda con valuación 9 000 000 000 micro-centavos y último promedio (15 000 000 000, 2000), igual al cálculo a mano; sin compras queda sin costo; con existencia 0 conserva el promedio; el trigger rechaza existencias negativas.
+- Pruebas: 229 líneas `TEST_CHECK` nuevas. Cuatro existentes cambiadas: las que fijaban la versión 10 comparan ahora con la migración más alta de la carpeta. No es una relajación del comportamiento, pero deja de detectar una migración borrada por error.
+- Pendientes de B4 resueltos: folio por rango sobre el índice único y respaldo sin archivos temporales residuales (con prueba de restauración).
+- Verificación del orquestador en el worktree: build sin advertencias y CTest 5/5 en Release y Debug.
+- Observaciones: `__int128` es propio de GCC y Clang (no compila con MSVC); `list_purchase_entries` muestra el costo de cada compra a quien tiene `inventory.restock` (pedido así para Reabastecimiento) y la bitácora ya mostraba el costo de las compras a quien tiene `audit.view`; el relleno de la 012 es aproximado y está documentado.
+- No verificado: ejecutable real, pruebas GUI y rendimiento con muchas ventas. Sigue pendiente el carrito y el reintento fijos a `reg-01`.
+
+## Ronda 5 — F6b (AntiGravity, modo Orchestrator (Argon)) — auditado el 2026-11-13
+
+**F6b:** mejora aceptada, pero `test_i2_integration` sigue en rojo en el escritorio real del usuario.
+
+- Alcance: solo `tests/test_i2_integration.py` (+247/-28): detección del diálogo de impresión clásico (`#32770` en el proceso) y del moderno de Windows 11, cancelación con espera de cierre, y fallo explícito si no se encuentra o no se cierra. Ya no imprime «detectado» con identificador `None`.
+- **Causa de la discrepancia con F6, explicada por Gemini y coherente con lo observado:** AntiGravity ejecuta los comandos en un escritorio aislado (`WinSta0\exebox-*`), donde Windows muestra el diálogo clásico dentro de la aplicación; en el escritorio interactivo del usuario aparece el diálogo moderno, alojado fuera del proceso. Por eso a Gemini le pasaba y al orquestador no. No fue un informe falso.
+- Informe de Gemini: 3 corridas seguidas con exit 0 en su escritorio aislado, folio `V-C1-00001`; declaró que la rama del diálogo moderno no pudo ejercitarla.
+- **Verificación del orquestador en el escritorio interactivo (100 %): 2 de 2 fallan**, ahora con un error claro: el diálogo «Impresión desde la aplicación Win32 - Impresión» (`explorer.exe`) se detecta, pero no se cierra tras la cancelación (tiempo de espera). La detección funciona; la cancelación del diálogo moderno no.
+- Consecuencia: en esta PC las pruebas GUI dan resultados distintos según dónde se ejecuten. Los «pasó» de AntiGravity valen para su escritorio aislado; los pasos que abren diálogos del sistema hay que repetirlos en el escritorio real. El resto de I2 (venta, folio, reimpresión) no se alcanza en el escritorio real porque la prueba se detiene antes.
+- Siguiente (F6c): cancelar de forma fiable el diálogo moderno. Gemini no puede reproducirlo en su entorno, así que la validación la hace el orquestador o el usuario en el escritorio real. Alternativa a valorar con el usuario: un gancho de prueba que evite el diálogo del sistema.
+
+**Verificación integrada en `main` (`a013186`, B5 + F6/F6b):** build sin advertencias y CTest 5/5 en Release y Debug; `test_i1_integration` exit 0 en ambos, a 100 % de escalado. No se corrió el resto de la batería GUI con B5 integrado; `test_i2_integration` sigue fallando en el escritorio real por el diálogo de impresión.

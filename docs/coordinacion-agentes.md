@@ -8,7 +8,7 @@ Vigente desde el 2026-11-08. Complementa `AGENTS.md`; si hay conflicto, manda `A
 |---|---|---|---|---|
 | **Orquestador** (Claude, app de escritorio) | Fable 5.2 (antes Opus 5.5) | Auditoría independiente, compilación desde cero, lectura de capturas con medición en píxeles | Caro si implementa; no debe escribir código de producción | Redacta prompts, vigila terminales, audita, mantiene `docs/specs.md`, planes, tareas y auditorías |
 | **Claude Code Terminal** | `opusplan`: Opus 5.5 planifica, Sonnet 5.5 ejecuta | Razonamiento de dominio, transacciones SQLite, aritmética racional de costos, permisos en servicios, diseño de pruebas C++ | Más caro por token que Gemini | **Dueño del backend**: contratos, dominio, almacenamiento, migraciones, servicios y CTest |
-| **AntiGravity** | Gemini 3.8 Flash (high) | Rápido y barato; buen cableado de paneles wxWidgets sobre contratos existentes; scripts Win32/Python de prueba GUI y capturas | Exagera resultados; tiende a debilitar pruebas; bloques de razonamiento de 7–9 min; demasiadas lecturas | **Dueño del frontend**: paneles, diálogos, tema, pruebas GUI en Python y capturas |
+| **AntiGravity** | Desde 2026-11-13: modo Orchestrator (Argon), Gemini 4 Argon planifica y Gemini 4 Hydrogen ejecuta. Antes Gemini 4 Hydrogen (F0, F5) y Gemini 3.8 Flash (high); las observaciones de esta fila son de 3.8 Flash | Rápido y barato; buen cableado de paneles wxWidgets sobre contratos existentes; scripts Win32/Python de prueba GUI y capturas | Exagera resultados; tiende a debilitar pruebas; bloques de razonamiento de 7–9 min; demasiadas lecturas | **Dueño del frontend**: paneles, diálogos, tema, pruebas GUI en Python y capturas |
 
 ## Propiedad de archivos (dos escritores nunca tocan lo mismo)
 
@@ -58,7 +58,7 @@ Su README mide un ahorro de solo ~3 % de tokens de salida frente a la instrucci�
 
 ## Puertas y bloqueos vigentes
 
-- **I2:** software cerrado; falta QA humano (0/7), impresora térmica, monitor táctil y DPI. Según la regla vigente, **no se inicia I3 hasta el QA humano**.
+- **I2:** software cerrado; falta QA humano (0/7), impresora térmica, monitor táctil y DPI. Desde el 2026-11-13, por decisión del usuario, **I3 se desarrolla sin esperar el QA humano**; el QA humano y el hardware siguen pendientes para cerrar I2.
 - **Sección 9 de `docs/specs.md`:** 11 decisiones de negocio abiertas; bloquean reglas de I3 (sobreventa, valuación de costos) e I4 (anulaciones, quién cierra caja).
 - **PC de caja e impresora:** sin datos; bloquean empaquetado y cierre de I2.
 

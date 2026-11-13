@@ -190,12 +190,15 @@ La división detallada y ejecutable del trabajo está en [`frontend/plan.md`](..
 2. ¿Qué hardware de lector de código, impresora de tickets y cajón de dinero se usará? ¿Se requiere facturación? La terminal bancaria no se integrará en esta etapa; únicamente se registra el método declarado.
 3. ¿Qué métodos de pago se deben poder registrar? ¿Se permiten pagos mixtos, impuestos, descuentos manuales y devoluciones? ¿Cómo se redondea? Ninguno de estos métodos implica procesamiento electrónico en esta etapa.
 4. ¿Se permite vender sin existencia o autorizar sobreventa? ¿Cómo se calculan mermas, recetas, combos y productos por peso?
+   - **Decidido 2026-11-13:** no se permite sobreventa: sin existencias suficientes la venta se bloquea, como ya hace el servicio de ventas. Siguen abiertas las reglas de mermas, combos y productos por peso.
 5. ¿Qué permisos iniciales y roles adicionales al Dueño se necesitan para empezar? El Dueño podrá configurarlos después. ¿Quién puede cambiar precios, anular ventas, ajustar inventario y cerrar caja?
    - **Decidido 2026-11-08:** el Dueño puede editar los permisos del rol de sistema Cajero (`role-cashier`), pero no renombrarlo ni eliminarlo. El rol Dueño queda en solo lectura y el rol Desarrollador nunca se muestra. Siguen abiertas las preguntas de quién cambia precios, anula ventas, ajusta inventario y cierra caja.
 6. ¿Hay datos existentes para importar y formatos obligatorios de ticket, reportes y corte?
 7. ¿Cuál es la configuración exacta de la PC de caja (RAM real —estimada en 4 a 6 GB—, HDD/SSD, sistema operativo y resolución) y cuántos productos y ventas históricas se esperan?
 8. ¿Cómo se valúan ingredientes comprados a precios distintos: promedio ponderado, primeras entradas/primeras salidas u otro método? ¿Se requiere mostrar costo y margen estimados por platillo/bebida?
+   - **Decidido 2026-11-13:** cada entrada de ingrediente guarda el costo que introduce un usuario con permiso suficiente (costo total y cantidad exactos, como ya hace `register_purchase_entry`). El costo y el margen estimados por platillo o bebida se muestran solo a quien administra productos. Confirmado por el usuario: el margen estimado usa promedio ponderado, calculado sin coma flotante. Decidido 2026-11-13: promedio móvil sobre las existencias (la valuación sube con cada compra y baja en proporción a lo que sale).
 9. ¿El bajo stock se calcula por ingrediente en toda la cafetería o por ubicación (almacén/barra)? ¿Debe alertar solo en pantalla o también generar un reporte imprimible?
+   - **Decidido 2026-11-13:** existencias y avisos de poco inventario por ingrediente para toda la cafetería, sin separar almacén y barra. Sigue abierto si el aviso genera además un reporte imprimible.
 10. ¿Dónde se guardarán los respaldos locales y con qué frecuencia se harán? ¿Quién, además del Dueño, puede restaurarlos? Para el servidor remoto opcional, definir dirección, capacidad, frecuencia, retención y responsable de administrarlo.
 11. ¿Cómo se provisionará y recuperará la identidad técnica del Desarrollador para modificar la configuración remota sin introducir una contraseña maestra fija o una puerta trasera?
 
