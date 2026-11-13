@@ -23,6 +23,8 @@ Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo
 
 Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilidades `ui_helpers`) y **F2b** (`dba641a`, resaltado de subsección) aceptados; capturas 10 y 11 regeneradas. En cola, prompts en `Prompts/prompts-2026-11-12-ronda4.md`: **B4a** (Claude, títulos de permisos, migración 009; rama `backend/b4a` ya al día con `main`) -> **F5** (Gemini, interruptores; requiere B4a integrado) y **B4** (Claude, ajustes de datos, migraciones desde 010; tras B4a). Después F3 (UI Respaldos) y F4 (UI Reportes).
 
+Actualización 2026-11-12 (PC nueva): **F0 aceptado** (Gemini 4 Hydrogen) y **B4a aceptado** en `1fc6dc5` e integrado en `main` tras F0. Siguiente: **F5**. Nota histórica del orden: Orden acordado con el usuario: Gemini hace **F0** (quitar rutas fijas de `tests/*.py` y correr las pruebas GUI) sobre el `main` actual; al aceptarlo se integra B4a y se envía **F5** de inmediato, porque la 009 rompe `test_f1_roles_panel.py` hasta que F5 lo reescriba. B4 parte de `main` con B4a integrado.
+
 ## Decisiones del usuario
 
 - 2026-11-08: el Dueño edita los permisos del Cajero; no puede renombrarlo ni eliminarlo. Dueño en solo lectura. Desarrollador nunca visible (registrado en `docs/specs.md` §9.5).
@@ -34,6 +36,7 @@ Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilid
 
 - 2026-11-12: títulos y descripciones de los 20 permisos aprobados por el usuario (tabla en el prompt B4a).
 - 2026-11-12: salió Gemini 4 Hydrogen en AntiGravity. Recomendación del orquestador: no cambiar a mitad de F2b; probarlo en F5 como ensayo y comparar contra el perfil de 3.8 Flash (exageración en informes, anchos a ojo, pruebas débiles). Decisión del usuario: seguir con 3.8 Flash; en su plan Pro los modelos Gemini 4 (Carbon, Argon, Hydrogen) aparecen como «Unavailable» en el selector. Revisar de nuevo si se habilitan.
+- 2026-11-12 (más tarde): Gemini 4 Hydrogen ya está disponible para el usuario. Plan del orquestador: usarlo en F0 (bloque mecánico: quitar rutas fijas de `tests/*.py` y correr las pruebas GUI) como calibración barata y, si respeta límites de archivos e informa de forma literal, en F5 como ensayo real. Mantener los prompts estrictos del perfil de 3.8 Flash hasta tener evidencia; anotar aquí su perfil tras auditar F0.
 
 ## Git e integración
 
@@ -56,10 +59,12 @@ Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilid
 
 - **Claude Code Terminal (opusplan):** B1 sin caveman: plan sólido, informe exacto (salvo contar 80 `TEST_CHECK` en lugar de 102) y límites declarados con honestidad. Revisar su plan antes de aprobar: aportó 5 ajustes útiles. Puede reescribir finales de línea (ya resuelto con `.gitattributes`).
 - **AntiGravity (Gemini 3.8 Flash high):** rápido en cableado de UI. Patrones: compila y corre pruebas sin haber editado (unos 7 min en F1); bloques de razonamiento de 7–9 min; exagera en informes («sin recorte» falso en F1, captura 08 inválida en 2026-10-14); fija anchos a ojo; sus pruebas miden solo lo que le es fácil (F1: botones sí, columnas no). Con aserciones estrictas y prompts pequeños funciona bien (prompts A y C). Pierde «», ≥ y ▾ al pegar: escribir sus prompts sin esos caracteres.
+- **AntiGravity (Gemini 4 Hydrogen high), primer bloque F0 (2026-11-12):** respetó la lista de archivos, hizo el cambio mínimo, no tocó aserciones y reportó de forma literal cuatro pruebas fallidas sin intentar arreglarlas. Lee solo lo indicado. Un solo bloque mecánico: confirmar el perfil en un bloque de interfaz real antes de relajar los prompts.
 - **Caveman:** su README mide ~3 % de ahorro de salida (ruido). Ronda 2 comparada en `Auditorias/auditoria-2026-10-18.md`: la mejora visible vino de la memoria operativa, los prompts acotados y las pruebas estrictas; sin evidencia separable de caveman. El orquestador no lo usa (decisión del usuario).
 
 ## Pendientes conocidos (no asignados)
 
+- **Pruebas GUI no válidas con escalado distinto de 100 %** (hallado en F0, 2026-11-12): el proceso de prueba no declara conciencia de DPI y los umbrales son píxeles fijos. A 125 % fallan `test_fe08_fe09_visual_integration`, `test_f1_roles_panel`, `test_f2_audit_log` y `test_f2b_subnav`; I1 e I2 pasan. Detalle en la auditoría de F0. Decisión del usuario: correr las pruebas a 100 % (a 1920x1080 y 100 % pasan las seis). Hacer las pruebas conscientes de DPI queda como bloque futuro, ligado al pendiente de I2 de DPI 125/150/200; comprobar el escalado antes de cada tanda de pruebas GUI.
 - Pruebas GUI intermitentes (2026-11-12): `test_i1_integration` y `test_f2_audit_log` fallaron una vez por tiempo de espera tras el inicio de sesión y pasaron al repetir. Investigar cómo envían el inicio de sesión (foco o tiempos fijos) antes de fiarse de una sola pasada. Al auditar, repetir a solas antes de culpar a un bloque.
 
 - Candidatos de backend para B3: build `build_hooks` con `-DCAFETERIA_TEST_HOOKS=ON` para el requerimiento 8 de I2; retención y limpieza de `backups/`; persistir `get_developer_server_config`; conciliación del corte de turno (I4, depende en parte de la sección 9).

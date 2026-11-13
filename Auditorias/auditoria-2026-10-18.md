@@ -268,3 +268,29 @@ Conclusión provisional: la mejora visible viene de la memoria operativa de `AGE
 
 - **Intermitencia observada:** en la primera pasada `test_i1_integration` y `test_f2_audit_log` (sesión 3, Debug) fallaron por tiempo de espera: tras enviar el inicio de sesión, la ventana principal no apareció en 12–15 s. Repetidas a solas pasaron (I1 dos veces, F2 una). Ningún bloque de la ronda toca el inicio de sesión. Causa no determinada; sospecha: pérdida de foco del escritorio durante la prueba. Queda como pendiente.
 - No verificado: `test_i2_integration.py` no se repitió.
+
+## Ronda 4 — B4a (auditado el 2026-11-12, PC nueva)
+
+**B4a (Claude Code Terminal):** aceptado en `1fc6dc5` (rama `backend/b4a`), integrado en `2bdd6ae` tras F0.
+
+- Alcance: `migrations/009_permission_titles.sql` (nuevo), `include/app/contracts/dto.hpp`, `src/services/sqlite_account_service.cpp`, `src/services/mock_services.cpp`, `tests/test_storage.cpp`. Nada fuera de lo permitido.
+- Comprobación independiente del orquestador: migraciones 001 a 009 aplicadas con Python sobre una base en memoria y comparadas con la tabla aprobada (`Prompts/prompts-2026-11-12-ronda4.md`): 21 de 21 permisos iguales en sección, orden, título y descripción; `role_permissions` idéntico antes y después de la 009 (28 filas).
+- `list_permissions` ordena por `sort_order`; filtros y cálculo de `module` sin cambios. Al mock le faltaba `backup.restore` (tenía 20); ahora devuelve los 21 y la prueba lo compara campo por campo con el servicio real.
+- Pruebas nuevas en `StorageTest`: 32 `TEST_CHECK` (el informe dijo 31). Migran primero solo hasta la 008 para tener línea base real; ninguna aserción existente relajada.
+- Verificación del orquestador en el worktree: CTest 5/5 en Release y Debug.
+- **Efecto conocido al integrar:** `tests/test_f1_roles_panel.py` localiza casillas por el texto antiguo de la descripción ("Consulta de bitácora", "Venta y cobro", "Consulta de existencias"); con la 009 dejará de pasar hasta que F5 reescriba el panel y la prueba. `capture_visual_qa.py` puede verse afectado igual.
+- No verificado: pruebas GUI; el panel de roles con los textos nuevos (trabajo de F5).
+- Menor: ejecutar `test_storage.exe` desde la raíz de la copia deja `test_snapshot.bak.tmp-shm` y `-wal` en el directorio actual; alguna prueba escribe relativo al directorio de trabajo. Candidato para un bloque de backend.
+
+## F0 (AntiGravity, Gemini 4 Hydrogen) — auditado el 2026-11-12, PC nueva
+
+**F0:** aceptado; primer bloque con Gemini 4 Hydrogen.
+
+- Alcance: exactamente los ocho `tests/*.py` permitidos; 8 inserciones y 20 eliminaciones, todas la línea del `PATH`. Ninguna aserción, espera ni umbral tocados. Búsqueda de rutas fijas en `tests/*.py`: 0.
+- Informe literal: reportó 2 pruebas aprobadas y 4 fallidas dos veces, con el error textual, sin intentar arreglarlas.
+- Resultados en esta PC (1920x1200, escalado 125 %, 120 DPI): `test_i1_integration` y `test_i2_integration` pasan (I1 repetida por el orquestador: exit 0, Release y Debug; I2 no repetida). Fallan dos veces, siempre en Release: `test_fe08_fe09_visual_integration` (campo de notas Touch 38 px < 40), `test_f1_roles_panel` (el clic no selecciona la fila), `test_f2_audit_log` (columnas 920 px > cliente 737 px) y `test_f2b_subnav` (no mide el color de fondo).
+- **Causa (diagnóstico del orquestador, sin repetir las pruebas):** el proceso Python de las pruebas no declara conciencia de DPI y ve la pantalla virtualizada (1536x960), mientras la aplicación trabaja en píxeles físicos. Se mezclan los dos espacios: 920/737 = 1.25 y 48 px físicos / 1.25 = 38. Los umbrales en píxeles fijos tampoco escalan. Es un defecto del arnés de pruebas, nunca ejercitado a más de 100 %; no demuestra por sí mismo un defecto de la aplicación, pero tampoco lo descarta.
+- Consecuencia: la batería GUI solo es válida al 100 %. Corresponde al pendiente de I2 «DPI 125/150/200 sin probar».
+- **Confirmación a 100 %:** con la pantalla a 1920x1080 y escalado 100 % (96 DPI), el orquestador repitió las cuatro pruebas fallidas con el código de F0: `test_fe08_fe09_visual_integration`, `test_f1_roles_panel`, `test_f2_audit_log` y `test_f2b_subnav` terminan con exit 0 en Release y Debug. El diagnóstico de DPI queda confirmado y la línea base GUI en esta PC es válida a 100 %. `test_i2_integration` no se repitió (pasó a 125 % según Gemini).
+
+**Verificación integrada en `main` (`2bdd6ae`, F0 + B4a):** build 0 advertencias y CTest 5/5 en Release y Debug; `test_i1_integration` exit 0 en ambos, a 100 % de escalado. No se corrió `test_f1_roles_panel` tras integrar: fallará por los textos nuevos hasta F5 (ver B4a). Tampoco `test_i2_integration`, `test_f2_audit_log`, `test_f2b_subnav` ni `test_fe08_fe09_visual_integration` tras la integración (B4a no toca venta, bitácora ni navegación).
