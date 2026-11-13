@@ -1336,7 +1336,7 @@ contracts::Result<std::vector<contracts::PermissionDto>> SqliteAccountService::l
         return contracts::Result<std::vector<contracts::PermissionDto>>::fail(perm_res.error_code(), perm_res.error_message());
     }
 
-    auto prep = db_.prepare("SELECT id, description FROM permissions ORDER BY id ASC;");
+    auto prep = db_.prepare("SELECT id, description, title, section, sort_order FROM permissions ORDER BY sort_order ASC, id ASC;");
     if (!prep.is_success()) return contracts::Result<std::vector<contracts::PermissionDto>>::fail(prep.error_code(), prep.error_message());
 
     auto stmt = std::move(prep.value());
@@ -1349,6 +1349,9 @@ contracts::Result<std::vector<contracts::PermissionDto>> SqliteAccountService::l
         contracts::PermissionDto p;
         p.id = stmt.get_text(0);
         p.description = stmt.get_text(1);
+        p.title = stmt.get_text(2);
+        p.section = stmt.get_text(3);
+        p.sort_order = static_cast<int>(stmt.get_int64(4));
 
         auto dot_pos = p.id.find('.');
         if (dot_pos != std::string::npos) {
