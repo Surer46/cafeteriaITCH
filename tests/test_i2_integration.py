@@ -30,6 +30,7 @@ import tempfile
 import shutil
 import string
 import secrets
+import re
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
@@ -50,8 +51,26 @@ user32.EnumChildWindows.restype = wintypes.BOOL
 user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
 user32.GetWindowThreadProcessId.restype = wintypes.DWORD
 
+user32.IsWindow.argtypes = [wintypes.HWND]
+user32.IsWindow.restype = wintypes.BOOL
+
 user32.IsWindowVisible.argtypes = [wintypes.HWND]
 user32.IsWindowVisible.restype = wintypes.BOOL
+
+user32.IsWindowEnabled.argtypes = [wintypes.HWND]
+user32.IsWindowEnabled.restype = wintypes.BOOL
+
+user32.GetWindow.argtypes = [wintypes.HWND, wintypes.UINT]
+user32.GetWindow.restype = wintypes.HWND
+
+user32.GetLastActivePopup.argtypes = [wintypes.HWND]
+user32.GetLastActivePopup.restype = wintypes.HWND
+
+user32.GetPropW.argtypes = [wintypes.HWND, wintypes.LPCWSTR]
+user32.GetPropW.restype = wintypes.HANDLE
+
+user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
+user32.GetWindowRect.restype = wintypes.BOOL
 
 user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
 user32.GetWindowTextLengthW.restype = ctypes.c_int
@@ -61,6 +80,15 @@ user32.GetWindowTextW.restype = ctypes.c_int
 
 user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
 user32.GetClassNameW.restype = ctypes.c_int
+
+kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+kernel32.OpenProcess.restype = wintypes.HANDLE
+
+kernel32.QueryFullProcessImageNameW.argtypes = [wintypes.HANDLE, wintypes.DWORD, wintypes.LPWSTR, ctypes.POINTER(wintypes.DWORD)]
+kernel32.QueryFullProcessImageNameW.restype = wintypes.BOOL
+
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
 
 ULONG_PTR = ctypes.c_size_t
 PDWORD_PTR = ctypes.POINTER(ULONG_PTR)
@@ -74,6 +102,8 @@ user32.SendMessageTimeoutW.restype = wintypes.LPARAM
 user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 user32.PostMessageW.restype = wintypes.BOOL
 
+GW_OWNER = 4
+PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 WM_SETTEXT = 0x000C
 WM_COMMAND = 0x0111
 WM_CLOSE = 0x0010
@@ -96,6 +126,53 @@ def get_window_pid(hwnd):
     pid = wintypes.DWORD()
     user32.GetWindowThreadProcessId(hwnd, ctypes.byref(pid))
     return pid.value
+
+def get_window_class(hwnd):
+    buf = ctypes.create_unicode_buffer(256)
+    user32.GetClassNameW(hwnd, buf, 256)
+    return buf.value
+
+def get_window_text(hwnd):
+    length = user32.GetWindowTextLengthW(hwnd)
+    if length <= 0:
+        return ""
+    buf = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, buf, length + 1)
+    return buf.value
+
+def get_process_image_name(pid):
+    if not pid:
+        return ""
+    h_proc = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if not h_proc:
+        return ""
+    try:
+        buf_len = wintypes.DWORD(1024)
+        buf = ctypes.create_unicode_buffer(1024)
+        if kernel32.QueryFullProcessImageNameW(h_proc, 0, buf, ctypes.byref(buf_len)):
+            return os.path.basename(buf.value).lower()
+        return ""
+    finally:
+        kernel32.CloseHandle(h_proc)
+
+def wait_for_window_close(hwnd, timeout=5.0):
+    start = time.time()
+    while time.time() - start < timeout:
+        if not user32.IsWindow(hwnd) or not user32.IsWindowVisible(hwnd):
+            return True
+        time.sleep(0.1)
+    return not user32.IsWindow(hwnd) or not user32.IsWindowVisible(hwnd)
+
+def dump_visible_windows(target_pid=None):
+    rows = []
+    def enum_cb(hwnd, _):
+        if user32.IsWindowVisible(hwnd):
+            pid = get_window_pid(hwnd)
+            if target_pid is None or pid == target_pid:
+                rows.append((hwnd, get_window_class(hwnd), get_window_text(hwnd), pid, get_process_image_name(pid)))
+        return True
+    user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+    return rows
 
 def send_message_timeout(hwnd, msg, wparam=0, lparam=0, timeout_ms=3000, check_error=True):
     res = ULONG_PTR(0)
@@ -247,22 +324,132 @@ def wait_for_shift_open_dialog_by_pid(target_pid, timeout=10.0):
     titles = [t for (_, t) in all_wins]
     raise TimeoutError(f"[TIMEOUT {timeout}s] Esperando diálogo 'Turno Abierto' en PID {target_pid}. Ventanas visibles: {titles}")
 
-def cancel_system_print_dialog_by_pid(target_pid, timeout=6.0):
-    """Detecta y cancela el diálogo nativo de impresión del sistema operativo Windows."""
+def _collect_top_level_windows():
+    rows = []
+    def enum_cb(hwnd, _):
+        pid = get_window_pid(hwnd)
+        cls_name = get_window_class(hwnd)
+        title = get_window_text(hwnd)
+        visible = bool(user32.IsWindowVisible(hwnd))
+        owner = user32.GetWindow(hwnd, GW_OWNER)
+        rect = wintypes.RECT()
+        user32.GetWindowRect(hwnd, ctypes.byref(rect))
+        rows.append((hwnd, pid, cls_name, title, visible, owner, rect))
+        return True
+    user32.EnumWindows(WNDENUMPROC(enum_cb), 0)
+    return rows
+
+def _find_system_print_dialog(target_pid, owner_hwnd=None):
+    all_wins = _collect_top_level_windows()
+    pid_wins = [w for w in all_wins if w[1] == target_pid]
+    app_exclusions = ("venta registrada", "cafetería", "impresión cancelada", "aviso del subsistema")
+
+    # 1. Diálogo clásico Win32 #32770 dentro del proceso de la aplicación
+    for hwnd, pid, cls_name, title, visible, owner, rect in pid_wins:
+        title_l = title.lower()
+        if visible and cls_name == "#32770" and not any(ex in title_l for ex in app_exclusions):
+            return hwnd, "classic_32770", f"{title or '#32770'} [app_desktop.exe]"
+
+    # 2. Diálogo moderno Windows 11 enlazado vía ModalExperienceWindowProp (twinui.dll / ProxyModalWindow)
+    anchors = []
+    if owner_hwnd and user32.IsWindow(owner_hwnd):
+        anchors.append(owner_hwnd)
+        last_popup = user32.GetLastActivePopup(owner_hwnd)
+        if last_popup and user32.IsWindow(last_popup):
+            anchors.append(last_popup)
+    for hwnd, _, _, _, _, _, _ in pid_wins:
+        if hwnd not in anchors:
+            anchors.append(hwnd)
+
+    for anchor in anchors:
+        modal_prop = user32.GetPropW(anchor, "ModalExperienceWindowProp")
+        if modal_prop and user32.IsWindow(modal_prop) and get_window_pid(modal_prop) != target_pid:
+            m_pid = get_window_pid(modal_prop)
+            m_proc = get_process_image_name(m_pid)
+            m_cls = get_window_class(modal_prop)
+            m_title = get_window_text(modal_prop)
+            return modal_prop, "modern_uwp", f"{m_title or m_cls} [{m_proc}]"
+
+    # 3. Ventana visible cuyo GW_OWNER pertenece a target_pid (p. ej. ApplicationFrameWindow / PrintDialog.exe)
+    for hwnd, pid, cls_name, title, visible, owner, rect in all_wins:
+        if not visible or pid == target_pid or not owner:
+            continue
+        if get_window_pid(owner) == target_pid:
+            proc_name = get_process_image_name(pid)
+            if proc_name in ("printdialog.exe", "applicationframehost.exe") or cls_name in ("ApplicationFrameWindow", "Windows.UI.Core.CoreWindow", "#32770"):
+                mode = "classic_32770" if cls_name == "#32770" else "modern_uwp"
+                return hwnd, mode, f"{title or cls_name} [{proc_name}]"
+
+    # 4. Respaldo seguro: solo si target_pid tiene estado modal activo (ProxyModalWindow o owner deshabilitado),
+    #    buscar ventana visible activa con rectángulo real de PrintDialog.exe (nunca la ventana oculta 'XCP')
+    has_proxy = any(cls_name == "ProxyModalWindow" for (_, _, cls_name, _, _, _, _) in pid_wins)
+    owner_disabled = bool(owner_hwnd and user32.IsWindow(owner_hwnd) and not user32.IsWindowEnabled(owner_hwnd))
+    if has_proxy or owner_disabled:
+        for hwnd, pid, cls_name, title, visible, owner, rect in all_wins:
+            if not visible or title.lower() == "xcp":
+                continue
+            if (rect.right - rect.left) <= 50 or (rect.bottom - rect.top) <= 50:
+                continue
+            proc_name = get_process_image_name(pid)
+            if proc_name == "printdialog.exe":
+                return hwnd, "modern_uwp", f"{title or cls_name} [printdialog.exe]"
+            if cls_name in ("ApplicationFrameWindow", "Windows.UI.Core.CoreWindow", "Xaml_WindowedPopupClass"):
+                child_pids = set()
+                def enum_child_pids(ch, _):
+                    child_pids.add(get_window_pid(ch))
+                    return True
+                user32.EnumChildWindows(hwnd, WNDENUMPROC(enum_child_pids), 0)
+                if any(get_process_image_name(cpid) == "printdialog.exe" for cpid in child_pids):
+                    return hwnd, "modern_uwp", f"{title or cls_name} [printdialog.exe en {proc_name}]"
+
+    return None, None, None
+
+def _send_print_dialog_cancel(hwnd_dialog, mode):
+    if mode == "classic_32770":
+        user32.PostMessageW(hwnd_dialog, WM_COMMAND, 2, 0)  # IDCANCEL
+        user32.PostMessageW(hwnd_dialog, WM_CLOSE, 0, 0)
+        return
+
+    core_windows = []
+    def enum_core(ch, _):
+        cls_name = get_window_class(ch)
+        if cls_name == "Windows.UI.Core.CoreWindow" or get_process_image_name(get_window_pid(ch)) == "printdialog.exe":
+            core_windows.append(ch)
+        return True
+    user32.EnumChildWindows(hwnd_dialog, WNDENUMPROC(enum_core), 0)
+
+    key_targets = core_windows if core_windows else [hwnd_dialog]
+    for tgt in key_targets:
+        user32.PostMessageW(tgt, WM_KEYDOWN, VK_ESCAPE, 0x00010001)
+        user32.PostMessageW(tgt, WM_KEYUP, VK_ESCAPE, 0xC0010001)
+    user32.PostMessageW(hwnd_dialog, WM_CLOSE, 0, 0)
+    for tgt in core_windows:
+        if tgt != hwnd_dialog:
+            user32.PostMessageW(tgt, WM_CLOSE, 0, 0)
+
+def cancel_system_print_dialog_by_pid(target_pid, timeout=6.0, owner_hwnd=None):
+    """Detecta, cancela sin imprimir y espera el cierre del diálogo de impresión del sistema (Win32 clásico o Windows 11 moderno)."""
     start = time.time()
     while time.time() - start < timeout:
-        wins = find_windows_by_pid(target_pid, "")
-        for hwnd, title in wins:
-            class_buf = ctypes.create_unicode_buffer(256)
-            user32.GetClassNameW(hwnd, class_buf, 256)
-            cls_name = class_buf.value
-            title_l = title.lower()
-            # Diálogo estándar #32770 que no sea la ventana principal ni el TicketPrintDialog
-            if cls_name == "#32770" and "venta registrada" not in title_l and "cafetería" not in title_l:
-                # Cancelar con IDCANCEL (2) o WM_CLOSE
-                post_message_checked(hwnd, WM_COMMAND, 2, 0, allow_closed=True)
-                time.sleep(0.3)
-                return hwnd, title
+        hwnd_dialog, mode, desc = _find_system_print_dialog(target_pid, owner_hwnd=owner_hwnd)
+        if hwnd_dialog:
+            if mode == "modern_uwp":
+                time.sleep(0.2)
+            _send_print_dialog_cancel(hwnd_dialog, mode)
+            wait_start = time.time()
+            resent = False
+            while time.time() - wait_start < 4.0:
+                dialog_gone = (not user32.IsWindow(hwnd_dialog)) or (not user32.IsWindowVisible(hwnd_dialog))
+                if dialog_gone:
+                    return hwnd_dialog, desc
+                if not resent and (time.time() - wait_start) >= 0.5:
+                    _send_print_dialog_cancel(hwnd_dialog, mode)
+                    resent = True
+                time.sleep(0.1)
+            raise TimeoutError(
+                f"Se detectó el diálogo de impresión ({desc}, HWND: {hwnd_dialog}), pero no desapareció tras cancelar. "
+                f"Ventanas visibles: {dump_visible_windows()}"
+            )
         time.sleep(0.2)
     return None, None
 
@@ -449,6 +636,7 @@ def run_integration_test_i2(exe_path, work_dir):
         main_controls = get_child_controls(hwnd_main2)
         buttons = [(h, txt) for (h, cls, txt) in main_controls if cls.lower() == "button"]
         btn_caja_sidebar = next((h for (h, t) in buttons if "Caja y Reportes" in t), None)
+        assert btn_caja_sidebar is not None, "Botón 'Caja y Reportes' no encontrado en la barra lateral"
         send_click_button(btn_caja_sidebar)
         time.sleep(0.8)
 
@@ -456,6 +644,7 @@ def run_integration_test_i2(exe_path, work_dir):
         shift_buttons = [(h, txt) for (h, cls, txt) in shift_controls if cls.lower() == "button"]
         shift_edits = [h for (h, cls, txt) in shift_controls if cls.lower() == "edit"]
         btn_abrir_turno = next((h for (h, t) in shift_buttons if "Abrir Turno de Caja" in t), None)
+        assert btn_abrir_turno is not None, "Botón 'Abrir Turno de Caja' no encontrado"
         if shift_edits:
             set_text(shift_edits[0], "350.00")
             time.sleep(0.2)
@@ -465,6 +654,7 @@ def run_integration_test_i2(exe_path, work_dir):
 
         # Regresar a Punto de Venta
         pos_sidebar_btn = next((h for (h, t) in shift_buttons if "Punto de Venta" in t), None)
+        assert pos_sidebar_btn is not None, "Botón 'Punto de Venta' no encontrado en la barra lateral"
         send_click_button(pos_sidebar_btn)
         time.sleep(0.8)
 
@@ -482,9 +672,12 @@ def run_integration_test_i2(exe_path, work_dir):
         btn_cobrar = next((h for (h, t) in buttons if "Cobrar" in t), None)
         list_items = lists[0] if lists else None
 
+        assert btn_buscar is not None, "Botón 'Buscar' no encontrado"
+        assert btn_agregar is not None, "Botón 'Agregar al Carrito' no encontrado"
         assert btn_edit_qty is not None, "Botón 'Editar cantidad' no encontrado"
         assert btn_edit_notes is not None, "Botón 'Editar nota' no encontrado"
         assert btn_remove_item is not None, "Botón 'Quitar línea' no encontrado"
+        assert btn_cobrar is not None, "Botón 'Cobrar' no encontrado"
         assert list_items is not None, "Control de lista del carrito no encontrado"
 
         txt_search = edits[0]
@@ -649,6 +842,7 @@ def run_integration_test_i2(exe_path, work_dir):
         chk_edits = [h for (h, cls, txt) in chk_children if cls.lower() == "edit"]
         chk_btns = [(h, txt) for (h, cls, txt) in chk_children if cls.lower() == "button"]
         btn_confirmar = next((h for (h, t) in chk_btns if "Confirmar Venta" in t), None)
+        assert btn_confirmar is not None, "Botón 'Confirmar Venta' no encontrado"
         set_text(chk_edits[0], "250.00")
         time.sleep(0.2)
         post_click_button(btn_confirmar)
@@ -666,8 +860,12 @@ def run_integration_test_i2(exe_path, work_dir):
         time.sleep(0.6)
 
         # Cancelar el diálogo del sistema nativo Windows
-        h_sys, t_sys = cancel_system_print_dialog_by_pid(pid2, timeout=6.0)
-        print(f"  -> Diálogo del sistema detectado y cancelado con IDCANCEL (HWND: {h_sys})", flush=True)
+        h_sys, t_sys = cancel_system_print_dialog_by_pid(pid2, timeout=6.0, owner_hwnd=hwnd_ticket)
+        assert h_sys is not None, (
+            f"No se detectó ningún diálogo de impresión del sistema tras pulsar 'Imprimir'. "
+            f"Ventanas visibles: {dump_visible_windows()}"
+        )
+        print(f"  -> Diálogo del sistema detectado y cancelado ({t_sys}, HWND: {h_sys})", flush=True)
 
         # Diálogo de confirmación de cancelación: "Impresión Cancelada"
         hwnd_cancel_box, _ = wait_for_window_by_pid(pid2, "Impresión Cancelada", timeout=6.0, step_name="Aviso Impresión Cancelada")
@@ -676,9 +874,10 @@ def run_integration_test_i2(exe_path, work_dir):
 
         # Con la impresión cancelada, cerrar TicketPrintDialog con «Ahora no»
         btn_ahora_no = next((h for (h, t) in t_btns if "Ahora no" in t), None)
-        if btn_ahora_no:
-            post_click_button(btn_ahora_no)
-            time.sleep(0.6)
+        assert btn_ahora_no is not None, "Botón 'Ahora no' no encontrado en TicketPrintDialog"
+        post_click_button(btn_ahora_no)
+        assert wait_for_window_close(hwnd_ticket, timeout=5.0), "TicketPrintDialog no cerró tras pulsar 'Ahora no'"
+        time.sleep(0.2)
 
         # Comprobar en SQLite: venta confirmada, inventario deducido, caja actualizada, y venta NO revertida ni duplicada
         con = sqlite3.connect(db_path)
@@ -753,7 +952,7 @@ def run_integration_test_i2(exe_path, work_dir):
         assert btn_hist_buscar is not None, "Botón Buscar en historial no encontrado"
         assert btn_hist_close is not None, "Botón Cerrar en historial no encontrado"
 
-        # Buscar por folio V-10001
+        # Buscar por el folio real de la primera venta (folio1)
         set_text(hist_edits[0], folio1)
         time.sleep(0.2)
         post_click_button(btn_hist_buscar)
@@ -764,6 +963,7 @@ def run_integration_test_i2(exe_path, work_dir):
         th_texts = [txt for (h, cls, txt) in th_controls if txt]
         th_btns = [(h, txt) for (h, cls, txt) in th_controls if cls.lower() == "button"]
         btn_th_ahora_no = next((h for (h, t) in th_btns if "Ahora no" in t), None)
+        assert btn_th_ahora_no is not None, "Botón 'Ahora no' no encontrado en TicketPrintDialog del historial"
 
         full_ticket_text = "\n".join(th_texts)
         assert folio1 in full_ticket_text, f"El ticket recuperado debe contener el folio '{folio1}'"
@@ -781,7 +981,8 @@ def run_integration_test_i2(exe_path, work_dir):
         print(f"[OK] Ticket histórico {folio1} recuperado íntegro tras reapertura con verificación exhaustiva de UI (folio, cajero, productos, cantidades, precios unitarios, notas y total).", flush=True)
 
         post_click_button(btn_th_ahora_no)
-        time.sleep(0.4)
+        assert wait_for_window_close(hwnd_hist_ticket, timeout=5.0), "TicketPrintDialog histórico no cerró tras pulsar 'Ahora no'"
+        time.sleep(0.2)
         post_click_button(btn_hist_close)
         time.sleep(0.4)
 
@@ -821,6 +1022,7 @@ def run_integration_test_i2(exe_path, work_dir):
             h4_edits = [h for (h, cls, txt) in h4_controls if cls.lower() == "edit"]
             h4_btns = [(h, txt) for (h, cls, txt) in h4_controls if cls.lower() == "button"]
             btn_h4_buscar = next((h for (h, t) in h4_btns if "Buscar" in t), None)
+            assert btn_h4_buscar is not None, "Botón 'Buscar' en historial (Req 8) no encontrado"
             set_text(h4_edits[0], folio1)
             time.sleep(0.2)
             post_click_button(btn_h4_buscar)
@@ -828,6 +1030,7 @@ def run_integration_test_i2(exe_path, work_dir):
             hwnd_t4, _ = wait_for_window_by_pid(pid4, "Venta Registrada", timeout=6.0)
             t4_btns = [(h, txt) for (h, cls, txt) in get_child_controls(hwnd_t4) if cls.lower() == "button"]
             btn_t4_print = next((h for (h, t) in t4_btns if "Imprimir" in t), None)
+            assert btn_t4_print is not None, "Botón 'Imprimir' en TicketPrintDialog (Req 8) no encontrado"
 
             print("  -> Disparando impresión con CAFETERIA_SIMULATE_PRINT_ERROR=1...", flush=True)
             post_click_button(btn_t4_print)
@@ -864,14 +1067,16 @@ def run_integration_test_i2(exe_path, work_dir):
             # Salir de TicketPrintDialog con «Ahora no»
             t4_btns = [(h, txt) for (h, cls, txt) in get_child_controls(hwnd_t4) if cls.lower() == "button"]
             btn_t4_not_now = next((h for (h, t) in t4_btns if "Ahora no" in t), None)
-            if btn_t4_not_now:
-                post_click_button(btn_t4_not_now)
-                time.sleep(0.5)
+            assert btn_t4_not_now is not None, "Botón 'Ahora no' en TicketPrintDialog (Req 8) no encontrado"
+            post_click_button(btn_t4_not_now)
+            assert wait_for_window_close(hwnd_t4, timeout=5.0), "TicketPrintDialog (Req 8) no cerró tras pulsar 'Ahora no'"
 
             # Cerrar diálogo de historial
             btn_h4_close = next((h for (h, t) in h4_btns if "Cerrar" in t), None)
+            assert btn_h4_close is not None, "Botón 'Cerrar' en historial (Req 8) no encontrado"
             post_click_button(btn_h4_close)
-            time.sleep(0.4)
+            assert wait_for_window_close(hwnd_hist4, timeout=5.0), "Diálogo de historial (Req 8) no cerró"
+            time.sleep(0.2)
 
             # Verificar en SQLite que los datos siguen 100% consistentes y no se duplicaron
             con = sqlite3.connect(db_path)
@@ -934,6 +1139,9 @@ def run_integration_test_i2(exe_path, work_dir):
         btn_buscar5 = next((h for (h, t) in buttons5 if "Buscar" in t), None)
         btn_agregar5 = next((h for (h, t) in buttons5 if "Agregar al Carrito" in t), None)
         btn_cobrar5 = next((h for (h, t) in buttons5 if "Cobrar" in t), None)
+        assert btn_buscar5 is not None, "Botón 'Buscar' no encontrado para vendedor"
+        assert btn_agregar5 is not None, "Botón 'Agregar al Carrito' no encontrado para vendedor"
+        assert btn_cobrar5 is not None, "Botón 'Cobrar' no encontrado para vendedor"
 
         set_text(edits5[0], "Torta")
         send_click_button(btn_buscar5)
@@ -949,6 +1157,7 @@ def run_integration_test_i2(exe_path, work_dir):
         chk_edits5 = [h for (h, cls, txt) in get_child_controls(hwnd_chk5) if cls.lower() == "edit"]
         chk_btns5 = [(h, txt) for (h, cls, txt) in get_child_controls(hwnd_chk5) if cls.lower() == "button"]
         btn_conf5 = next((h for (h, t) in chk_btns5 if "Confirmar Venta" in t), None)
+        assert btn_conf5 is not None, "Botón 'Confirmar Venta' no encontrado para vendedor"
         set_text(chk_edits5[0], "50.00")
         time.sleep(0.2)
         post_click_button(btn_conf5)
@@ -958,12 +1167,14 @@ def run_integration_test_i2(exe_path, work_dir):
         t5_texts = [txt for (h, cls, txt) in get_child_controls(hwnd_t5) if txt]
         t5_btns = [(h, txt) for (h, cls, txt) in get_child_controls(hwnd_t5) if cls.lower() == "button"]
         btn_t5_not_now = next((h for (h, t) in t5_btns if "Ahora no" in t), None)
+        assert btn_t5_not_now is not None, "Botón 'Ahora no' no encontrado en ticket del vendedor"
 
         assert any("Vendedor I2" in t for t in t5_texts), "El ticket debe incluir el nombre del vendedor"
         print("[OK] Vendedor sin pos.reprint pudo visualizar con éxito su ticket recién confirmado.", flush=True)
 
         post_click_button(btn_t5_not_now)
-        time.sleep(0.5)
+        assert wait_for_window_close(hwnd_t5, timeout=5.0), "TicketPrintDialog del vendedor no cerró"
+        time.sleep(0.2)
 
         close_window_and_wait(proc5, hwnd_main5, timeout=6)
         print("[OK] Sesión 5 cerrada limpiamente.", flush=True)
@@ -977,10 +1188,18 @@ def run_integration_test_i2(exe_path, work_dir):
         con = sqlite3.connect(db_path)
         cur = con.cursor()
 
-        cur.execute("SELECT id, folio, idempotency_key, total_cents, user_id FROM sales WHERE folio='V-10001'")
+        cur.execute("SELECT id, folio, idempotency_key, total_cents, user_id FROM sales WHERE folio=?", (folio1,))
         s1_row = cur.fetchone()
-        assert s1_row is not None, "Venta V-10001 no encontrada"
+        assert s1_row is not None, f"Venta {folio1} no encontrada"
         s1_id, s1_folio, s1_key, s1_tot, s1_user = s1_row
+
+        cur.execute("SELECT id, folio FROM sales ORDER BY id")
+        all_sales_folios = cur.fetchall()
+        assert (
+            len(all_sales_folios) >= 2
+            and all(re.fullmatch(r"V-[A-Z0-9]{1,4}-[0-9]{5}", f) is not None for _, f in all_sales_folios)
+            and len({f for _, f in all_sales_folios}) == len(all_sales_folios)
+        ), f"Formato de folio inválido o folios duplicados entre ventas distintas: {all_sales_folios}"
 
         def capture_db_snapshot(cursor):
             tables = [
