@@ -79,6 +79,10 @@ public:
 
     contracts::OperationResult backup_to(const std::filesystem::path& dest_path);
 
+    // Deja el archivo como una base de un solo archivo: checkpoint completo y journal_mode=DELETE,
+    // de modo que no queden archivos -wal ni -shm junto a él. Pensado para respaldos recién creados.
+    static contracts::OperationResult make_single_file(const std::filesystem::path& file_path);
+
     // Inspección de solo lectura de un archivo de respaldo; no modifica nada.
     static contracts::Result<BackupFileInfo> inspect_file(const std::filesystem::path& file_path);
 

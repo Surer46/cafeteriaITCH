@@ -4,6 +4,8 @@
 #include <filesystem>
 #include <cstdlib>
 #include <random>
+#include <algorithm>
+#include <limits>
 #include <chrono>
 #include <thread>
 #include <unordered_set>
@@ -11,6 +13,7 @@
 #include "app/storage/migration_runner.hpp"
 #include "app/crypto/password_hasher.hpp"
 #include "app/domain/clock.hpp"
+#include "app/domain/stock_valuation.hpp"
 #include "app/services/identifiers.hpp"
 #include "app/services/mock_services.hpp"
 #include "app/services/sqlite_account_service.hpp"
@@ -127,6 +130,19 @@ fs::path find_migrations_dir() {
         }
     }
     return fs::path();
+}
+
+// Versión más alta presente en la carpeta de migraciones (prefijo numérico NNN_), como texto.
+std::string latest_migration_version() {
+    fs::path dir = find_migrations_dir();
+    int best = 0;
+    for (const auto& e : fs::directory_iterator(dir)) {
+        const std::string name = e.path().filename().u8string();
+        if (name.size() > 4 && name.substr(name.size() - 4) == ".sql" && name[0] >= '0' && name[0] <= '9') {
+            best = std::max(best, std::atoi(name.c_str()));
+        }
+    }
+    return std::to_string(best);
 }
 
 void test_sqlite_lifecycle_and_persistence() {
@@ -3138,7 +3154,7 @@ void test_b4a_permission_titles_migration() {
 
         MigrationRunner runner(db);
         TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 009");
-        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == "10", "Última versión del esquema es 10");
+        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == latest_migration_version(), "Última versión del esquema es la de la carpeta de migraciones");
         TEST_CHECK(query_text(rp_sql) == rp_before, "role_permissions (role-owner y role-cashier incluidos) no cambian con 009");
         TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "21", "Siguen existiendo 21 permisos");
         TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions WHERE title <> '' AND section <> '' AND sort_order > 0;") == "21",
@@ -3156,7 +3172,7 @@ void test_b4a_permission_titles_migration() {
         TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
         TEST_CHECK(query_text(perm_sql) == perm_after_first, "Ejecutar el runner dos veces no cambia permissions");
         TEST_CHECK(query_text(rp_sql) == rp_before, "Segunda ejecución no cambia role_permissions");
-        TEST_CHECK(query_text("SELECT COUNT(*) FROM schema_migrations;") == "10", "Segunda ejecución no duplica versiones");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM schema_migrations;") == latest_migration_version(), "Segunda ejecución no duplica versiones");
 
         auto account_svc = std::make_shared<SqliteAccountService>(db);
         const std::string owner_pwd = generate_random_secret(18);
@@ -3338,7 +3354,7 @@ void test_b4_ids_clock_folios_and_migration() {
     // --- Migrar a la versión nueva ---
     MigrationRunner runner(db);
     TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 010");
-    TEST_CHECK(q("SELECT MAX(version) FROM schema_migrations;") == "10", "Esquema en versión 10");
+    TEST_CHECK(q("SELECT MAX(version) FROM schema_migrations;") == latest_migration_version(), "Esquema en la última versión");
     TEST_CHECK(q(orig_sql) == orig_before, "Los datos originales quedan intactos tras migrar");
 
     // Columnas nuevas presentes
@@ -3377,7 +3393,7 @@ void test_b4_ids_clock_folios_and_migration() {
     const std::string full_before = q(orig_sql) + q(reg_sql);
     MigrationRunner runner2(db);
     TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
-    TEST_CHECK(q("SELECT COUNT(*) FROM schema_migrations;") == "10", "No se duplican versiones");
+    TEST_CHECK(q("SELECT COUNT(*) FROM schema_migrations;") == latest_migration_version(), "No se duplican versiones");
     TEST_CHECK(q(schema_sql) == schema_before, "El esquema no cambia");
     TEST_CHECK(q(orig_sql) + q(reg_sql) == full_before, "Los datos no cambian");
 
@@ -3494,6 +3510,679 @@ void test_b4_ids_clock_folios_and_migration() {
     std::cout << "  -> Identificadores, UTC, updated_at, folios por caja y migración 010 verificados." << std::endl;
 }
 
+void test_b5_adjustments_movements_and_migration() {
+    std::cout << "[TEST] B5: migración 011, mermas, ajustes, movimientos, compras y folio por rango..." << std::endl;
+
+    fs::path mig_dir = find_migrations_dir();
+    TEST_CHECK(!mig_dir.empty(), "Debe encontrar directorio de migraciones");
+
+    const fs::path base_dir = fs::temp_directory_path() / ("cafeteria_b5_" + generate_random_alphanumeric(8));
+    fs::remove_all(base_dir);
+    fs::create_directories(base_dir / "mig_v10");
+    int copied = 0;
+    for (const auto& entry : fs::directory_iterator(mig_dir)) {
+        const std::string name = entry.path().filename().u8string();
+        if (name.size() > 4 && name.substr(name.size() - 4) == ".sql" && name < "011") {
+            fs::copy_file(entry.path(), base_dir / "mig_v10" / entry.path().filename());
+            ++copied;
+        }
+    }
+    TEST_CHECK(copied == 10, "Deben copiarse exactamente las migraciones 001 a 010");
+
+    SqliteDatabase db;
+    TEST_CHECK(db.open((base_dir / "b5.db").u8string()).is_success(), "Abrir SQLite B5");
+
+    auto q = [&](const std::string& sql) -> std::string {
+        auto prep = db.prepare(sql);
+        TEST_CHECK(prep.is_success(), "Preparar consulta B5: " + sql);
+        auto stmt = std::move(prep.value());
+        auto step = stmt.step();
+        TEST_CHECK(step.is_success() && step.value(), "La consulta B5 debe devolver fila: " + sql);
+        return stmt.get_text(0);
+    };
+
+    // --- Base v10 con datos ---
+    MigrationRunner old_runner(db);
+    TEST_CHECK(old_runner.run_pending_migrations_from_dir(base_dir / "mig_v10").is_success(), "Migrar hasta 010");
+    TEST_CHECK(q("SELECT MAX(version) FROM schema_migrations;") == "10", "Línea base en versión 10");
+
+    const std::string owner_pwd = generate_random_secret(18);
+    const std::string owner_hash = app::crypto::PasswordHasher::hash_password(owner_pwd);
+    TEST_CHECK(db.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at, updated_at) "
+                          "VALUES ('user-dueno_b5', 'dueno_b5', 'Dueño B5', 'b5@cafeteria-itch.edu.mx', '" + owner_hash +
+                          "', 'role-owner', 1, '2026-10-01 07:00:00', '2026-10-01 07:00:00');").is_success(), "Alta de Dueño v10 por SQL");
+    const char* seed[] = {
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-a', 'Limon', 'MASS', 'mg', 1000000, '2026-10-01 07:00:00');",
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-v', 'Leche', 'VOLUME', 'ml', 5000, '2026-10-01 07:00:00');",
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-big', 'Agua', 'VOLUME', 'ml', 9223372036854775800, '2026-10-01 07:00:00');",
+        "INSERT INTO purchase_entries (id, ingredient_id, quantity_purchased, purchase_unit, total_cost_cents, base_units_purchased, created_at) VALUES ('pe-old', 'ing-a', 1, 'kg', 5000, 1000000, '2026-09-30 12:00:00');",
+        "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at) VALUES ('sm-old', 'ing-a', 'PURCHASE', 1000000, 'Entrada de compra', '2026-09-30 12:00:00');"
+    };
+    for (const char* s : seed) {
+        auto r = db.execute(s);
+        TEST_CHECK(r.is_success(), std::string("Dato previo: ") + s + " -> " + r.error_message());
+    }
+    const std::string orig_sql =
+        "SELECT (SELECT group_concat(id||'|'||ingredient_id||'|'||movement_type||'|'||quantity_base_units||'|'||reason||'|'||created_at, ';') FROM stock_movements) || '#' ||"
+        "(SELECT group_concat(id||'|'||ingredient_id||'|'||total_cost_cents||'|'||base_units_purchased||'|'||created_at, ';') FROM purchase_entries) || '#' ||"
+        "(SELECT group_concat(id||'|'||name||'|'||current_stock, ';') FROM ingredients) || '#' ||"
+        "(SELECT group_concat(id||'|'||username, ';') FROM users);";
+    const std::string orig_before = q(orig_sql);
+
+    // --- Migrar a 011 ---
+    MigrationRunner runner(db);
+    TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 011");
+    TEST_CHECK(std::stoll(q("SELECT MAX(version) FROM schema_migrations;")) >= 11, "Esquema al menos en versión 11");
+    TEST_CHECK(q(orig_sql) == orig_before, "Los datos originales quedan intactos tras migrar a 011");
+    TEST_CHECK(q("SELECT COUNT(*) FROM pragma_table_info('stock_movements') WHERE name = 'actor_user_id';") == "1", "actor_user_id en stock_movements");
+    TEST_CHECK(q("SELECT COUNT(*) FROM pragma_table_info('purchase_entries') WHERE name = 'actor_user_id';") == "1", "actor_user_id en purchase_entries");
+    TEST_CHECK(q("SELECT COUNT(*) FROM stock_movements WHERE id = 'sm-old' AND actor_user_id IS NULL;") == "1", "Movimiento anterior: actor NULL");
+    TEST_CHECK(q("SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name LIKE 'trg_ingredients_no_negative_stock%';") == "2", "Triggers de existencias negativas");
+    TEST_CHECK(q("SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name IN ('idx_stock_movements_ingredient', 'idx_stock_movements_created', 'idx_purchase_entries_ingredient', 'idx_purchase_entries_created');") == "4", "Índices de movimientos y compras");
+    const std::string schema_sql = "SELECT group_concat(name||type, ';') FROM (SELECT name, type FROM sqlite_master ORDER BY name);";
+    const std::string schema_before = q(schema_sql);
+    const std::string version_count_before = q("SELECT COUNT(*) FROM schema_migrations;");
+    MigrationRunner runner2(db);
+    TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
+    TEST_CHECK(q(schema_sql) == schema_before && q(orig_sql) == orig_before, "El segundo runner no cambia esquema ni datos");
+    TEST_CHECK(q("SELECT COUNT(*) FROM schema_migrations;") == version_count_before, "El segundo runner no duplica versiones");
+    // Respaldo en la base: ninguna escritura directa deja existencias negativas
+    TEST_CHECK(!db.execute("UPDATE ingredients SET current_stock = -1 WHERE id = 'ing-v';").is_success(), "El trigger impide existencias negativas por UPDATE");
+    TEST_CHECK(q("SELECT current_stock FROM ingredients WHERE id = 'ing-v';") == "5000", "La existencia no cambió tras el UPDATE rechazado");
+
+    // --- Folio por rango: usa el índice único ---
+    {
+        auto prep = db.prepare("EXPLAIN QUERY PLAN SELECT COALESCE(MAX(CAST(substr(folio, 6) AS INTEGER)), 0) FROM sales WHERE folio >= 'V-C1-' AND folio < 'V-C1.';");
+        TEST_CHECK(prep.is_success(), "Preparar plan de consulta del folio");
+        auto stmt = std::move(prep.value());
+        std::string plan;
+        while (true) {
+            auto step = stmt.step();
+            TEST_CHECK(step.is_success(), "Leer plan");
+            if (!step.value()) break;
+            plan += stmt.get_text(3) + "|";
+        }
+        TEST_CHECK(plan.find("SEARCH") != std::string::npos && plan.find("INDEX") != std::string::npos && plan.find("folio>") != std::string::npos &&
+                       plan.find("SCAN") == std::string::npos,
+                   "La búsqueda de folio es un rango sobre un índice de folio, sin recorrer la tabla (plan: " + plan + ")");
+    }
+
+    // --- Servicios ---
+    auto account_svc = std::make_shared<SqliteAccountService>(db);
+    auto cat_svc = std::make_shared<SqliteCatalogService>(db, account_svc);
+    auto inv_svc = std::make_shared<SqliteInventoryService>(db, account_svc);
+    auto cart_svc = std::make_shared<SqliteCartService>(db, account_svc, cat_svc);
+    auto shift_svc = std::make_shared<SqliteShiftService>(db, account_svc);
+    auto sale_svc = std::make_shared<SqliteSaleService>(db, account_svc, cart_svc, shift_svc);
+    TEST_CHECK(account_svc->login("dueno_b5", owner_pwd).is_success(), "Login del Dueño");
+    const std::string owner_id = "user-dueno_b5";
+
+    const std::string cashier_pwd = generate_random_secret(18);
+    {
+        CreateUserDto cu;
+        cu.username = "cajero_b5"; cu.display_name = "Cajero B5"; cu.raw_password = cashier_pwd;
+        cu.role_id = "role-cashier"; cu.email = "cajero_b5@cafeteria-itch.edu.mx";
+        TEST_CHECK(account_svc->create_user(cu).is_success(), "Crear cajero");
+    }
+    auto stock_of = [&](const std::string& id) { return std::stoll(q("SELECT current_stock FROM ingredients WHERE id = '" + id + "';")); };
+    auto count_of = [&](const std::string& table) { return std::stoll(q("SELECT COUNT(*) FROM " + table + ";")); };
+
+    // Merma
+    TEST_CHECK(inv_svc->register_waste("ing-a", 300, "g", "Se cayó el costal").is_success(), "Merma de 300 g");
+    TEST_CHECK(stock_of("ing-a") == 700000, "Existencia tras la merma: 700000 mg");
+    TEST_CHECK(q("SELECT quantity_base_units||'|'||movement_type||'|'||reason||'|'||actor_user_id||'|'||(created_at_utc IS NOT NULL) FROM stock_movements WHERE movement_type = 'WASTE';")
+                   == "-300000|WASTE|Se cayó el costal|" + owner_id + "|1", "Movimiento de merma correcto con actor y UTC");
+    TEST_CHECK(q("SELECT COUNT(*) FROM audit_events WHERE event_type = 'STOCK_WASTE' AND created_at_utc IS NOT NULL;") == "1", "Auditoría de la merma");
+    // Ajustes positivo y negativo
+    TEST_CHECK(inv_svc->register_adjustment("ing-a", 2, "kg", "Conteo físico").is_success(), "Ajuste +2 kg");
+    TEST_CHECK(stock_of("ing-a") == 2700000, "Existencia tras ajuste positivo");
+    TEST_CHECK(inv_svc->register_adjustment("ing-a", -1, "kg", "Corrección").is_success(), "Ajuste -1 kg");
+    TEST_CHECK(stock_of("ing-a") == 1700000, "Existencia tras ajuste negativo");
+    TEST_CHECK(q("SELECT COUNT(*) FROM stock_movements WHERE movement_type = 'ADJUSTMENT';") == "2", "Dos movimientos de ajuste");
+    TEST_CHECK(q("SELECT COUNT(*) FROM audit_events WHERE event_type = 'STOCK_ADJUSTMENT';") == "2", "Dos auditorías de ajuste");
+    // Motivo: 200 caracteres acentuados (400 bytes) se aceptan; 201 se rechazan
+    std::string reason200;
+    for (int i = 0; i < 200; ++i) reason200 += "ñ";
+    TEST_CHECK(inv_svc->register_adjustment("ing-a", 1, "g", reason200).is_success(), "Motivo de 200 caracteres (400 bytes) aceptado");
+    TEST_CHECK(!inv_svc->register_adjustment("ing-a", 1, "g", reason200 + "x").is_success(), "Motivo de 201 caracteres rechazado");
+    TEST_CHECK(stock_of("ing-a") == 1701000, "Solo el ajuste de 200 caracteres cambió existencias");
+
+    // Rechazos sin cambios
+    const auto mov_before = count_of("stock_movements");
+    const auto audit_before = count_of("audit_events");
+    const auto stock_before = stock_of("ing-a");
+    auto expect_rejected = [&](const OperationResult& r, ErrorCode code, const std::string& what) {
+        TEST_CHECK(!r.is_success() && r.error_code() == code, what);
+        TEST_CHECK(count_of("stock_movements") == mov_before && count_of("audit_events") == audit_before && stock_of("ing-a") == stock_before,
+                   what + " (sin cambios)");
+    };
+    expect_rejected(inv_svc->register_waste("ing-a", 1, "g", ""), ErrorCode::InvalidInput, "Motivo vacío");
+    expect_rejected(inv_svc->register_waste("ing-a", 1, "g", "   \t "), ErrorCode::InvalidInput, "Motivo solo espacios");
+    expect_rejected(inv_svc->register_waste("ing-a", 0, "g", "x"), ErrorCode::InvalidInput, "Merma de cantidad cero");
+    expect_rejected(inv_svc->register_waste("ing-a", -5, "g", "x"), ErrorCode::InvalidInput, "Merma de cantidad negativa");
+    expect_rejected(inv_svc->register_adjustment("ing-a", 0, "g", "x"), ErrorCode::InvalidInput, "Ajuste de cantidad cero");
+    expect_rejected(inv_svc->register_waste("ing-a", 2, "kg", "x"), ErrorCode::InsufficientStock, "Merma mayor a la existencia (1.701 kg)");
+    expect_rejected(inv_svc->register_adjustment("ing-a", -2, "kg", "x"), ErrorCode::InsufficientStock, "Ajuste que dejaría existencia negativa");
+    expect_rejected(inv_svc->register_waste("ing-a", 1, "l", "x"), ErrorCode::InvalidInput, "Unidad de otra dimensión");
+    expect_rejected(inv_svc->register_waste("ing-a", std::numeric_limits<std::int64_t>::max(), "kg", "x"), ErrorCode::InvalidInput, "Conversión que desborda");
+    expect_rejected(inv_svc->register_adjustment("ing-a", std::numeric_limits<std::int64_t>::min(), "g", "x"), ErrorCode::InvalidInput, "Cantidad mínima de int64");
+    expect_rejected(inv_svc->register_adjustment("ing-inexistente", 1, "g", "x"), ErrorCode::NotFound, "Ingrediente inexistente");
+    TEST_CHECK(!inv_svc->register_adjustment("ing-big", 100, "ml", "x").is_success() && stock_of("ing-big") == 9223372036854775800LL,
+               "Un ajuste que desborda las existencias se rechaza sin cambios");
+
+    // Falla a mitad de transacción: la auditoría falla y todo se revierte
+    TEST_CHECK(db.execute("CREATE TRIGGER t_fail_waste_audit BEFORE INSERT ON audit_events WHEN NEW.event_type = 'STOCK_WASTE' "
+                          "BEGIN SELECT RAISE(ABORT, 'forzado'); END;").is_success(), "Trigger de falla forzada");
+    auto forced = inv_svc->register_waste("ing-a", 1, "g", "No debe quedar");
+    TEST_CHECK(!forced.is_success(), "La falla de auditoría hace fallar la merma");
+    TEST_CHECK(count_of("stock_movements") == mov_before && stock_of("ing-a") == stock_before && count_of("audit_events") == audit_before,
+               "La falla a mitad de transacción no deja datos parciales");
+    TEST_CHECK(db.execute("DROP TRIGGER t_fail_waste_audit;").is_success(), "Quitar trigger de falla forzada");
+    TEST_CHECK(inv_svc->register_waste("ing-a", 1, "g", "Ahora sí").is_success(), "La merma funciona tras quitar la falla");
+    TEST_CHECK(stock_of("ing-a") == stock_before - 1000, "Existencia tras la merma recuperada");
+
+    // Compra y venta con actor
+    TEST_CHECK(inv_svc->register_purchase_entry("ing-a", 2, "kg", Money::from_cents(10000)).is_success(), "Compra de 2 kg");
+    CreateProductDto pd;
+    pd.sku = "SKU-B5"; pd.name = "Limonada B5"; pd.category = "Bebidas"; pd.price = Money::from_cents(3500); pd.is_prepared = true;
+    auto prod = cat_svc->create_product(pd);
+    TEST_CHECK(prod.is_success(), "Crear producto");
+    RecipeItemDto ri;
+    ri.ingredient_id = "ing-a"; ri.quantity_base_units = 100000;
+    TEST_CHECK(cat_svc->set_recipe(prod.value().id, {ri}).is_success(), "Receta de limonada");
+    TEST_CHECK(shift_svc->open_shift("reg-01", Money::from_cents(10000)).is_success(), "Abrir turno");
+    TEST_CHECK(cart_svc->add_item(prod.value().id, 1, "").is_success(), "Agregar al carrito");
+    auto sale = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "");
+    TEST_CHECK(sale.is_success(), "Confirmar venta: " + sale.error_message());
+    TEST_CHECK(sale.value().folio == "V-C1-00001", "Folio por rango: primera venta de C1");
+    TEST_CHECK(cart_svc->add_item(prod.value().id, 1, "").is_success(), "Carrito de segunda venta");
+    auto sale_b = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "");
+    TEST_CHECK(sale_b.is_success() && sale_b.value().folio == "V-C1-00002", "Folio por rango: segunda venta de C1");
+
+    // Movimientos: filtros, orden y límite
+    StockMovementFilterDto f;
+    auto all = inv_svc->list_stock_movements(f);
+    TEST_CHECK(all.is_success(), "Listar movimientos: " + all.error_message());
+    TEST_CHECK(static_cast<long long>(all.value().size()) == count_of("stock_movements"), "El listado trae todos los movimientos");
+    TEST_CHECK(all.value().front().movement_type == "SALE" && all.value().back().id == "sm-old", "Más recientes primero; el antiguo al final");
+    bool desc = true;
+    for (std::size_t i = 1; i < all.value().size(); ++i) {
+        if (all.value()[i - 1].created_at < all.value()[i].created_at) desc = false;
+    }
+    TEST_CHECK(desc, "Orden descendente por fecha");
+    TEST_CHECK(all.value().back().actor_user_id.empty() && all.value().back().actor_name.empty(), "Movimiento anterior sin actor");
+    int sales = 0, purchases = 0, wastes = 0;
+    for (const auto& m : all.value()) {
+        if (m.movement_type == "SALE") { ++sales; TEST_CHECK(m.actor_user_id == owner_id && m.actor_name == "Dueño B5" && m.quantity_base_units == -100000, "Venta con actor y cantidad negativa"); }
+        if (m.movement_type == "PURCHASE" && m.id != "sm-old") { ++purchases; TEST_CHECK(m.actor_user_id == owner_id && m.quantity_base_units == 2000000, "Compra con actor y cantidad"); }
+        if (m.movement_type == "WASTE") ++wastes;
+    }
+    TEST_CHECK(sales == 2 && purchases == 1 && wastes == 2, "Una venta y una compra aparecen con su tipo");
+    f.movement_type = "WASTE";
+    TEST_CHECK(inv_svc->list_stock_movements(f).value().size() == 2, "Filtro por tipo");
+    f = StockMovementFilterDto{};
+    f.ingredient_id = "ing-v";
+    TEST_CHECK(inv_svc->list_stock_movements(f).value().empty(), "Filtro por ingrediente sin movimientos");
+    f.ingredient_id = "ing-a";
+    f.limit = 2;
+    TEST_CHECK(inv_svc->list_stock_movements(f).value().size() == 2, "Límite de 2");
+    f.limit = 100000;
+    TEST_CHECK(inv_svc->list_stock_movements(f).is_success(), "Límite excesivo se acota");
+    const std::string today = app::domain::now().local.substr(0, 10);
+    f = StockMovementFilterDto{};
+    f.date_from = today; f.date_to = today;
+    TEST_CHECK(static_cast<long long>(inv_svc->list_stock_movements(f).value().size()) == count_of("stock_movements") - 1, "Rango de hoy: todos menos el antiguo");
+    f.date_from = "2999-01-01"; f.date_to = "";
+    TEST_CHECK(inv_svc->list_stock_movements(f).value().empty(), "Rango futuro vacío");
+    f.date_from = ""; f.date_to = "2026-09-30";
+    TEST_CHECK(inv_svc->list_stock_movements(f).value().size() == 1, "Rango hasta 2026-09-30 incluye el movimiento antiguo");
+    f = StockMovementFilterDto{};
+    f.movement_type = "INVENTADO";
+    TEST_CHECK(!inv_svc->list_stock_movements(f).is_success(), "Tipo desconocido rechazado");
+    f = StockMovementFilterDto{};
+    f.date_from = "12/11/2026";
+    TEST_CHECK(!inv_svc->list_stock_movements(f).is_success(), "Fecha mal formada rechazada");
+
+    // Entradas de compra
+    PurchaseEntryFilterDto pf;
+    auto pur = inv_svc->list_purchase_entries(pf);
+    TEST_CHECK(pur.is_success() && pur.value().size() == 2, "Dos entradas de compra");
+    TEST_CHECK(pur.value()[0].total_cost.cents() == 10000 && pur.value()[0].base_units_purchased == 2000000 &&
+               pur.value()[0].actor_name == "Dueño B5" && pur.value()[0].ingredient_name == "Limon", "Entrada más reciente con costo, unidades y actor");
+    TEST_CHECK(pur.value()[1].id == "pe-old" && pur.value()[1].actor_user_id.empty(), "Entrada anterior sin actor, al final");
+    pf.ingredient_id = "ing-v";
+    TEST_CHECK(inv_svc->list_purchase_entries(pf).value().empty(), "Filtro de compras por ingrediente");
+    pf = PurchaseEntryFilterDto{};
+    pf.limit = 1;
+    TEST_CHECK(inv_svc->list_purchase_entries(pf).value().size() == 1, "Límite en compras");
+
+    // Cajero sin permisos
+    TEST_CHECK(account_svc->login("cajero_b5", cashier_pwd).is_success(), "Login del cajero");
+    TEST_CHECK(inv_svc->register_waste("ing-a", 1, "g", "x").error_code() == ErrorCode::Forbidden, "Cajero no puede registrar mermas");
+    TEST_CHECK(inv_svc->register_adjustment("ing-a", 1, "g", "x").error_code() == ErrorCode::Forbidden, "Cajero no puede registrar ajustes");
+    TEST_CHECK(inv_svc->list_stock_movements(StockMovementFilterDto{}).error_code() == ErrorCode::Forbidden, "Cajero no puede listar movimientos");
+    TEST_CHECK(inv_svc->list_purchase_entries(PurchaseEntryFilterDto{}).error_code() == ErrorCode::Forbidden, "Cajero no puede listar compras");
+    TEST_CHECK(stock_of("ing-a") == stock_before - 1000 + 2000000 - 200000, "Las existencias no cambiaron con el cajero");
+
+    db.close();
+    std::error_code ec;
+    fs::remove_all(base_dir, ec);
+    std::cout << "  -> Migración 011, mermas, ajustes, movimientos, compras y folio por rango verificados." << std::endl;
+}
+
+void test_b5_valuation_domain_rules() {
+    std::cout << "[TEST] B5: reglas puras de valuación (promedio móvil, redondeo, desbordamiento)..." << std::endl;
+    using app::domain::StockState;
+    namespace dom = app::domain;
+
+    StockState empty;
+    TEST_CHECK(dom::cost_micro_for_quantity(empty, 10).error_code() == ErrorCode::NotFound, "Sin compras el costo es desconocido, no 0");
+    auto p1 = dom::valuation_after_purchase(empty, 1000, 5000);
+    TEST_CHECK(p1.is_success() && p1.value().value_micro == 5000000000LL && p1.value().stock == 1000, "Compra: la valuación sube por el costo total");
+    TEST_CHECK(dom::valuation_after_purchase(empty, 0, 5000).error_code() == ErrorCode::InvalidInput, "Compra de cantidad 0 rechazada");
+    TEST_CHECK(dom::valuation_after_purchase(empty, 10, -1).error_code() == ErrorCode::InvalidInput, "Compra de costo negativo rechazada");
+    TEST_CHECK(dom::valuation_after_outflow(p1.value(), 1001).error_code() == ErrorCode::InsufficientStock, "Salida mayor a la existencia rechazada");
+    auto out_all = dom::valuation_after_outflow(p1.value(), 1000);
+    TEST_CHECK(out_all.is_success() && out_all.value().value_micro == 0 && out_all.value().stock == 0, "Salir todo deja la valuación exactamente en 0");
+    TEST_CHECK(out_all.value().last_avg_units == 1000 && out_all.value().last_avg_value_micro == 5000000000LL, "Se conserva el último promedio conocido");
+    auto uc = dom::cost_micro_for_quantity(out_all.value(), 100);
+    TEST_CHECK(uc.is_success() && uc.value().from_last_known && uc.value().micro == 500000000LL, "Con existencia 0 se usa el último promedio conocido");
+    TEST_CHECK(dom::micro_to_cents(499999) == 0 && dom::micro_to_cents(500000) == 1 && dom::micro_to_cents(0) == 0, "Redondeo de micro-centavos a centavos");
+    TEST_CHECK(dom::margin_basis_points(3280, 3500).value() == 9371, "Margen 3280 sobre 3500 = 9371 puntos base");
+    TEST_CHECK(dom::margin_basis_points(-500, 1000).value() == -5000, "Margen negativo");
+    TEST_CHECK(!dom::margin_basis_points(100, 0).is_success(), "Sin porcentaje cuando el precio es 0");
+    // Desbordamientos
+    StockState big;
+    big.stock = std::numeric_limits<std::int64_t>::max() - 5;
+    TEST_CHECK(dom::valuation_after_purchase(big, 10, 1).error_code() == ErrorCode::InvalidInput, "Existencia que desborda rechazada");
+    TEST_CHECK(dom::valuation_after_inflow_adjustment(big, 10).error_code() == ErrorCode::InvalidInput, "Ajuste que desborda rechazado");
+    TEST_CHECK(dom::valuation_after_purchase(empty, 1, 9223372036855LL).error_code() == ErrorCode::InvalidInput, "Costo que desborda la escala de micro-centavos rechazado");
+    TEST_CHECK(dom::valuation_after_purchase(empty, 1, 9223372036854LL).is_success(), "El mayor costo que cabe se acepta");
+}
+
+void test_b5_costing_and_valuation() {
+    std::cout << "[TEST] B5: costo promedio móvil, receta, margen, permisos e invariantes..." << std::endl;
+    fs::path mig_dir = find_migrations_dir();
+    TEST_CHECK(!mig_dir.empty(), "Debe encontrar directorio de migraciones");
+    const fs::path base_dir = fs::temp_directory_path() / ("cafeteria_b5c_" + generate_random_alphanumeric(8));
+    fs::remove_all(base_dir);
+    fs::create_directories(base_dir);
+
+    SqliteDatabase db;
+    TEST_CHECK(db.open((base_dir / "b5c.db").u8string()).is_success(), "Abrir SQLite B5 costos");
+    MigrationRunner runner(db);
+    TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Migraciones completas");
+
+    auto account_svc = std::make_shared<SqliteAccountService>(db);
+    auto cat_svc = std::make_shared<SqliteCatalogService>(db, account_svc);
+    auto inv_svc = std::make_shared<SqliteInventoryService>(db, account_svc);
+    auto cart_svc = std::make_shared<SqliteCartService>(db, account_svc, cat_svc);
+    auto shift_svc = std::make_shared<SqliteShiftService>(db, account_svc);
+    auto sale_svc = std::make_shared<SqliteSaleService>(db, account_svc, cart_svc, shift_svc);
+    const std::string owner_pwd = generate_random_secret(18);
+    TEST_CHECK(account_svc->create_initial_owner("dueno_c", "Dueño C", owner_pwd, "dueno_c@cafeteria-itch.edu.mx").is_success(), "Alta del Dueño");
+
+    auto q = [&](const std::string& sql) -> std::string {
+        auto prep = db.prepare(sql);
+        TEST_CHECK(prep.is_success(), "Preparar consulta B5c: " + sql);
+        auto stmt = std::move(prep.value());
+        auto step = stmt.step();
+        TEST_CHECK(step.is_success() && step.value(), "La consulta B5c debe devolver fila: " + sql);
+        return stmt.get_text(0);
+    };
+    auto num = [&](const std::string& sql) { return std::stoll(q(sql)); };
+    auto stock_of = [&](const std::string& id) { return num("SELECT current_stock FROM ingredients WHERE id = '" + id + "';"); };
+    auto value_of = [&](const std::string& id) { return num("SELECT stock_value_micro FROM ingredients WHERE id = '" + id + "';"); };
+    auto make_ing = [&](const std::string& name, const std::string& dim, const std::string& unit) {
+        CreateIngredientDto d;
+        d.name = name; d.unit_dimension = dim; d.base_unit = unit;
+        auto r = inv_svc->create_ingredient(d);
+        TEST_CHECK(r.is_success(), "Crear ingrediente " + name + ": " + r.error_message());
+        return r.value().id;
+    };
+    auto buy = [&](const std::string& id, std::int64_t qty, const std::string& unit, std::int64_t cents) {
+        auto r = inv_svc->register_purchase_entry(id, qty, unit, Money::from_cents(cents));
+        TEST_CHECK(r.is_success(), "Compra: " + r.error_message());
+    };
+    auto cost = [&](const std::string& id, std::int64_t qty) {
+        auto r = inv_svc->get_ingredient_cost(id, qty);
+        TEST_CHECK(r.is_success(), "Consultar costo: " + r.error_message());
+        return r.value();
+    };
+    auto make_product = [&](const std::string& sku, std::int64_t price_cents, const std::vector<std::pair<std::string, std::int64_t>>& items) {
+        CreateProductDto pd;
+        pd.sku = sku; pd.name = "Producto " + sku; pd.category = "Pruebas"; pd.price = Money::from_cents(price_cents); pd.is_prepared = true;
+        auto p = cat_svc->create_product(pd);
+        TEST_CHECK(p.is_success(), "Crear producto " + sku);
+        std::vector<RecipeItemDto> ris;
+        for (const auto& it : items) {
+            RecipeItemDto ri;
+            ri.ingredient_id = it.first; ri.quantity_base_units = it.second;
+            ris.push_back(ri);
+        }
+        TEST_CHECK(cat_svc->set_recipe(p.value().id, ris).is_success(), "Receta de " + sku);
+        return p.value().id;
+    };
+
+    // --- Ejemplo del limón: 1 kg por $50 => 0.05 pesos por g y costo no nulo por mg ---
+    const std::string lim = make_ing("Limon", "MASS", "mg");
+    buy(lim, 1, "kg", 5000);
+    TEST_CHECK(stock_of(lim) == 1000000 && value_of(lim) == 5000000000LL, "Limón: 1 kg => valuación 5 000 000 000 micro-centavos");
+    TEST_CHECK(cost(lim, 1).known && cost(lim, 1).cost_for_quantity_micro == 5000, "Limón: costo no nulo por mg (5000 micro-centavos)");
+    TEST_CHECK(cost(lim, 1000).cost_for_quantity.cents() == 5 && cost(lim, 1000).basis == CostBasis::CurrentAverage, "Limón: 1 g cuesta exactamente 5 centavos ($0.05)");
+
+    // --- Ejemplo del método B: 1000 g a $50, consumo de 800 g, 1000 g a $100 ---
+    const std::string azu = make_ing("Azucar", "MASS", "mg");
+    buy(azu, 1000, "g", 5000);
+    TEST_CHECK(inv_svc->register_adjustment(azu, -800, "g", "Consumo de prueba").is_success(), "Salida de 800 g");
+    TEST_CHECK(stock_of(azu) == 200000 && value_of(azu) == 1000000000LL, "Tras consumir 800 g quedan 200 g valuados en 1 000 000 000 micro");
+    buy(azu, 1000, "g", 10000);
+    TEST_CHECK(stock_of(azu) == 1200000 && value_of(azu) == 11000000000LL, "Valuación 11000 centavos entre 1200 g");
+    TEST_CHECK(cost(azu, 100000).cost_for_quantity.cents() == 917, "100 g cuestan 917 centavos (9.17 por g, redondeando solo al final)");
+    TEST_CHECK(cost(azu, 1200000).cost_for_quantity.cents() == 11000 && cost(azu, 1200000).stock_value.cents() == 11000, "1200 g cuestan exactamente 11000 centavos");
+
+    // --- Una merma no cambia el costo promedio ---
+    const std::string har = make_ing("Harina", "MASS", "mg");
+    buy(har, 2, "kg", 8000);
+    const auto micro_before = cost(har, 1000000).cost_for_quantity_micro;
+    TEST_CHECK(inv_svc->register_waste(har, 500, "g", "Humedad").is_success(), "Merma de 500 g");
+    TEST_CHECK(stock_of(har) == 1500000 && value_of(har) == 6000000000LL, "La merma baja la valuación proporcionalmente");
+    TEST_CHECK(cost(har, 1000000).cost_for_quantity_micro == micro_before, "La merma no cambia el costo promedio");
+
+    // --- Muchas salidas pequeñas hasta existencia 0 dejan valuación exactamente 0 ---
+    const std::string sal = make_ing("Sal", "MASS", "mg");
+    buy(sal, 3, "g", 100);
+    std::int64_t remaining = 3000;
+    while (remaining > 7) {
+        TEST_CHECK(inv_svc->register_waste(sal, 7, "mg", "Gota").is_success(), "Salida pequeña");
+        remaining -= 7;
+        TEST_CHECK(value_of(sal) >= 0 && stock_of(sal) == remaining, "Valuación no negativa en cada salida");
+    }
+    TEST_CHECK(inv_svc->register_waste(sal, remaining, "mg", "Último").is_success(), "Salida final");
+    TEST_CHECK(stock_of(sal) == 0 && value_of(sal) == 0, "Existencia 0 => valuación exactamente 0");
+    auto sal_cost = cost(sal, 1000);
+    TEST_CHECK(sal_cost.known && sal_cost.basis == CostBasis::LastKnown, "Con existencia 0 se usa el último costo conocido");
+    TEST_CHECK(sal_cost.cost_for_quantity.cents() >= 33 && sal_cost.cost_for_quantity.cents() <= 34, "El último costo conocido sigue siendo ~33.3 centavos por g");
+
+    // --- Una venta que falla y se revierte deja la valuación intacta ---
+    const std::string pan = make_ing("Pan", "MASS", "mg");
+    buy(pan, 1, "kg", 1000);
+    const std::string torta = make_product("TORTA-B5", 3500, {{pan, 200000}});
+    TEST_CHECK(shift_svc->open_shift("reg-01", Money::from_cents(10000)).is_success(), "Abrir turno");
+    TEST_CHECK(cart_svc->add_item(torta, 1, "").is_success(), "Agregar al carrito");
+    const auto sales_before = num("SELECT COUNT(*) FROM sales;");
+    const auto mov_before = num("SELECT COUNT(*) FROM stock_movements;");
+    TEST_CHECK(db.execute("CREATE TRIGGER t_fail_pay BEFORE INSERT ON payment_records BEGIN SELECT RAISE(ABORT, 'forzado'); END;").is_success(), "Falla forzada del pago");
+    TEST_CHECK(!sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "").is_success(), "La venta falla a mitad de transacción");
+    TEST_CHECK(stock_of(pan) == 1000000 && value_of(pan) == 1000000000LL, "Venta revertida: existencias y valuación intactas");
+    TEST_CHECK(num("SELECT COUNT(*) FROM sales;") == sales_before && num("SELECT COUNT(*) FROM stock_movements;") == mov_before, "Venta revertida: sin ventas ni movimientos parciales");
+    TEST_CHECK(db.execute("DROP TRIGGER t_fail_pay;").is_success(), "Quitar falla forzada");
+    TEST_CHECK(sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "").is_success(), "La venta se confirma tras quitar la falla");
+    TEST_CHECK(stock_of(pan) == 800000 && value_of(pan) == 800000000LL, "La venta baja la valuación proporcionalmente (800 000 000 micro)");
+    TEST_CHECK(cost(pan, 1000).cost_for_quantity_micro == 1000000, "La venta no cambia el costo promedio (1 centavo por g)");
+
+    // --- Costo desconocido nunca es 0 y bloquea el margen ---
+    const std::string fan = make_ing("Fantasma", "MASS", "mg");
+    TEST_CHECK(!cost(fan, 100).known && cost(fan, 100).basis == CostBasis::Unknown, "Ingrediente sin compras: costo desconocido");
+    const std::string misterio = make_product("MISTERIO", 1000, {{fan, 100}, {pan, 100000}});
+    auto mc = cat_svc->get_recipe_costing(misterio);
+    TEST_CHECK(mc.is_success(), "Costeo de receta con un ingrediente desconocido");
+    TEST_CHECK(!mc.value().all_costs_known && !mc.value().margin_known && !mc.value().margin_percent_known, "Con un costo desconocido no hay margen");
+    TEST_CHECK(mc.value().unknown_ingredient_names.size() == 1 && mc.value().unknown_ingredient_names[0] == "Fantasma", "Se lista el ingrediente desconocido");
+    TEST_CHECK(mc.value().known_cost_subtotal.cents() == 100, "El subtotal conocido (Pan 100 g) es 100 centavos");
+    TEST_CHECK(mc.value().cost_per_portion.cents() == 0 && mc.value().margin.cents() == 0, "No se presenta un costo ni margen falsos");
+
+    // --- Receta con varios ingredientes y margen ---
+    const std::string ia = make_ing("IngA", "MASS", "mg");
+    const std::string ib = make_ing("IngB", "VOLUME", "ml");
+    buy(ia, 1, "kg", 5000);
+    buy(ib, 500, "ml", 2000);
+    const std::string combo = make_product("COMBO-B5", 3500, {{ia, 20000}, {ib, 30}});
+    auto cc = cat_svc->get_recipe_costing(combo);
+    TEST_CHECK(cc.is_success() && cc.value().all_costs_known, "Costeo completo");
+    TEST_CHECK(cc.value().lines.size() == 2 && cc.value().cost_per_portion.cents() == 220, "Costo por porción: 100 + 120 = 220 centavos");
+    TEST_CHECK(cc.value().price.cents() == 3500 && cc.value().margin.cents() == 3280 && cc.value().margin_known, "Margen = 3500 - 220 = 3280");
+    TEST_CHECK(cc.value().margin_percent_known && cc.value().margin_basis_points == 9371, "Margen 93.71 %");
+    // El total se redondea una sola vez: dos líneas de 0.4 centavos suman 1 centavo (no 0)
+    const std::string ic = make_ing("IngC", "MASS", "mg");
+    const std::string id_ = make_ing("IngD", "MASS", "mg");
+    buy(ic, 1000, "mg", 1);
+    buy(id_, 1000, "mg", 1);
+    const std::string redondeo = make_product("REDONDEO", 100, {{ic, 400}, {id_, 400}});
+    auto rc = cat_svc->get_recipe_costing(redondeo);
+    TEST_CHECK(rc.is_success() && rc.value().lines.size() == 2, "Costeo de redondeo");
+    TEST_CHECK(rc.value().lines[0].cost.cents() == 0 && rc.value().lines[1].cost.cents() == 0, "Cada línea sola se muestra en 0 centavos");
+    TEST_CHECK(rc.value().cost_per_portion.cents() == 1 && rc.value().margin.cents() == 99, "El total redondea una sola vez: 1 centavo");
+    // Existencia 0 con compras: último costo conocido, marcado
+    const std::string salado = make_product("SALADO", 500, {{sal, 1000}});
+    auto sc = cat_svc->get_recipe_costing(salado);
+    TEST_CHECK(sc.is_success() && sc.value().all_costs_known && sc.value().uses_last_known_cost &&
+               sc.value().lines[0].basis == CostBasis::LastKnown && sc.value().margin_known, "Receta con ingrediente en 0: usa el último costo conocido y lo marca");
+
+    // --- Costos: ajuste positivo (a) ---
+    const std::string cafe = make_ing("Cafe", "MASS", "mg");
+    buy(cafe, 1000, "g", 5000);
+    const auto cafe_micro = cost(cafe, 1000000).cost_for_quantity_micro;
+    TEST_CHECK(inv_svc->register_adjustment(cafe, 1000, "g", "Apareció mercancía").is_success(), "Ajuste positivo");
+    TEST_CHECK(stock_of(cafe) == 2000000 && value_of(cafe) == 10000000000LL, "El ajuste positivo entra al costo promedio vigente");
+    TEST_CHECK(cost(cafe, 1000000).cost_for_quantity_micro == cafe_micro, "El ajuste positivo no cambia el promedio");
+    TEST_CHECK(inv_svc->register_waste(cafe, 2000, "g", "Se acabó").is_success() && value_of(cafe) == 0, "Vaciado: valuación 0");
+    TEST_CHECK(inv_svc->register_adjustment(cafe, 500, "g", "Reaparece").is_success() && value_of(cafe) == 2500000000LL, "Con existencia 0 entra al último promedio conocido");
+    TEST_CHECK(cost(cafe, 1000).basis == CostBasis::CurrentAverage, "Tras entrar mercancía el promedio vuelve a ser vigente");
+
+    // --- Regla (d): existencia previa sin costo ---
+    const std::string mis = make_ing("Misterioso", "MASS", "mg");
+    TEST_CHECK(inv_svc->register_adjustment(mis, 500, "g", "Existencia sin factura").is_success(), "Ajuste positivo sin compras previas");
+    TEST_CHECK(stock_of(mis) == 500000 && value_of(mis) == 0 && !cost(mis, 1000).known, "Sin costo conocido: entra sin valuación y el costo sigue desconocido");
+    buy(mis, 500, "g", 2500);
+    TEST_CHECK(stock_of(mis) == 1000000 && value_of(mis) == 5000000000LL, "La primera compra valora también la existencia previa sin costo");
+    TEST_CHECK(cost(mis, 1000).cost_for_quantity.cents() == 5, "Primer costo conocido: 5 centavos por g");
+    const std::string don = make_ing("Donado", "MASS", "mg");
+    TEST_CHECK(inv_svc->register_adjustment(don, 100, "g", "Sin costo").is_success(), "Existencia sin costo");
+    buy(don, 100, "g", 0);
+    auto don_cost = cost(don, 1000);
+    TEST_CHECK(stock_of(don) == 200000 && value_of(don) == 0, "Compra de costo 0: existencias sumadas y valuación 0");
+    TEST_CHECK(don_cost.known && don_cost.cost_for_quantity_micro == 0 && don_cost.basis == CostBasis::CurrentAverage, "Compra de costo 0: el costo es conocido y vale 0");
+
+    // --- Desbordamientos: error y nada cambia ---
+    const std::string caro = make_ing("Caro", "MASS", "mg");
+    const auto pe_count = num("SELECT COUNT(*) FROM purchase_entries;");
+    const auto mv_count = num("SELECT COUNT(*) FROM stock_movements;");
+    auto too_big = inv_svc->register_purchase_entry(caro, 1, "mg", Money::from_cents(9223372036855LL));
+    TEST_CHECK(!too_big.is_success() && too_big.error_code() == ErrorCode::InvalidInput, "Compra cuya valuación no cabe: rechazada");
+    TEST_CHECK(stock_of(caro) == 0 && value_of(caro) == 0 && num("SELECT COUNT(*) FROM purchase_entries;") == pe_count &&
+               num("SELECT COUNT(*) FROM stock_movements;") == mv_count, "Compra rechazada: no cambia nada");
+    buy(caro, 1, "mg", 9000000000000LL);
+    TEST_CHECK(value_of(caro) == 9000000000000000000LL, "Una valuación grande que sí cabe se acepta");
+    const auto pe_count2 = num("SELECT COUNT(*) FROM purchase_entries;");
+    auto second = inv_svc->register_purchase_entry(caro, 1, "mg", Money::from_cents(9000000000000LL));
+    TEST_CHECK(!second.is_success() && second.error_code() == ErrorCode::InvalidInput, "Una segunda compra que desborda la valuación: rechazada");
+    TEST_CHECK(stock_of(caro) == 1 && value_of(caro) == 9000000000000000000LL && num("SELECT COUNT(*) FROM purchase_entries;") == pe_count2,
+               "Desbordamiento de valuación: no cambia nada");
+    TEST_CHECK(db.execute("INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-lleno', 'Lleno', 'MASS', 'mg', 9223372036854775802, '2026-11-12 00:00:00');").is_success(), "Ingrediente casi lleno");
+    auto too_many = inv_svc->register_purchase_entry("ing-lleno", 10, "mg", Money::from_cents(1));
+    TEST_CHECK(!too_many.is_success() && too_many.error_code() == ErrorCode::InvalidInput && stock_of("ing-lleno") == 9223372036854775802LL,
+               "Compra que desborda las existencias: rechazada sin cambios");
+
+    // --- Permisos: solo inventory.manage_products ve costos ---
+    auto owner_recipe = cat_svc->get_recipe(combo);
+    TEST_CHECK(owner_recipe.is_success() && owner_recipe.value().estimated_cost_per_portion.cents() == 220, "El Dueño recibe el costo (campo obsoleto) como siempre");
+    {
+        CreateUserDto cu;
+        cu.username = "cajero_c"; cu.display_name = "Cajero C"; cu.raw_password = generate_random_secret(18);
+        cu.role_id = "role-cashier"; cu.email = "cajero_c@cafeteria-itch.edu.mx";
+        TEST_CHECK(account_svc->create_user(cu).is_success(), "Crear cajero");
+        TEST_CHECK(account_svc->login("cajero_c", cu.raw_password).is_success(), "Login del cajero");
+    }
+    TEST_CHECK(inv_svc->get_ingredient_cost(lim, 1000).error_code() == ErrorCode::Forbidden, "Cajero: get_ingredient_cost denegado");
+    TEST_CHECK(cat_svc->get_recipe_costing(combo).error_code() == ErrorCode::Forbidden, "Cajero: get_recipe_costing denegado");
+    auto cashier_recipe = cat_svc->get_recipe(combo);
+    TEST_CHECK(cashier_recipe.is_success() && cashier_recipe.value().estimated_cost_per_portion.cents() == 0, "Cajero: get_recipe devuelve el costo estimado en 0");
+    TEST_CHECK(!cashier_recipe.value().items.empty(), "Cajero: get_recipe sigue devolviendo la receta");
+    TEST_CHECK(account_svc->login("dueno_c", owner_pwd).is_success(), "Volver al Dueño");
+
+    // --- Invariantes tras una secuencia larga y mezclada ---
+    struct Track {
+        std::string id;
+        bool has_min = false;
+        __int128 min_num = 0, min_den = 1, max_num = 0, max_den = 1; // micro-centavos por unidad base (fracción)
+    };
+    std::vector<Track> tracks(3);
+    const char* names[3] = {"SeqX", "SeqY", "SeqZ"};
+    for (int i = 0; i < 3; ++i) tracks[i].id = make_ing(names[i], "MASS", "mg");
+    const std::string seq_prod = make_product("SEQ-VENTA", 900, {{tracks[0].id, 100}});
+    std::uint64_t rng = 0x9E3779B97F4A7C15ULL;
+    auto next = [&]() { rng = rng * 6364136223846793005ULL + 1442695040888963407ULL; return rng >> 33; };
+    auto do_purchase = [&](Track& t, std::int64_t units, std::int64_t cents) {
+        buy(t.id, units, "mg", cents);
+        const __int128 n = static_cast<__int128>(cents) * 1000000, d = units;
+        if (!t.has_min) { t.min_num = t.max_num = n; t.min_den = t.max_den = d; t.has_min = true; }
+        if (n * t.min_den < t.min_num * d) { t.min_num = n; t.min_den = d; }
+        if (n * t.max_den > t.max_num * d) { t.max_num = n; t.max_den = d; }
+    };
+    for (auto& t : tracks) do_purchase(t, 1000 + static_cast<std::int64_t>(next() % 4000), 1 + static_cast<std::int64_t>(next() % 500));
+    int sales_done = 0;
+    long long ops = 3;
+    for (int step = 0; step < 300; ++step) {
+        Track& t = tracks[next() % 3];
+        const std::int64_t s = stock_of(t.id);
+        const auto kind = next() % 10;
+        if (kind <= 3 || s == 0) {
+            do_purchase(t, 1 + static_cast<std::int64_t>(next() % 5000), static_cast<std::int64_t>(next() % 20000));
+        } else if (kind <= 5) {
+            TEST_CHECK(inv_svc->register_waste(t.id, 1 + static_cast<std::int64_t>(next() % std::min<std::int64_t>(s, 3000)), "mg", "Merma").is_success(), "Merma aleatoria");
+        } else if (kind == 6) {
+            TEST_CHECK(inv_svc->register_adjustment(t.id, -(1 + static_cast<std::int64_t>(next() % std::min<std::int64_t>(s, 2000))), "mg", "Ajuste -").is_success(), "Ajuste negativo aleatorio");
+        } else if (kind == 7) {
+            TEST_CHECK(inv_svc->register_adjustment(t.id, 1 + static_cast<std::int64_t>(next() % 2000), "mg", "Ajuste +").is_success(), "Ajuste positivo aleatorio");
+        } else if (stock_of(tracks[0].id) >= 100 && sales_done < 15) {
+            TEST_CHECK(cart_svc->add_item(seq_prod, 1, "").is_success(), "Carrito de la secuencia");
+            TEST_CHECK(sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(1000), "").is_success(), "Venta de la secuencia");
+            ++sales_done;
+        }
+        ++ops;
+        for (const auto& tr : tracks) {
+            const std::int64_t stock = stock_of(tr.id), value = value_of(tr.id);
+            TEST_CHECK(value >= 0 && stock >= 0, "La valuación nunca es negativa");
+            if (stock == 0) {
+                TEST_CHECK(value == 0, "Con existencia 0 la valuación es exactamente 0");
+            } else {
+                // El promedio vigente queda entre el costo unitario mínimo y máximo de las compras (±1 micro por operación)
+                const __int128 tol = ops;
+                TEST_CHECK((static_cast<__int128>(value) + tol) * tr.min_den >= static_cast<__int128>(stock) * tr.min_num, "El promedio vigente no baja del mínimo de las compras");
+                TEST_CHECK(static_cast<__int128>(value) * tr.max_den <= static_cast<__int128>(stock) * tr.max_num + tol * tr.max_den, "El promedio vigente no supera el máximo de las compras");
+            }
+        }
+    }
+    TEST_CHECK(sales_done > 0, "La secuencia incluyó ventas reales");
+
+    db.close();
+    std::error_code ec;
+    fs::remove_all(base_dir, ec);
+    std::cout << "  -> Costos, receta, margen, permisos e invariantes verificados." << std::endl;
+}
+
+void test_b5_valuation_backfill_migration() {
+    std::cout << "[TEST] B5: migración 012, relleno aproximado de la valuación..." << std::endl;
+    fs::path mig_dir = find_migrations_dir();
+    TEST_CHECK(!mig_dir.empty(), "Debe encontrar directorio de migraciones");
+    const fs::path base_dir = fs::temp_directory_path() / ("cafeteria_b5m_" + generate_random_alphanumeric(8));
+    fs::remove_all(base_dir);
+    fs::create_directories(base_dir / "mig_v11");
+    int copied = 0;
+    for (const auto& entry : fs::directory_iterator(mig_dir)) {
+        const std::string name = entry.path().filename().u8string();
+        if (name.size() > 4 && name.substr(name.size() - 4) == ".sql" && name < "012") {
+            fs::copy_file(entry.path(), base_dir / "mig_v11" / entry.path().filename());
+            ++copied;
+        }
+    }
+    TEST_CHECK(copied == 11, "Deben copiarse exactamente las migraciones 001 a 011");
+
+    SqliteDatabase db;
+    TEST_CHECK(db.open((base_dir / "b5m.db").u8string()).is_success(), "Abrir SQLite B5 relleno");
+    auto q = [&](const std::string& sql) -> std::string {
+        auto prep = db.prepare(sql);
+        TEST_CHECK(prep.is_success(), "Preparar consulta: " + sql);
+        auto stmt = std::move(prep.value());
+        auto step = stmt.step();
+        TEST_CHECK(step.is_success() && step.value(), "La consulta debe devolver fila: " + sql);
+        return stmt.get_text(0);
+    };
+    MigrationRunner old_runner(db);
+    TEST_CHECK(old_runner.run_pending_migrations_from_dir(base_dir / "mig_v11").is_success(), "Migrar hasta 011");
+
+    const std::string owner_pwd = generate_random_secret(18);
+    const std::string owner_hash = app::crypto::PasswordHasher::hash_password(owner_pwd);
+    TEST_CHECK(db.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at, updated_at) "
+                          "VALUES ('user-dueno_m', 'dueno_m', 'Dueño M', 'm@cafeteria-itch.edu.mx', '" + owner_hash +
+                          "', 'role-owner', 1, '2026-10-01 07:00:00', '2026-10-01 07:00:00');").is_success(), "Alta de Dueño v11 por SQL");
+    const char* seed[] = {
+        // ing-p: dos compras a precios distintos y existencia parcial (1 500 000 de 2 000 000 comprados)
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-p', 'Parcial', 'MASS', 'mg', 1500000, '2026-10-01 00:00:00');",
+        "INSERT INTO purchase_entries (id, ingredient_id, quantity_purchased, purchase_unit, total_cost_cents, base_units_purchased, created_at) VALUES ('pe-1', 'ing-p', 1, 'kg', 5000, 1000000, '2026-09-01 10:00:00');",
+        "INSERT INTO purchase_entries (id, ingredient_id, quantity_purchased, purchase_unit, total_cost_cents, base_units_purchased, created_at) VALUES ('pe-2', 'ing-p', 1, 'kg', 10000, 1000000, '2026-09-15 10:00:00');",
+        // ing-n: sin compras
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-n', 'SinCompras', 'MASS', 'mg', 700, '2026-10-01 00:00:00');",
+        // ing-z: con compras y existencia 0
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-z', 'Agotado', 'MASS', 'mg', 0, '2026-10-01 00:00:00');",
+        "INSERT INTO purchase_entries (id, ingredient_id, quantity_purchased, purchase_unit, total_cost_cents, base_units_purchased, created_at) VALUES ('pe-3', 'ing-z', 3, 'g', 100, 3000, '2026-09-20 10:00:00');",
+        // ing-h: cifras que obligan a dividir antes de multiplicar
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-h', 'Enorme', 'MASS', 'mg', 1000000, '2026-10-01 00:00:00');",
+        "INSERT INTO purchase_entries (id, ingredient_id, quantity_purchased, purchase_unit, total_cost_cents, base_units_purchased, created_at) VALUES ('pe-4', 'ing-h', 3, 'kg', 9000000000000, 3000000, '2026-09-21 10:00:00');"
+    };
+    for (const char* s : seed) {
+        auto r = db.execute(s);
+        TEST_CHECK(r.is_success(), std::string("Dato previo: ") + s + " -> " + r.error_message());
+    }
+    const std::string orig_sql =
+        "SELECT (SELECT group_concat(id||'|'||name||'|'||current_stock||'|'||low_stock_threshold, ';') FROM ingredients) || '#' ||"
+        "(SELECT group_concat(id||'|'||ingredient_id||'|'||total_cost_cents||'|'||base_units_purchased, ';') FROM purchase_entries) || '#' ||"
+        "(SELECT group_concat(id||'|'||username, ';') FROM users);";
+    const std::string orig_before = q(orig_sql);
+
+    MigrationRunner runner(db);
+    TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 012");
+    TEST_CHECK(q("SELECT MAX(version) FROM schema_migrations;") == latest_migration_version(), "Esquema en la última versión");
+    TEST_CHECK(q(orig_sql) == orig_before, "Los datos originales quedan intactos");
+
+    auto row = [&](const std::string& id) {
+        return q("SELECT stock_value_micro||'|'||last_avg_value_micro||'|'||last_avg_units FROM ingredients WHERE id = '" + id + "';");
+    };
+    TEST_CHECK(row("ing-p") == "11250000000|15000000000|2000000", "Parcial: promedio 7.5 c/g aplicado a 1.5 kg = 11250 centavos");
+    TEST_CHECK(row("ing-n") == "0|0|0", "Sin compras: valuación 0 y costo desconocido");
+    TEST_CHECK(row("ing-z") == "0|100000000|3000", "Agotado: valuación 0 y último promedio conocido");
+    TEST_CHECK(row("ing-h") == "3000000000000000000|9000000000000000000|3000000", "Cifras enormes: se divide antes de multiplicar sin desbordar");
+
+    const std::string schema_sql = "SELECT group_concat(name||type, ';') FROM (SELECT name, type FROM sqlite_master ORDER BY name);";
+    const std::string schema_before = q(schema_sql);
+    const std::string values_before = q("SELECT group_concat(id||'|'||stock_value_micro||'|'||last_avg_value_micro||'|'||last_avg_units, ';') FROM ingredients;");
+    MigrationRunner runner2(db);
+    TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
+    TEST_CHECK(q(schema_sql) == schema_before && q(orig_sql) == orig_before, "El segundo runner no cambia esquema ni datos");
+    TEST_CHECK(q("SELECT group_concat(id||'|'||stock_value_micro||'|'||last_avg_value_micro||'|'||last_avg_units, ';') FROM ingredients;") == values_before,
+               "El segundo runner no recalcula el relleno");
+    TEST_CHECK(!db.execute("UPDATE ingredients SET stock_value_micro = -1 WHERE id = 'ing-n';").is_success(), "El trigger impide valuación negativa");
+
+    // Los datos migrados son utilizables por los servicios
+    auto account_svc = std::make_shared<SqliteAccountService>(db);
+    auto inv_svc = std::make_shared<SqliteInventoryService>(db, account_svc);
+    TEST_CHECK(account_svc->login("dueno_m", owner_pwd).is_success(), "Login del Dueño");
+    auto p_cost = inv_svc->get_ingredient_cost("ing-p", 1000);
+    TEST_CHECK(p_cost.is_success() && p_cost.value().known && p_cost.value().cost_for_quantity_micro == 7500000 && p_cost.value().cost_for_quantity.cents() == 8,
+               "Parcial: 1 g cuesta 7.5 centavos (8 al redondear)");
+    TEST_CHECK(!inv_svc->get_ingredient_cost("ing-n", 1000).value().known, "Sin compras: desconocido tras migrar");
+    auto z_cost = inv_svc->get_ingredient_cost("ing-z", 1000);
+    TEST_CHECK(z_cost.value().known && z_cost.value().basis == CostBasis::LastKnown && z_cost.value().cost_for_quantity.cents() == 33, "Agotado: último costo conocido");
+    TEST_CHECK(inv_svc->register_purchase_entry("ing-p", 500, "g", Money::from_cents(5000)).is_success(), "Compra sobre datos migrados");
+    TEST_CHECK(q("SELECT current_stock||'|'||stock_value_micro FROM ingredients WHERE id = 'ing-p';") == "2000000|16250000000", "La compra suma a la valuación rellenada (11250 + 5000 = 16250 centavos)");
+
+    db.close();
+    std::error_code ec;
+    fs::remove_all(base_dir, ec);
+    std::cout << "  -> Migración 012 y relleno aproximado verificados." << std::endl;
+}
+
 int main() {
     std::cout << "=== PRUEBAS DE ALMACENAMIENTO SQLITE, PERSISTENCIA Y SEGURIDAD (Debug y Release) ===" << std::endl;
     test_sqlite_lifecycle_and_persistence();
@@ -3511,6 +4200,10 @@ int main() {
     test_i2_print_config_atomic_save_and_isolation();
     test_b4a_permission_titles_migration();
     test_b4_ids_clock_folios_and_migration();
+    test_b5_adjustments_movements_and_migration();
+    test_b5_valuation_domain_rules();
+    test_b5_costing_and_valuation();
+    test_b5_valuation_backfill_migration();
     std::cout << "\n>>> TODAS LAS PRUEBAS DE ALMACENAMIENTO PASARON CON EXITO! <<<\n" << std::endl;
     return 0;
 }

@@ -120,6 +120,9 @@ struct RecipeDto {
     std::string product_id;
     int version{1};
     std::vector<RecipeItemDto> items;
+    // OBSOLETO: se conserva solo por compatibilidad. Usa la última compra de cada ingrediente, redondea
+    // por ingrediente y cuenta un costo desconocido como 0. Vale 0 para quien no tiene
+    // inventory.manage_products. Las pantallas nuevas deben usar ICatalogService::get_recipe_costing.
     Money estimated_cost_per_portion{Money::zero()};
 };
 
@@ -212,6 +215,100 @@ struct PurchaseEntryDto {
     Money total_cost{Money::zero()};
     Money unit_cost_base{Money::zero()};
     std::string created_at;
+};
+
+// Origen del costo de un ingrediente.
+enum class CostBasis {
+    Unknown,        // sin compras: el costo es DESCONOCIDO (no es 0)
+    CurrentAverage, // promedio móvil de las existencias actuales
+    LastKnown       // existencia 0: se usa el último promedio conocido
+};
+
+// Costo de un ingrediente. Solo lo devuelven consultas que exigen inventory.manage_products.
+struct IngredientCostDto {
+    std::string ingredient_id;
+    bool known{false};
+    CostBasis basis{CostBasis::Unknown};
+    std::int64_t quantity_base_units{0};   // cantidad consultada
+    Money cost_for_quantity{Money::zero()};  // redondeado a centavos una sola vez; sin significado si !known
+    std::int64_t cost_for_quantity_micro{0}; // mismo costo en micro-centavos (1 centavo = 1 000 000)
+    std::int64_t stock_base_units{0};
+    Money stock_value{Money::zero()};        // valor de las existencias; 0 si !known
+};
+
+struct RecipeCostLineDto {
+    std::string ingredient_id;
+    std::string ingredient_name;
+    std::int64_t quantity_base_units{0};
+    std::string base_unit;
+    CostBasis basis{CostBasis::Unknown};
+    Money cost{Money::zero()};          // solo para mostrar; el total se redondea una sola vez
+    std::int64_t cost_micro{0};
+};
+
+// Costo estimado y margen de un producto con receta. Solo para inventory.manage_products.
+struct RecipeCostingDto {
+    std::string product_id;
+    std::string recipe_id;
+    int version{1};
+    Money price{Money::zero()};
+    std::vector<RecipeCostLineDto> lines;
+    bool all_costs_known{false};          // false si algún ingrediente tiene costo desconocido
+    bool uses_last_known_cost{false};     // true si alguna línea usa el último costo conocido
+    std::vector<std::string> unknown_ingredient_names;
+    Money known_cost_subtotal{Money::zero()}; // suma de lo conocido (parcial si !all_costs_known)
+    Money cost_per_portion{Money::zero()};    // válido solo si all_costs_known
+    bool margin_known{false};                 // false si falta algún costo: no se presenta un margen falso
+    Money margin{Money::zero()};              // precio - costo; puede ser negativo
+    bool margin_percent_known{false};         // false si el precio es 0
+    std::int64_t margin_basis_points{0};      // margen * 10000 / precio (1 % = 100 puntos base)
+};
+
+// Filtro de movimientos de existencias. Cadena vacía = sin filtro.
+// date_from / date_to: "YYYY-MM-DD" (hora local, ambos días incluidos).
+// movement_type: PURCHASE, SALE, ADJUSTMENT, WASTE o TRANSFER.
+// limit <= 0 usa 100; el máximo es 500.
+struct StockMovementFilterDto {
+    std::string ingredient_id;
+    std::string movement_type;
+    std::string date_from;
+    std::string date_to;
+    int limit{100};
+};
+
+struct StockMovementDto {
+    std::string id;
+    std::string ingredient_id;
+    std::string ingredient_name;
+    std::string movement_type;
+    std::int64_t quantity_base_units{0}; // con signo: negativo = salida
+    std::string base_unit;
+    std::string reason;
+    std::string created_at;     // hora local
+    std::string actor_user_id;  // vacío en movimientos anteriores a la migración 011
+    std::string actor_name;     // nombre actual de la cuenta; vacío si no se conoce
+};
+
+// Filtro de entradas de compra. Mismas reglas que StockMovementFilterDto.
+struct PurchaseEntryFilterDto {
+    std::string ingredient_id;
+    std::string date_from;
+    std::string date_to;
+    int limit{100};
+};
+
+struct PurchaseEntryRecordDto {
+    std::string id;
+    std::string ingredient_id;
+    std::string ingredient_name;
+    std::int64_t quantity_purchased{0};
+    std::string purchase_unit;
+    Money total_cost{Money::zero()};
+    std::int64_t base_units_purchased{0};
+    std::string base_unit;
+    std::string created_at;
+    std::string actor_user_id;
+    std::string actor_name;
 };
 
 struct BackupStatusDto {

@@ -8,7 +8,9 @@
 #include "app/services/sqlite_cart_service.hpp"
 #include "app/services/sqlite_sale_service.hpp"
 #include "app/services/sqlite_print_config_service.hpp"
+#include "app/domain/unit_converter.hpp"
 #include <algorithm>
+#include <limits>
 #include <sstream>
 
 namespace app::services {
@@ -517,6 +519,45 @@ contracts::Result<contracts::RecipeDto> MockCatalogService::get_recipe(const std
     return contracts::Result<contracts::RecipeDto>::fail(contracts::ErrorCode::NotFound, "Receta no encontrada");
 }
 
+contracts::Result<contracts::RecipeCostingDto> MockCatalogService::get_recipe_costing(const std::string& product_id) {
+    // Datos simulados (no persistidos): cada unidad base cuesta 0.5 centavos.
+    auto rit = recipes_.find(product_id);
+    if (rit == recipes_.end()) {
+        return contracts::Result<contracts::RecipeCostingDto>::fail(contracts::ErrorCode::NotFound, "Receta no encontrada");
+    }
+    contracts::RecipeCostingDto dto;
+    dto.product_id = product_id;
+    dto.recipe_id = rit->second.recipe_id;
+    dto.version = rit->second.version;
+    for (const auto& p : products_) {
+        if (p.id == product_id) dto.price = p.price;
+    }
+    std::int64_t sum_micro = 0;
+    for (const auto& it : rit->second.items) {
+        contracts::RecipeCostLineDto line;
+        line.ingredient_id = it.ingredient_id;
+        line.ingredient_name = it.ingredient_name;
+        line.quantity_base_units = it.quantity_base_units;
+        line.base_unit = it.base_unit;
+        line.basis = contracts::CostBasis::CurrentAverage;
+        line.cost_micro = it.quantity_base_units * 5000;
+        line.cost = contracts::Money(domain::micro_to_cents(line.cost_micro));
+        sum_micro += line.cost_micro;
+        dto.lines.push_back(line);
+    }
+    dto.all_costs_known = true;
+    dto.known_cost_subtotal = contracts::Money(domain::micro_to_cents(sum_micro));
+    dto.cost_per_portion = dto.known_cost_subtotal;
+    dto.margin_known = true;
+    dto.margin = dto.price - dto.cost_per_portion;
+    auto bp = domain::margin_basis_points(dto.margin.cents(), dto.price.cents());
+    if (bp.is_success()) {
+        dto.margin_percent_known = true;
+        dto.margin_basis_points = bp.value();
+    }
+    return contracts::Result<contracts::RecipeCostingDto>::ok(dto);
+}
+
 contracts::OperationResult MockCatalogService::set_recipe(
     const std::string& product_id,
     const std::vector<contracts::RecipeItemDto>& items
@@ -719,12 +760,174 @@ contracts::OperationResult MockInventoryService::update_low_stock_threshold(
 }
 
 contracts::OperationResult MockInventoryService::register_purchase_entry(
-    const std::string&,
-    std::int64_t,
-    const std::string&,
-    contracts::Money
+    const std::string& ingredient_id,
+    std::int64_t quantity_purchased,
+    const std::string& purchase_unit,
+    contracts::Money total_cost
 ) {
-    return contracts::OperationResult::ok();
+    // Servicio simulado: solo para desarrollar la interfaz. No persiste nada.
+    auto base = domain::UnitConverter::to_base_units(quantity_purchased, purchase_unit);
+    if (!base.is_success() || base.value() <= 0 || total_cost.cents() < 0) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "Compra inválida");
+    }
+    for (auto& ing : ingredients_) {
+        if (ing.id != ingredient_id) continue;
+        auto next = domain::valuation_after_purchase(state_for(ing), base.value(), total_cost.cents());
+        if (!next.is_success()) {
+            return contracts::OperationResult::fail(next.error_code(), next.error_message());
+        }
+        states_[ing.id] = next.value();
+        ing.current_stock_base = next.value().stock;
+        contracts::PurchaseEntryRecordDto p;
+        p.id = "pe-mock-" + std::to_string(purchases_.size() + 1);
+        p.ingredient_id = ing.id;
+        p.ingredient_name = ing.name;
+        p.quantity_purchased = quantity_purchased;
+        p.purchase_unit = purchase_unit;
+        p.total_cost = total_cost;
+        p.base_units_purchased = base.value();
+        p.base_unit = ing.base_unit;
+        p.created_at = "2026-11-12 09:00:00";
+        p.actor_user_id = "user-mock";
+        p.actor_name = "Usuario simulado";
+        purchases_.insert(purchases_.begin(), p);
+        contracts::StockMovementDto m;
+        m.id = "sm-mock-" + std::to_string(movements_.size() + 1);
+        m.ingredient_id = ing.id;
+        m.ingredient_name = ing.name;
+        m.movement_type = "PURCHASE";
+        m.quantity_base_units = base.value();
+        m.base_unit = ing.base_unit;
+        m.reason = "Entrada de compra";
+        m.created_at = p.created_at;
+        m.actor_user_id = p.actor_user_id;
+        m.actor_name = p.actor_name;
+        movements_.insert(movements_.begin(), m);
+        return contracts::OperationResult::ok();
+    }
+    return contracts::OperationResult::fail(contracts::ErrorCode::NotFound, "Ingrediente no encontrado");
+}
+
+contracts::OperationResult MockInventoryService::apply_mock_change(
+    const char* type, const std::string& ingredient_id, std::int64_t signed_quantity,
+    const std::string& unit, const std::string& reason
+) {
+    // Servicio simulado: mismas reglas visibles que el real, sin persistencia.
+    if (reason.find_first_not_of(" \t\r\n") == std::string::npos) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "El motivo es obligatorio");
+    }
+    if (signed_quantity == 0 || signed_quantity == std::numeric_limits<std::int64_t>::min()) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "Cantidad inválida");
+    }
+    const std::int64_t magnitude = signed_quantity < 0 ? -signed_quantity : signed_quantity;
+    for (auto& ing : ingredients_) {
+        if (ing.id != ingredient_id) continue;
+        if (!domain::UnitConverter::are_compatible(unit, ing.base_unit)) {
+            return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "Unidad incompatible");
+        }
+        auto base = domain::UnitConverter::to_base_units(magnitude, unit);
+        if (!base.is_success() || base.value() <= 0) {
+            return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "Cantidad inválida");
+        }
+        const std::int64_t delta = signed_quantity < 0 ? -base.value() : base.value();
+        auto next = delta < 0
+            ? domain::valuation_after_outflow(state_for(ing), -delta)
+            : domain::valuation_after_inflow_adjustment(state_for(ing), delta);
+        if (!next.is_success()) {
+            return contracts::OperationResult::fail(next.error_code(), next.error_message());
+        }
+        states_[ing.id] = next.value();
+        ing.current_stock_base = next.value().stock;
+        contracts::StockMovementDto m;
+        m.id = "sm-mock-" + std::to_string(movements_.size() + 1);
+        m.ingredient_id = ing.id;
+        m.ingredient_name = ing.name;
+        m.movement_type = type;
+        m.quantity_base_units = delta;
+        m.base_unit = ing.base_unit;
+        m.reason = reason;
+        m.created_at = "2026-11-12 09:00:00";
+        m.actor_user_id = "user-mock";
+        m.actor_name = "Usuario simulado";
+        movements_.insert(movements_.begin(), m);
+        return contracts::OperationResult::ok();
+    }
+    return contracts::OperationResult::fail(contracts::ErrorCode::NotFound, "Ingrediente no encontrado");
+}
+
+contracts::OperationResult MockInventoryService::register_waste(
+    const std::string& ingredient_id, std::int64_t quantity, const std::string& unit, const std::string& reason
+) {
+    if (quantity <= 0) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "La cantidad debe ser positiva");
+    }
+    return apply_mock_change("WASTE", ingredient_id, -quantity, unit, reason);
+}
+
+contracts::OperationResult MockInventoryService::register_adjustment(
+    const std::string& ingredient_id, std::int64_t signed_quantity, const std::string& unit, const std::string& reason
+) {
+    return apply_mock_change("ADJUSTMENT", ingredient_id, signed_quantity, unit, reason);
+}
+
+domain::StockState& MockInventoryService::state_for(const contracts::IngredientDto& ing) {
+    auto it = states_.find(ing.id);
+    if (it == states_.end()) {
+        domain::StockState s;
+        s.stock = ing.current_stock_base; // existencia inicial simulada, sin costo conocido
+        it = states_.emplace(ing.id, s).first;
+    }
+    return it->second;
+}
+
+contracts::Result<contracts::IngredientCostDto> MockInventoryService::get_ingredient_cost(
+    const std::string& ingredient_id, std::int64_t quantity_base_units
+) {
+    for (const auto& ing : ingredients_) {
+        if (ing.id != ingredient_id) continue;
+        contracts::IngredientCostDto dto;
+        dto.ingredient_id = ing.id;
+        dto.quantity_base_units = quantity_base_units;
+        dto.stock_base_units = ing.current_stock_base;
+        const auto& st = state_for(ing);
+        auto cost = domain::cost_micro_for_quantity(st, quantity_base_units);
+        if (cost.is_success()) {
+            dto.known = true;
+            dto.basis = cost.value().from_last_known ? contracts::CostBasis::LastKnown : contracts::CostBasis::CurrentAverage;
+            dto.cost_for_quantity_micro = cost.value().micro;
+            dto.cost_for_quantity = contracts::Money(domain::micro_to_cents(cost.value().micro));
+            dto.stock_value = contracts::Money(domain::micro_to_cents(st.value_micro));
+        }
+        return contracts::Result<contracts::IngredientCostDto>::ok(dto);
+    }
+    return contracts::Result<contracts::IngredientCostDto>::fail(contracts::ErrorCode::NotFound, "Ingrediente no encontrado");
+}
+
+contracts::Result<std::vector<contracts::StockMovementDto>> MockInventoryService::list_stock_movements(
+    const contracts::StockMovementFilterDto& filter
+) {
+    std::vector<contracts::StockMovementDto> out;
+    const std::size_t limit = filter.limit <= 0 ? 100 : (filter.limit > 500 ? 500 : static_cast<std::size_t>(filter.limit));
+    for (const auto& m : movements_) {
+        if (!filter.ingredient_id.empty() && m.ingredient_id != filter.ingredient_id) continue;
+        if (!filter.movement_type.empty() && m.movement_type != filter.movement_type) continue;
+        out.push_back(m);
+        if (out.size() >= limit) break;
+    }
+    return contracts::Result<std::vector<contracts::StockMovementDto>>::ok(out);
+}
+
+contracts::Result<std::vector<contracts::PurchaseEntryRecordDto>> MockInventoryService::list_purchase_entries(
+    const contracts::PurchaseEntryFilterDto& filter
+) {
+    std::vector<contracts::PurchaseEntryRecordDto> out;
+    const std::size_t limit = filter.limit <= 0 ? 100 : (filter.limit > 500 ? 500 : static_cast<std::size_t>(filter.limit));
+    for (const auto& p : purchases_) {
+        if (!filter.ingredient_id.empty() && p.ingredient_id != filter.ingredient_id) continue;
+        out.push_back(p);
+        if (out.size() >= limit) break;
+    }
+    return contracts::Result<std::vector<contracts::PurchaseEntryRecordDto>>::ok(out);
 }
 
 // --- MockSaleService ---

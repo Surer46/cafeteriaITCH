@@ -169,6 +169,13 @@ contracts::OperationResult SqliteBackupService::create_verified_snapshot(const f
         remove_with_sidecars(tmp);
         return res;
     }
+    // El temporal se deja como archivo único (checkpoint + journal_mode=DELETE) ANTES de verificarlo:
+    // así la verificación se hace sobre el archivo final y no queda ningún -wal/-shm junto al destino.
+    auto single = storage::SqliteDatabase::make_single_file(tmp);
+    if (!single.is_success()) {
+        remove_with_sidecars(tmp);
+        return contracts::OperationResult::fail(contracts::ErrorCode::BackupFailure, single.error_message());
+    }
     auto info = storage::SqliteDatabase::inspect_file(tmp);
     if (!info.is_success() || !info.value().integrity_ok) {
         remove_with_sidecars(tmp);
@@ -183,6 +190,8 @@ contracts::OperationResult SqliteBackupService::create_verified_snapshot(const f
         return contracts::OperationResult::fail(
             contracts::ErrorCode::BackupFailure, "No se pudo colocar el respaldo en su destino");
     }
+    // Defensivo: tras el rename no debe quedar nada con el nombre temporal.
+    remove_with_sidecars(tmp);
     return contracts::OperationResult::ok();
 }
 
