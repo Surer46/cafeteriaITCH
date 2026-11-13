@@ -13,6 +13,9 @@ struct PermissionDto {
     std::string id;
     std::string description;
     std::string module;
+    std::string title;
+    std::string section;
+    int sort_order{0};
 };
 
 struct CreateRoleDto {

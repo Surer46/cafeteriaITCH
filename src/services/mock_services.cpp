@@ -324,26 +324,27 @@ contracts::OperationResult MockAccountService::delete_role(const std::string& ro
 
 contracts::Result<std::vector<contracts::PermissionDto>> MockAccountService::list_permissions() {
     std::vector<contracts::PermissionDto> list = {
-        {"pos.sell", "Venta y cobro regular", "pos"},
-        {"pos.visual_catalog", "Catálogo visual", "pos"},
-        {"pos.notes", "Notas de productos", "pos"},
-        {"pos.reprint", "Reimpresión de ticket", "pos"},
-        {"pos.cancel_order", "Cancelar orden", "pos"},
-        {"pos.void_sale", "Anular venta cobrada", "pos"},
-        {"inventory.view", "Consulta de existencias", "inventory"},
-        {"inventory.manage_products", "Gestión de productos y recetas", "inventory"},
-        {"inventory.manage_thresholds", "Umbral bajo stock", "inventory"},
-        {"inventory.restock", "Entradas de compra", "inventory"},
-        {"inventory.adjust", "Ajustes y mermas", "inventory"},
-        {"inventory.promotions", "Promociones y combos", "inventory"},
-        {"shift.operate", "Turnos y caja", "shift"},
-        {"audit.view", "Consulta de bitácora", "audit"},
-        {"reports.view", "Consulta de reportes", "reports"},
-        {"users.manage", "Gestión de usuarios", "users"},
-        {"roles.manage", "Gestión de roles", "roles"},
-        {"config.manage", "Configuración operativa", "config"},
-        {"backup.manage", "Gestión de respaldos locales", "backup"},
-        {"backup.dev_config", "Configuración remota Desarrollador", "backup"}
+        {"pos.sell", "Registrar ventas y cobrarlas en la caja.", "pos", "Vender y cobrar", "Punto de Venta", 10},
+        {"pos.visual_catalog", "Elegir productos desde las tarjetas con imagen, como en un menú.", "pos", "Usar el catálogo con fotos", "Punto de Venta", 20},
+        {"pos.notes", "Añadir indicaciones a un producto, por ejemplo: sin azúcar.", "pos", "Escribir notas en un pedido", "Punto de Venta", 30},
+        {"pos.reprint", "Volver a imprimir el ticket de una venta ya cobrada.", "pos", "Reimprimir tickets", "Punto de Venta", 40},
+        {"pos.cancel_order", "Vaciar el pedido en curso antes de cobrarlo.", "pos", "Cancelar un pedido sin cobrar", "Punto de Venta", 50},
+        {"pos.void_sale", "Cancelar una venta que ya se cobró. Queda registrado quién lo hizo y por qué.", "pos", "Anular una venta cobrada", "Punto de Venta", 60},
+        {"inventory.view", "Consultar cuánto hay de cada producto e ingrediente.", "inventory", "Ver existencias", "Inventario", 110},
+        {"inventory.manage_products", "Crear, cambiar o dar de baja productos, sus precios y sus recetas.", "inventory", "Administrar productos y recetas", "Inventario", 120},
+        {"inventory.restock", "Anotar lo que se compra y cuánto costó, para sumarlo al inventario.", "inventory", "Registrar compras", "Inventario", 130},
+        {"inventory.adjust", "Anotar pérdidas, traslados y correcciones del inventario.", "inventory", "Registrar mermas y ajustes", "Inventario", 140},
+        {"inventory.manage_thresholds", "Fijar la cantidad mínima de cada ingrediente para que el sistema avise.", "inventory", "Definir avisos de poco inventario", "Inventario", 150},
+        {"inventory.promotions", "Crear y cambiar promociones y combos.", "inventory", "Administrar promociones y combos", "Inventario", 160},
+        {"shift.operate", "Abrir turno, registrar entradas y salidas de dinero y hacer el corte.", "shift", "Abrir y cerrar caja", "Caja y Reportes", 210},
+        {"reports.view", "Consultar los reportes de ventas e inventario.", "reports", "Ver reportes", "Caja y Reportes", 220},
+        {"audit.view", "Consultar el historial de lo que cada persona hizo en el sistema.", "audit", "Ver la bitácora", "Caja y Reportes", 230},
+        {"users.manage", "Crear cuentas de usuario, cambiarlas o desactivarlas.", "users", "Administrar cuentas", "BackOffice", 310},
+        {"roles.manage", "Crear roles y decidir qué puede hacer cada uno.", "roles", "Administrar roles y permisos", "BackOffice", 320},
+        {"config.manage", "Ajustar opciones del negocio, como la impresora y el tamaño del ticket.", "config", "Cambiar la configuración", "BackOffice", 330},
+        {"backup.manage", "Activar y ejecutar copias de seguridad de la información.", "backup", "Hacer respaldos", "BackOffice", 340},
+        {"backup.restore", "Recuperar la información desde una copia. Reemplaza los datos actuales.", "backup", "Restaurar un respaldo", "BackOffice", 350},
+        {"backup.dev_config", "Configuración técnica del servidor remoto (exclusivo Desarrollador).", "backup", "Configurar el servidor de respaldos", "BackOffice", 990}
     };
     return contracts::Result<std::vector<contracts::PermissionDto>>::ok(list);
 }

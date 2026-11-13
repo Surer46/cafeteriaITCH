@@ -6,6 +6,7 @@
 #include <random>
 #include "app/storage/sqlite_database.hpp"
 #include "app/storage/migration_runner.hpp"
+#include "app/services/mock_services.hpp"
 #include "app/services/sqlite_account_service.hpp"
 #include "app/services/sqlite_backup_service.hpp"
 #include "app/services/sqlite_catalog_service.hpp"
@@ -3076,6 +3077,117 @@ void test_i2_print_config_atomic_save_and_isolation() {
     std::cout << "  -> Aislamiento por puesto (Unicode con u8path), persistencia atómica y compatibilidad de centinela verificados exitosamente." << std::endl;
 }
 
+void test_b4a_permission_titles_migration() {
+    std::cout << "[TEST] B4a: migración 009, títulos, secciones y orden de permisos..." << std::endl;
+
+    fs::path mig_dir = find_migrations_dir();
+    TEST_CHECK(!mig_dir.empty(), "Debe encontrar directorio de migraciones");
+
+    const fs::path base_dir = fs::temp_directory_path() / "cafeteria_b4a_perm_titles";
+    fs::remove_all(base_dir);
+    fs::create_directories(base_dir / "mig_old");
+    const std::string db_file = (base_dir / "b4a.db").u8string();
+
+    // Copia controlada de las migraciones 001 a 008 para tomar la línea base previa a 009.
+    int copied = 0;
+    for (const auto& entry : fs::directory_iterator(mig_dir)) {
+        const std::string name = entry.path().filename().u8string();
+        if (name.size() > 4 && name.substr(name.size() - 4) == ".sql" && name < "009") {
+            fs::copy_file(entry.path(), base_dir / "mig_old" / entry.path().filename());
+            ++copied;
+        }
+    }
+    TEST_CHECK(copied == 8, "Deben copiarse exactamente las migraciones 001 a 008");
+
+    {
+        SqliteDatabase db;
+        TEST_CHECK(db.open(db_file).is_success(), "Abrir SQLite B4a");
+
+        auto query_text = [&](const std::string& sql) -> std::string {
+            auto prep = db.prepare(sql);
+            TEST_CHECK(prep.is_success(), "Preparar consulta B4a");
+            auto stmt = std::move(prep.value());
+            auto step = stmt.step();
+            TEST_CHECK(step.is_success() && step.value(), "La consulta B4a debe devolver una fila");
+            return stmt.get_text(0);
+        };
+        const std::string rp_sql =
+            "SELECT group_concat(role_id || ':' || permission_id, ',') FROM "
+            "(SELECT role_id, permission_id FROM role_permissions ORDER BY role_id, permission_id);";
+        const std::string perm_sql =
+            "SELECT group_concat(id || '|' || description || '|' || title || '|' || section || '|' || sort_order, ';') FROM "
+            "(SELECT * FROM permissions ORDER BY id);";
+
+        MigrationRunner old_runner(db);
+        TEST_CHECK(old_runner.run_pending_migrations_from_dir(base_dir / "mig_old").is_success(), "Migrar hasta 008");
+        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == "8", "Línea base en versión 8");
+        const std::string rp_before = query_text(rp_sql);
+        TEST_CHECK(!rp_before.empty(), "role_permissions previos no deben estar vacíos");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "21", "21 permisos antes de 009");
+
+        MigrationRunner runner(db);
+        TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 009");
+        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == "9", "Última versión del esquema es 9");
+        TEST_CHECK(query_text(rp_sql) == rp_before, "role_permissions (role-owner y role-cashier incluidos) no cambian con 009");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "21", "Siguen existiendo 21 permisos");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions WHERE title <> '' AND section <> '' AND sort_order > 0;") == "21",
+                   "Los 21 permisos tienen título, sección y orden");
+        TEST_CHECK(query_text("SELECT COUNT(DISTINCT title) FROM permissions;") == "21", "Los títulos son únicos");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions WHERE section IN ('Punto de Venta','Inventario','Caja y Reportes','BackOffice');") == "21",
+                   "Toda sección es una de las cuatro válidas");
+        TEST_CHECK(query_text("SELECT title FROM permissions WHERE id = 'pos.sell';") == "Vender y cobrar", "Título de pos.sell");
+        TEST_CHECK(query_text("SELECT description FROM permissions WHERE id = 'backup.restore';") ==
+                       "Recuperar la información desde una copia. Reemplaza los datos actuales.",
+                   "Descripción nueva de backup.restore");
+
+        const std::string perm_after_first = query_text(perm_sql);
+        MigrationRunner runner2(db);
+        TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
+        TEST_CHECK(query_text(perm_sql) == perm_after_first, "Ejecutar el runner dos veces no cambia permissions");
+        TEST_CHECK(query_text(rp_sql) == rp_before, "Segunda ejecución no cambia role_permissions");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM schema_migrations;") == "9", "Segunda ejecución no duplica versiones");
+
+        auto account_svc = std::make_shared<SqliteAccountService>(db);
+        const std::string owner_pwd = generate_random_secret(18);
+        TEST_CHECK(account_svc->create_initial_owner("owner_b4a", "Dueno B4a", owner_pwd, "owner_b4a@cafeteria-itch.edu.mx").is_success(), "Alta del Dueño B4a");
+        TEST_CHECK(account_svc->login("owner_b4a", owner_pwd).is_success(), "Login Dueño B4a");
+
+        auto list = account_svc->list_permissions();
+        TEST_CHECK(list.is_success(), "list_permissions B4a");
+        TEST_CHECK(list.value().size() == 21, "list_permissions devuelve las 21 filas");
+        bool ordered = true;
+        bool filled = true;
+        for (std::size_t i = 0; i < list.value().size(); ++i) {
+            const auto& p = list.value()[i];
+            if (i > 0 && list.value()[i - 1].sort_order >= p.sort_order) ordered = false;
+            if (p.title.empty() || p.section.empty() || p.sort_order <= 0 || p.module.empty()) filled = false;
+        }
+        TEST_CHECK(ordered, "list_permissions sale en orden de sort_order");
+        TEST_CHECK(filled, "El DTO trae title, section, sort_order y module");
+        TEST_CHECK(list.value().front().id == "pos.sell" && list.value().back().id == "backup.dev_config",
+                   "Primero pos.sell y último backup.dev_config");
+        TEST_CHECK(list.value().back().module == "backup", "El campo module conserva su cálculo por prefijo");
+
+        // El mock devuelve los mismos textos, secciones y orden que la migración.
+        MockAccountService mock;
+        auto mock_list = mock.list_permissions();
+        TEST_CHECK(mock_list.is_success() && mock_list.value().size() == list.value().size(), "El mock devuelve 21 permisos");
+        bool same = true;
+        for (std::size_t i = 0; i < list.value().size(); ++i) {
+            const auto& a = list.value()[i];
+            const auto& b = mock_list.value()[i];
+            if (a.id != b.id || a.title != b.title || a.description != b.description ||
+                a.section != b.section || a.sort_order != b.sort_order || a.module != b.module) same = false;
+        }
+        TEST_CHECK(same, "El mock coincide con el servicio real en id, textos, sección, orden y módulo");
+
+        db.close();
+    }
+
+    fs::remove_all(base_dir);
+    std::cout << "  -> Migración 009, orden y coherencia con el mock verificados." << std::endl;
+}
+
 int main() {
     std::cout << "=== PRUEBAS DE ALMACENAMIENTO SQLITE, PERSISTENCIA Y SEGURIDAD (Debug y Release) ===" << std::endl;
     test_sqlite_lifecycle_and_persistence();
@@ -3091,6 +3203,7 @@ int main() {
     test_i2_cart_atomic_rollback_and_overflow_integrity();
     test_i2_print_config_service_permissions();
     test_i2_print_config_atomic_save_and_isolation();
+    test_b4a_permission_titles_migration();
     std::cout << "\n>>> TODAS LAS PRUEBAS DE ALMACENAMIENTO PASARON CON EXITO! <<<\n" << std::endl;
     return 0;
 }
