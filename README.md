@@ -49,7 +49,7 @@ Reglas que no se negocian: dinero en centavos enteros; la venta confirmada se gu
 Requisitos: compilador C++17, CMake 3.16 o superior, Ninja y wxWidgets 3.2 o superior. SQLite viene incluido en `third_party/sqlite/`. Entorno verificado: Windows, GCC 16.1 (MinGW-w64), wxWidgets 3.3.3.
 
 ```powershell
-cmake -B build_release -G Ninja -DCMAKE_BUILD_TYPE=Release -DwxWidgets_ROOT_DIR="C:/ruta/a/wxwidgets" -DwxWidgets_LIB_DIR="C:/ruta/a/wxwidgets/lib/gcc_x64_dll" -DwxWidgets_CONFIGURATION=mswu
+cmake -B build_release -G Ninja -DCMAKE_BUILD_TYPE=Release -DwxWidgets_ROOT_DIR="<toolchain>/wxwidgets" -DwxWidgets_LIB_DIR="<toolchain>/wxwidgets/lib/gcc1610_x64_dll" -DwxWidgets_CONFIGURATION=mswu
 cmake --build build_release --parallel 2
 ctest --test-dir build_release --output-on-failure
 ```
@@ -63,15 +63,17 @@ Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan 
 Ejecutar con una carpeta de datos aparte:
 
 ```powershell
-.\build_release\app_desktop.exe --data-dir="D:\Cafeteria_QA_Manual"
+.\build_release\app_desktop.exe --data-dir="..\Cafeteria_QA_Manual"
 ```
 
 ## Retomar el trabajo en otra PC
 
+Ningún archivo versionado depende de rutas de una PC concreta. Los pasos completos (qué instalar, dónde y cómo verificarlo) están en [`docs/entorno.md`](docs/entorno.md); un agente puede seguirlos por su cuenta, pidiendo aprobación para las descargas. En resumen:
+
 1. Clonar el repositorio y traer también las ramas `backend/*`.
-2. Instalar el compilador y wxWidgets, y ajustar las rutas de la sección «Memoria operativa» de `AGENTS.md` si cambian.
-3. Configurar `build_release` y `build_debug` (frontend) y, en la copia de trabajo del backend, `build_be_release` y `build_be_debug`.
-4. Crear la copia de trabajo del backend: `git worktree add ..\Cafeteria_ITCH_backend backend/b4a`.
+2. Dejar el compilador y wxWidgets en la carpeta hermana `..\toolchain`.
+3. Crear la copia de trabajo del backend: `git worktree add ..\Cafeteria_ITCH_backend backend/<bloque>`.
+4. Configurar `build_release` y `build_debug` (frontend) y, en la copia del backend, `build_be_release` y `build_be_debug`; compilar y correr CTest para verificar la línea base.
 5. Leer [`docs/ORQUESTADOR.md`](docs/ORQUESTADOR.md): contiene el estado, las decisiones tomadas y los bloques en cola. Los prompts pendientes están en `Prompts/prompts-2026-11-12-ronda4.md`.
 
 Las conversaciones de los agentes no viajan con el repositorio; todo lo necesario para continuar está en esos archivos.
@@ -81,6 +83,7 @@ Las conversaciones de los agentes no viajan con el repositorio; todo lo necesari
 | Archivo | Contenido |
 |---|---|
 | [`docs/specs.md`](docs/specs.md) | Especificación funcional y técnica. |
+| [`docs/entorno.md`](docs/entorno.md) | Preparar el entorno de desarrollo en cualquier PC. |
 | [`frontend/plan.md`](frontend/plan.md), [`backend/plan.md`](backend/plan.md) | Listas de trabajo por capa. |
 | [`docs/coordinacion-agentes.md`](docs/coordinacion-agentes.md) | Reparto de archivos y protocolo entre agentes. |
 | [`Auditorias/auditoria-2026-10-18.md`](Auditorias/auditoria-2026-10-18.md) | Auditorías de cada bloque entregado. |

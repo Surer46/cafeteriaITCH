@@ -7,10 +7,9 @@ Estado inicial al 2026-09-29: **0 casos visuales aceptados por el usuario**. Com
 Ejecutar en PowerShell:
 
 ```powershell
-Set-Location -LiteralPath 'D:\Cafetería_ITCH'
-$env:PATH = "D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll;" + $env:PATH
-$env:CAFETERIA_DATA_DIR = 'D:\Cafetería_ITCH\qa_visual\data'
-& 'D:\Cafetería_ITCH\build_release\app_desktop.exe'
+# Desde la raíz de la copia principal del repositorio
+$env:CAFETERIA_DATA_DIR = (Join-Path (Get-Location) 'qa_visual\data')
+& '.\build_release\app_desktop.exe'
 ```
 
 Al primer inicio, elegir correo y contraseña propios para la cuenta Dueño de prueba. Al reabrir con la misma ruta se solicita login y se conservan los datos de QA. La variable se aplica a los procesos iniciados desde esa terminal; abrir otra terminal o quitarla al terminar permite volver a la ruta habitual:

@@ -4,6 +4,14 @@ Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo
 
 Última actualización: 2026-11-12.
 
+## Portabilidad (decisión del usuario, 2026-11-12)
+
+- Los archivos versionados no llevan rutas absolutas ni estado de una PC concreta, para que cualquier agente pueda retomar en cualquier PC siguiendo `docs/entorno.md`. Lo propio de cada PC (rutas reales, qué está instalado, qué se verificó ahí, sesiones de los agentes) va en `..\notas-pc.md`, fuera del repositorio; nunca se sube a GitHub. Leerlo al iniciar sesión si existe.
+- Las rutas `D:\...` de auditorías y prompts con fecha son históricas; al enviar un prompt pendiente, sustituirlas por las de la PC en uso.
+- Las conversaciones de los agentes no viajan con el repositorio: en una PC nueva los ejecutores empiezan sin contexto y los prompts deben ser autosuficientes.
+- Markdown reorganizados (`7ea9d50`): `Auditorias/`, `Prompts/`, `docs/`. No hay `CLAUDE.md` en el repositorio; la memoria del orquestador es este archivo.
+- Pendiente menor para Gemini: las pruebas `tests/*.py` anteponen al `PATH` rutas `D:\Temp\...` fijas. No estorban (CMake copia las DLL a la carpeta de compilación), pero conviene quitarlas.
+
 ## Estado
 
 - **Puertas:** I1 cerrada (revalidada con el ejecutable real tras integrar B1). I2: software cerrado; falta QA humano (0/7 en `frontend/qa-visual.md`), impresora térmica 55/80, monitor táctil y DPI 125/150/200. I3–I7 abiertas. **No iniciar I3 hasta el QA humano.**
@@ -29,11 +37,11 @@ Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilid
 
 ## Git e integración
 
-- `main` en `D:\Cafetería_ITCH`; worktree del backend en `D:\Cafeteria_ITCH_backend` (rama `backend/<bloque>`). Al aceptar un bloque de backend: commit en su rama, `git merge` en `main`, verificar el conjunto (build, CTest, I1) y luego `git merge --ff-only main` en el worktree con la rama siguiente.
+- `main` en la copia principal; worktree del backend en `..\Cafeteria_ITCH_backend` (rama `backend/<bloque>`). Al aceptar un bloque de backend: commit en su rama, `git merge` en `main`, verificar el conjunto (build, CTest, I1) y luego `git merge --ff-only main` en el worktree con la rama siguiente.
 - `.gitattributes` fija `eol=lf`. Auditar con `git diff --ignore-cr-at-eol` contra el último commit aceptado.
 - Los commits llevan la línea `Co-Authored-By` de Claude.
 
-- **Historial reescrito el 2026-11-12** para publicar sin el correo personal: autor y confirmador pasan a `Surer46` con su correo privado de GitHub. Los identificadores de commit citados en este archivo y en las auditorías con fecha anterior ya no existen en el repositorio; el historial original está en `D:\Cafeteria_ITCH_antes_de_cambiar_correo.bundle` (solo en la PC original). Remoto: `origin` = `https://github.com/Surer46/cafeteriaITCH.git` (público). La identidad git local es ahora `Surer46`.
+- **Historial reescrito el 2026-11-12** para publicar sin el correo personal: autor y confirmador pasan a `Surer46` con su correo privado de GitHub. Los identificadores de commit citados en este archivo y en las auditorías con fecha anterior ya no existen en el repositorio; el historial original está en `Cafeteria_ITCH_antes_de_cambiar_correo.bundle` (solo en la PC original, unidad `D:`). Remoto: `origin` = `https://github.com/Surer46/cafeteriaITCH.git` (público). La identidad git local es ahora `Surer46`.
 
 ## Cómo auditar (lista corta)
 
@@ -68,5 +76,5 @@ Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilid
 ## Reanudar agentes
 
 - AntiGravity (actual, ronda 3): `agy --conversation=5cb24680-56c1-4cd1-9621-72c8ef342fbd`. Anteriores: `36c58871-cb3f-45c6-88ad-07be0a8992e5`, `c94b5e25-55b3-490a-b547-abad9fb453b1`, `4c6c3e44-1c0a-40a4-8124-59943158b872`.
-- Claude Code Terminal (actual, ronda 3): `claude --resume CafeCH`, abierto en `D:\Cafeteria_ITCH_backend` con el modelo `opusplan`.
-- QA manual aislado: `.\build_release\app_desktop.exe --data-dir="D:\Cafeteria_QA_Manual"`.
+- Claude Code Terminal (actual, ronda 3): `claude --resume CafeCH`, abierto en el worktree del backend con el modelo `opusplan`. Estas conversaciones solo existen en la PC original; en otra PC se abre una sesión nueva.
+- QA manual aislado: `.\build_release\app_desktop.exe --data-dir="..\Cafeteria_QA_Manual"`.

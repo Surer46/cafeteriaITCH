@@ -6,7 +6,7 @@ Vigente desde el 2026-11-08. Complementa `AGENTS.md`; si hay conflicto, manda `A
 
 | Agente | Modelo | Fortalezas observadas | Debilidades observadas | Papel |
 |---|---|---|---|---|
-| **Orquestador** (Claude, app de escritorio) | Opus 5.5 | Auditoría independiente, compilación desde cero, lectura de capturas con medición en píxeles | Caro si implementa; no debe escribir código de producción | Redacta prompts, vigila terminales, audita, mantiene `docs/specs.md`, planes, tareas y auditorías |
+| **Orquestador** (Claude, app de escritorio) | Fable 5.2 (antes Opus 5.5) | Auditoría independiente, compilación desde cero, lectura de capturas con medición en píxeles | Caro si implementa; no debe escribir código de producción | Redacta prompts, vigila terminales, audita, mantiene `docs/specs.md`, planes, tareas y auditorías |
 | **Claude Code Terminal** | `opusplan`: Opus 5.5 planifica, Sonnet 5.5 ejecuta | Razonamiento de dominio, transacciones SQLite, aritmética racional de costos, permisos en servicios, diseño de pruebas C++ | Más caro por token que Gemini | **Dueño del backend**: contratos, dominio, almacenamiento, migraciones, servicios y CTest |
 | **AntiGravity** | Gemini 3.8 Flash (high) | Rápido y barato; buen cableado de paneles wxWidgets sobre contratos existentes; scripts Win32/Python de prueba GUI y capturas | Exagera resultados; tiende a debilitar pruebas; bloques de razonamiento de 7–9 min; demasiadas lecturas | **Dueño del frontend**: paneles, diálogos, tema, pruebas GUI en Python y capturas |
 
@@ -26,7 +26,7 @@ La interfaz consume contratos; nunca los cambia. Si AntiGravity necesita un mét
 
 ## Compilación y pruebas sin choques
 
-- Cada agente trabaja en su propia copia: Claude Code Terminal en `D:\Cafeteria_ITCH_backend` (git worktree, rama `backend/<bloque>`); AntiGravity en `D:\Cafetería_ITCH` (rama `main`). Así un archivo a medias de uno no rompe la compilación del otro. El orquestador integra la rama del backend en `main` al aceptar cada bloque.
+- Cada agente trabaja en su propia copia: Claude Code Terminal en el worktree hermano `..\Cafeteria_ITCH_backend` (rama `backend/<bloque>`); AntiGravity en la copia principal (rama `main`). La disposición de carpetas está en `docs/entorno.md`. Así un archivo a medias de uno no rompe la compilación del otro. El orquestador integra la rama del backend en `main` al aceptar cada bloque.
 
 - Claude Code Terminal compila en `build_be_debug` y `build_be_release` y solo ejecuta CTest.
 - AntiGravity compila en `build_debug` y `build_release` y es el único que ejecuta pruebas GUI (`tests/*.py`), porque abren ventanas y toman el foco.
