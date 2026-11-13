@@ -1,4 +1,6 @@
 #include "app/services/sqlite_inventory_service.hpp"
+#include "app/services/identifiers.hpp"
+#include "app/domain/clock.hpp"
 #include "app/domain/unit_converter.hpp"
 #include <chrono>
 #include <iomanip>
@@ -9,23 +11,6 @@
 namespace app::services {
 
 namespace {
-
-std::string current_timestamp() {
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
-    return ss.str();
-}
-
-std::string generate_id(const std::string& prefix) {
-    static std::atomic<std::uint64_t> counter{0};
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    std::stringstream ss;
-    ss << prefix << "-" << now_ms << "-" << ++counter;
-    return ss.str();
-}
 
 std::string expected_base_unit_for(domain::UnitDimension dim) {
     switch (dim) {
@@ -118,8 +103,8 @@ contracts::Result<contracts::IngredientDto> SqliteInventoryService::create_ingre
     std::string dim_canonical = domain::UnitConverter::to_string(dim_res.value());
 
     auto prep_ins = db_.prepare(
-        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, low_stock_threshold) "
-        "VALUES (?, ?, ?, ?, 0, ?);"
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, low_stock_threshold, updated_at, updated_at_utc) "
+        "VALUES (?, ?, ?, ?, 0, ?, ?, ?);"
     );
     if (!prep_ins.is_success()) {
         return contracts::Result<contracts::IngredientDto>::fail(prep_ins.error_code(), prep_ins.error_message());
@@ -131,6 +116,9 @@ contracts::Result<contracts::IngredientDto> SqliteInventoryService::create_ingre
     stmt_ins.bind_text(3, dim_canonical);
     stmt_ins.bind_text(4, input.base_unit);
     stmt_ins.bind_int64(5, input.low_stock_threshold_base);
+    const auto ing_ts = domain::now();
+    stmt_ins.bind_text(6, ing_ts.local);
+    stmt_ins.bind_text(7, ing_ts.utc);
 
     auto step_ins = stmt_ins.step();
     if (!step_ins.is_success()) {
@@ -189,7 +177,7 @@ contracts::OperationResult SqliteInventoryService::update_ingredient(const contr
     std::string new_name = input.name.value_or(current_ing.value().name);
     std::int64_t new_threshold = input.low_stock_threshold_base.value_or(current_ing.value().low_stock_threshold_base);
 
-    auto prep = db_.prepare("UPDATE ingredients SET name = ?, low_stock_threshold = ? WHERE id = ?;");
+    auto prep = db_.prepare("UPDATE ingredients SET name = ?, low_stock_threshold = ?, updated_at = ?, updated_at_utc = ? WHERE id = ?;");
     if (!prep.is_success()) {
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
     }
@@ -197,7 +185,10 @@ contracts::OperationResult SqliteInventoryService::update_ingredient(const contr
     auto stmt = std::move(prep.value());
     stmt.bind_text(1, new_name);
     stmt.bind_int64(2, new_threshold);
-    stmt.bind_text(3, input.ingredient_id);
+    const auto upd_ts = domain::now();
+    stmt.bind_text(3, upd_ts.local);
+    stmt.bind_text(4, upd_ts.utc);
+    stmt.bind_text(5, input.ingredient_id);
 
     auto step = stmt.step();
     if (!step.is_success()) {
@@ -354,14 +345,17 @@ contracts::OperationResult SqliteInventoryService::update_low_stock_threshold(
         return contracts::OperationResult::fail(current_ing.error_code(), current_ing.error_message());
     }
 
-    auto prep = db_.prepare("UPDATE ingredients SET low_stock_threshold = ? WHERE id = ?;");
+    auto prep = db_.prepare("UPDATE ingredients SET low_stock_threshold = ?, updated_at = ?, updated_at_utc = ? WHERE id = ?;");
     if (!prep.is_success()) {
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
     }
 
     auto stmt = std::move(prep.value());
     stmt.bind_int64(1, new_threshold_base);
-    stmt.bind_text(2, ingredient_id);
+    const auto thr_ts = domain::now();
+    stmt.bind_text(2, thr_ts.local);
+    stmt.bind_text(3, thr_ts.utc);
+    stmt.bind_text(4, ingredient_id);
 
     auto step = stmt.step();
     if (!step.is_success()) {
@@ -426,13 +420,14 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
 
     std::string pe_id = generate_id("pe");
     std::string sm_id = generate_id("sm");
-    std::string now_str = current_timestamp();
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
 
     // 1. Insertar entrada de compra preservando costo total y unidades base exactas
     auto prep_pe = db_.prepare(
         "INSERT INTO purchase_entries (id, ingredient_id, quantity_purchased, purchase_unit, "
-        "total_cost_cents, base_units_purchased, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?);"
+        "total_cost_cents, base_units_purchased, created_at, created_at_utc) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
     );
     if (!prep_pe.is_success()) {
         db_.rollback_transaction();
@@ -447,6 +442,7 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
     stmt_pe.bind_int64(5, total_cost.cents());
     stmt_pe.bind_int64(6, base_units_purchased);
     stmt_pe.bind_text(7, now_str);
+    stmt_pe.bind_text(8, ts.utc);
     auto step_pe = stmt_pe.step();
     if (!step_pe.is_success()) {
         db_.rollback_transaction();
@@ -471,8 +467,8 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
 
     // 3. Registrar movimiento de inventario (PURCHASE)
     auto prep_sm = db_.prepare(
-        "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at) "
-        "VALUES (?, ?, 'PURCHASE', ?, 'Entrada de compra', ?);"
+        "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at, created_at_utc) "
+        "VALUES (?, ?, 'PURCHASE', ?, 'Entrada de compra', ?, ?);"
     );
     if (!prep_sm.is_success()) {
         db_.rollback_transaction();
@@ -484,6 +480,7 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
     stmt_sm.bind_text(2, ingredient_id);
     stmt_sm.bind_int64(3, base_units_purchased);
     stmt_sm.bind_text(4, now_str);
+    stmt_sm.bind_text(5, ts.utc);
     auto step_sm = stmt_sm.step();
     if (!step_sm.is_success()) {
         db_.rollback_transaction();

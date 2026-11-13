@@ -4,8 +4,14 @@
 #include <filesystem>
 #include <cstdlib>
 #include <random>
+#include <chrono>
+#include <thread>
+#include <unordered_set>
 #include "app/storage/sqlite_database.hpp"
 #include "app/storage/migration_runner.hpp"
+#include "app/crypto/password_hasher.hpp"
+#include "app/domain/clock.hpp"
+#include "app/services/identifiers.hpp"
 #include "app/services/mock_services.hpp"
 #include "app/services/sqlite_account_service.hpp"
 #include "app/services/sqlite_backup_service.hpp"
@@ -342,7 +348,10 @@ void test_owner_persistence_and_auth() {
         TEST_CHECK(dev_cfg_allowed.is_success(), "Desarrollador debe poder consultar dev_config");
 
         // Probar instantánea real de respaldo mediante la API oficial de backup
-        const std::string backup_file = "test_snapshot.bak";
+        // Fuera del directorio de ejecución: el respaldo y sus archivos auxiliares viven en un directorio temporal.
+        const fs::path snapshot_dir = fs::temp_directory_path() / ("cafeteria_snapshot_" + generate_random_alphanumeric(8));
+        fs::create_directories(snapshot_dir);
+        const std::string backup_file = (snapshot_dir / "test_snapshot.bak").u8string();
         if (fs::exists(backup_file)) {
             fs::remove(backup_file);
         }
@@ -372,6 +381,8 @@ void test_owner_persistence_and_auth() {
         if (fs::exists(backup_file)) {
             fs::remove(backup_file);
         }
+        std::error_code snap_ec;
+        fs::remove_all(snapshot_dir, snap_ec);
     }
 
     if (fs::exists(db_file)) {
@@ -3127,7 +3138,7 @@ void test_b4a_permission_titles_migration() {
 
         MigrationRunner runner(db);
         TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 009");
-        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == "9", "Última versión del esquema es 9");
+        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == "10", "Última versión del esquema es 10");
         TEST_CHECK(query_text(rp_sql) == rp_before, "role_permissions (role-owner y role-cashier incluidos) no cambian con 009");
         TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "21", "Siguen existiendo 21 permisos");
         TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions WHERE title <> '' AND section <> '' AND sort_order > 0;") == "21",
@@ -3145,7 +3156,7 @@ void test_b4a_permission_titles_migration() {
         TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
         TEST_CHECK(query_text(perm_sql) == perm_after_first, "Ejecutar el runner dos veces no cambia permissions");
         TEST_CHECK(query_text(rp_sql) == rp_before, "Segunda ejecución no cambia role_permissions");
-        TEST_CHECK(query_text("SELECT COUNT(*) FROM schema_migrations;") == "9", "Segunda ejecución no duplica versiones");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM schema_migrations;") == "10", "Segunda ejecución no duplica versiones");
 
         auto account_svc = std::make_shared<SqliteAccountService>(db);
         const std::string owner_pwd = generate_random_secret(18);
@@ -3188,6 +3199,301 @@ void test_b4a_permission_titles_migration() {
     std::cout << "  -> Migración 009, orden y coherencia con el mock verificados." << std::endl;
 }
 
+// Convierte "YYYY-MM-DDTHH:MM:SS.mmmZ" a milisegundos desde 1970 (UTC). Devuelve -1 si el formato es inválido.
+std::int64_t parse_utc_ms(const std::string& s) {
+    if (s.size() != 24 || s[4] != '-' || s[7] != '-' || s[10] != 'T' || s[13] != ':' || s[16] != ':' || s[19] != '.' || s[23] != 'Z') return -1;
+    auto num = [&](std::size_t pos, std::size_t len) -> int {
+        int v = 0;
+        for (std::size_t i = 0; i < len; ++i) {
+            if (s[pos + i] < '0' || s[pos + i] > '9') return -1;
+            v = v * 10 + (s[pos + i] - '0');
+        }
+        return v;
+    };
+    int y = num(0, 4), m = num(5, 2), d = num(8, 2), hh = num(11, 2), mm = num(14, 2), ss = num(17, 2), ms = num(20, 3);
+    if (y < 0 || m < 1 || m > 12 || d < 1 || d > 31 || hh < 0 || mm < 0 || ss < 0 || ms < 0) return -1;
+    // Días desde 1970 (algoritmo de fecha civil)
+    y -= m <= 2;
+    const int era = (y >= 0 ? y : y - 399) / 400;
+    const unsigned yoe = static_cast<unsigned>(y - era * 400);
+    const unsigned doy = static_cast<unsigned>((153 * (m + (m > 2 ? -3 : 9)) + 2) / 5 + d - 1);
+    const unsigned doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    const std::int64_t days = static_cast<std::int64_t>(era) * 146097 + static_cast<std::int64_t>(doe) - 719468;
+    return ((days * 24 + hh) * 60 + mm) * 60000 + static_cast<std::int64_t>(ss) * 1000 + ms;
+}
+
+void test_b4_ids_clock_folios_and_migration() {
+    std::cout << "[TEST] B4: identificadores, hora local+UTC, updated_at, folios por caja y migración 010..." << std::endl;
+
+    // --- Identificadores: 100000 sin repetición y con formato prefijo-UUIDv4 ---
+    {
+        std::unordered_set<std::string> seen;
+        seen.reserve(100000);
+        bool format_ok = true;
+        for (int i = 0; i < 100000; ++i) {
+            std::string id = generate_id("sale");
+            if (id.size() != 5 + 36 || id.compare(0, 5, "sale-") != 0) {
+                format_ok = false;
+                seen.insert(std::move(id));
+                continue;
+            }
+            const std::string u = id.substr(5);
+            if (u[8] != '-' || u[13] != '-' || u[18] != '-' || u[23] != '-' || u[14] != '4') format_ok = false;
+            const char var = u[19];
+            if (!(var == '8' || var == '9' || var == 'a' || var == 'b')) format_ok = false;
+            for (std::size_t k = 0; k < u.size(); ++k) {
+                if (k == 8 || k == 13 || k == 18 || k == 23) continue;
+                const char ch = u[k];
+                if (!((ch >= '0' && ch <= '9') || (ch >= 'a' && ch <= 'f'))) format_ok = false;
+            }
+            seen.insert(std::move(id));
+        }
+        TEST_CHECK(format_ok, "Todos los ids tienen formato prefijo-UUID v4 en hexadecimal minúscula");
+        TEST_CHECK(seen.size() == 100000, "100000 identificadores generados sin repetición");
+    }
+
+    // --- Reloj: local y UTC del mismo instante ---
+    {
+        const auto tp = std::chrono::system_clock::time_point(std::chrono::milliseconds(1700000000123LL));
+        auto ts = app::domain::timestamp_from(tp);
+        TEST_CHECK(ts.utc == "2023-11-14T22:13:20.123Z", "UTC de un instante conocido");
+        TEST_CHECK(ts.local.size() == 19 && ts.local[10] == ' ', "Formato local histórico YYYY-MM-DD HH:MM:SS");
+        TEST_CHECK(parse_utc_ms(ts.utc) == 1700000000123LL, "El parser de pruebas reconstruye el instante");
+    }
+
+    fs::path mig_dir = find_migrations_dir();
+    TEST_CHECK(!mig_dir.empty(), "Debe encontrar directorio de migraciones");
+
+    const fs::path base_dir = fs::temp_directory_path() / ("cafeteria_b4_" + generate_random_alphanumeric(8));
+    fs::remove_all(base_dir);
+    fs::create_directories(base_dir / "mig_v9");
+    int copied = 0;
+    for (const auto& entry : fs::directory_iterator(mig_dir)) {
+        const std::string name = entry.path().filename().u8string();
+        if (name.size() > 4 && name.substr(name.size() - 4) == ".sql" && name < "010") {
+            fs::copy_file(entry.path(), base_dir / "mig_v9" / entry.path().filename());
+            ++copied;
+        }
+    }
+    TEST_CHECK(copied == 9, "Deben copiarse exactamente las migraciones 001 a 009");
+
+    SqliteDatabase db;
+    TEST_CHECK(db.open((base_dir / "b4.db").u8string()).is_success(), "Abrir SQLite B4");
+
+    auto q = [&](const std::string& sql) -> std::string {
+        auto prep = db.prepare(sql);
+        TEST_CHECK(prep.is_success(), "Preparar consulta B4: " + sql);
+        auto stmt = std::move(prep.value());
+        auto step = stmt.step();
+        TEST_CHECK(step.is_success() && step.value(), "La consulta B4 debe devolver fila: " + sql);
+        return stmt.get_text(0);
+    };
+
+    // --- Base con migraciones 001 a 009 y datos ---
+    MigrationRunner old_runner(db);
+    TEST_CHECK(old_runner.run_pending_migrations_from_dir(base_dir / "mig_v9").is_success(), "Migrar hasta 009");
+    TEST_CHECK(q("SELECT MAX(version) FROM schema_migrations;") == "9", "Línea base en versión 9");
+
+    const std::string owner_pwd = generate_random_secret(18);
+    const std::string owner_hash = app::crypto::PasswordHasher::hash_password(owner_pwd);
+    const char* seed[] = {
+        "INSERT INTO cash_registers (id, name) VALUES ('reg-02', 'Caja Dos');",
+        "INSERT INTO cash_registers (id, name) VALUES ('reg-03', 'Caja Tres');",
+        "INSERT INTO products (id, sku, name, category, price_cents, created_at) VALUES ('prod-old', 'SKU-OLD', 'Torta Vieja', 'Platillos', 3500, '2026-10-01 09:00:00');",
+        "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock) VALUES ('ing-old', 'Pan Viejo', 'COUNT', 'pz', 5);",
+        "INSERT INTO recipes (id, product_id, version, created_at) VALUES ('rcp-old', 'prod-old', 1, '2026-10-01 09:05:00');",
+        "INSERT INTO shifts (id, register_id, cashier_user_id, opened_at, closed_at, initial_cash_cents, final_cash_cents, is_open) VALUES ('shift-old', 'reg-01', 'user-dueno_b4', '2026-10-01 08:00:00', '2026-10-01 15:00:00', 50000, 53500, 0);",
+        "INSERT INTO sales (id, folio, shift_id, user_id, total_cents, created_at, cashier_name) VALUES ('sale-old', 'V-10001', 'shift-old', 'user-dueno_b4', 3500, '2026-10-01 10:00:00', 'Dueño B4');",
+        "INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price_cents, subtotal_cents) VALUES ('sitem-old', 'sale-old', 'prod-old', 'Torta Vieja', 1, 3500, 3500);",
+        "INSERT INTO payment_records (id, sale_id, payment_method, amount_cents, cash_received_cents, change_cents, created_at) VALUES ('pay-old', 'sale-old', 'EFECTIVO', 3500, 4000, 500, '2026-10-01 10:00:00');",
+        "INSERT INTO cash_movements (id, shift_id, movement_type, amount_cents, description, created_at) VALUES ('cm-old', 'shift-old', 'SALE', 3500, 'Venta V-10001 [EFECTIVO]', '2026-10-01 10:00:00');",
+        "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at) VALUES ('sm-old', 'ing-old', 'SALE', -1, 'Venta V-10001', '2026-10-01 10:00:00');",
+        "INSERT INTO purchase_entries (id, ingredient_id, quantity_purchased, purchase_unit, total_cost_cents, base_units_purchased, created_at) VALUES ('pe-old', 'ing-old', 6, 'pz', 9000, 6, '2026-09-30 12:00:00');",
+        "INSERT INTO audit_events (id, event_type, user_id, details, created_at) VALUES ('audit-old', 'SALE_CONFIRMED', 'user-dueno_b4', 'Venta confirmada folio V-10001', '2026-10-01 10:00:00');"
+    };
+    TEST_CHECK(db.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at) "
+                          "VALUES ('user-dueno_b4', 'dueno_b4', 'Dueño B4', 'b4@cafeteria-itch.edu.mx', '" + owner_hash +
+                          "', 'role-owner', 1, '2026-10-01 07:00:00');").is_success(), "Alta de Dueño v9 por SQL");
+    for (const char* s : seed) {
+        auto r = db.execute(s);
+        TEST_CHECK(r.is_success(), std::string("Dato previo: ") + s + " -> " + r.error_message());
+    }
+
+    // Instantánea de las columnas originales (todas las tablas con datos) antes de migrar
+    const std::string orig_sql =
+        "SELECT (SELECT group_concat(id||'|'||folio||'|'||shift_id||'|'||user_id||'|'||total_cents||'|'||created_at||'|'||cashier_name, ';') FROM sales) || '#' ||"
+        "(SELECT group_concat(id||'|'||payment_method||'|'||amount_cents||'|'||created_at, ';') FROM payment_records) || '#' ||"
+        "(SELECT group_concat(id||'|'||movement_type||'|'||amount_cents||'|'||created_at, ';') FROM cash_movements) || '#' ||"
+        "(SELECT group_concat(id||'|'||movement_type||'|'||quantity_base_units||'|'||created_at, ';') FROM stock_movements) || '#' ||"
+        "(SELECT group_concat(id||'|'||total_cost_cents||'|'||created_at, ';') FROM purchase_entries) || '#' ||"
+        "(SELECT group_concat(id||'|'||opened_at||'|'||closed_at||'|'||register_id, ';') FROM shifts) || '#' ||"
+        "(SELECT group_concat(id||'|'||sku||'|'||name||'|'||price_cents||'|'||created_at, ';') FROM products) || '#' ||"
+        "(SELECT group_concat(id||'|'||name||'|'||current_stock, ';') FROM ingredients) || '#' ||"
+        "(SELECT group_concat(id||'|'||username||'|'||created_at, ';') FROM users) || '#' ||"
+        "(SELECT group_concat(id||'|'||created_at, ';') FROM audit_events) || '#' ||"
+        "(SELECT group_concat(id||'|'||name, ';') FROM cash_registers);";
+    const std::string orig_before = q(orig_sql);
+    TEST_CHECK(!orig_before.empty(), "La instantánea previa no puede estar vacía");
+
+    // --- Migrar a la versión nueva ---
+    MigrationRunner runner(db);
+    TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 010");
+    TEST_CHECK(q("SELECT MAX(version) FROM schema_migrations;") == "10", "Esquema en versión 10");
+    TEST_CHECK(q(orig_sql) == orig_before, "Los datos originales quedan intactos tras migrar");
+
+    // Columnas nuevas presentes
+    auto has_col = [&](const std::string& table, const std::string& col) {
+        return q("SELECT COUNT(*) FROM pragma_table_info('" + table + "') WHERE name = '" + col + "';") == "1";
+    };
+    for (const char* t : {"sales", "payment_records", "cash_movements", "stock_movements", "purchase_entries", "audit_events"}) {
+        TEST_CHECK(has_col(t, "created_at_utc"), std::string("created_at_utc en ") + t);
+    }
+    TEST_CHECK(has_col("shifts", "opened_at_utc") && has_col("shifts", "closed_at_utc"), "Columnas UTC de shifts");
+    for (const char* t : {"products", "ingredients", "recipes", "product_images", "roles", "users"}) {
+        TEST_CHECK(has_col(t, "updated_at") && has_col(t, "updated_at_utc"), std::string("updated_at y updated_at_utc en ") + t);
+    }
+    TEST_CHECK(has_col("cash_registers", "code"), "Columna code en cash_registers");
+
+    // Filas anteriores: UTC en NULL y updated_at = created_at
+    TEST_CHECK(q("SELECT COUNT(*) FROM sales WHERE created_at_utc IS NULL;") == "1", "sales antigua: created_at_utc NULL");
+    TEST_CHECK(q("SELECT COUNT(*) FROM audit_events WHERE id = 'audit-old' AND created_at_utc IS NULL;") == "1", "audit antigua: created_at_utc NULL");
+    TEST_CHECK(q("SELECT COUNT(*) FROM shifts WHERE id = 'shift-old' AND opened_at_utc IS NULL AND closed_at_utc IS NULL;") == "1", "shift antiguo: UTC NULL");
+    TEST_CHECK(q("SELECT updated_at FROM products WHERE id = 'prod-old';") == "2026-10-01 09:00:00", "products.updated_at = created_at");
+    TEST_CHECK(q("SELECT updated_at FROM recipes WHERE id = 'rcp-old';") == "2026-10-01 09:05:00", "recipes.updated_at = created_at");
+    TEST_CHECK(q("SELECT updated_at FROM users WHERE id = 'user-dueno_b4';") == "2026-10-01 07:00:00", "users.updated_at = created_at");
+    TEST_CHECK(q("SELECT COUNT(*) FROM ingredients WHERE updated_at <> '';") == "1", "ingredients.updated_at poblada");
+    TEST_CHECK(q("SELECT updated_at_utc IS NULL FROM products WHERE id = 'prod-old';") == "1", "products.updated_at_utc NULL en filas antiguas");
+
+    // Códigos de caja: reg-01 = C1; las demás C + ordinal por rowid, únicos
+    TEST_CHECK(q("SELECT code FROM cash_registers WHERE id = 'reg-01';") == "C1", "reg-01 = C1");
+    TEST_CHECK(q("SELECT code FROM cash_registers WHERE id = 'reg-02';") == "C2", "reg-02 = C2");
+    TEST_CHECK(q("SELECT code FROM cash_registers WHERE id = 'reg-03';") == "C3", "reg-03 = C3");
+    TEST_CHECK(q("SELECT COUNT(DISTINCT code) FROM cash_registers;") == "3", "Códigos de caja únicos");
+
+    // Segunda ejecución del runner: nada cambia
+    const std::string schema_sql = "SELECT group_concat(name||type, ';') FROM (SELECT name, type FROM sqlite_master ORDER BY name);";
+    const std::string reg_sql = "SELECT group_concat(id||code, ';') FROM cash_registers;";
+    const std::string schema_before = q(schema_sql);
+    const std::string full_before = q(orig_sql) + q(reg_sql);
+    MigrationRunner runner2(db);
+    TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
+    TEST_CHECK(q("SELECT COUNT(*) FROM schema_migrations;") == "10", "No se duplican versiones");
+    TEST_CHECK(q(schema_sql) == schema_before, "El esquema no cambia");
+    TEST_CHECK(q(orig_sql) + q(reg_sql) == full_before, "Los datos no cambian");
+
+    // --- Servicios sobre la base migrada ---
+    auto account_svc = std::make_shared<SqliteAccountService>(db);
+    auto cat_svc = std::make_shared<SqliteCatalogService>(db, account_svc);
+    auto cart_svc = std::make_shared<SqliteCartService>(db, account_svc, cat_svc);
+    auto shift_svc = std::make_shared<SqliteShiftService>(db, account_svc);
+    auto sale_svc = std::make_shared<SqliteSaleService>(db, account_svc, cart_svc, shift_svc);
+    TEST_CHECK(account_svc->login("dueno_b4", owner_pwd).is_success(), "Login del Dueño sembrado");
+
+    // Folio antiguo sigue recuperable
+    auto old_ticket = sale_svc->get_ticket("V-10001");
+    TEST_CHECK(old_ticket.is_success(), "get_ticket con folio antiguo V-10001: " + old_ticket.error_message());
+    TEST_CHECK(old_ticket.value().folio == "V-10001" && old_ticket.value().total.cents() == 3500, "Ticket antiguo íntegro");
+    TEST_CHECK(old_ticket.value().items.size() == 1 && old_ticket.value().cashier_name == "Dueño B4", "Líneas y cajero del ticket antiguo");
+
+    // Producto nuevo y edición: updated_at cambia, created_at no
+    CreateProductDto pd;
+    pd.sku = "SKU-B4"; pd.name = "Cafe B4"; pd.category = "Bebidas"; pd.price = Money::from_cents(2500); pd.is_prepared = false;
+    auto prod = cat_svc->create_product(pd);
+    TEST_CHECK(prod.is_success(), "Crear producto B4");
+    const std::string prod_id = prod.value().id;
+    TEST_CHECK(prod_id.rfind("prod-", 0) == 0 && prod_id.size() == 5 + 36, "El id del producto usa el generador compartido");
+    const std::string created_before = q("SELECT created_at FROM products WHERE id = '" + prod_id + "';");
+    const std::string upd_before = q("SELECT updated_at FROM products WHERE id = '" + prod_id + "';");
+    const std::string upd_utc_before = q("SELECT updated_at_utc FROM products WHERE id = '" + prod_id + "';");
+    TEST_CHECK(upd_before == created_before && parse_utc_ms(upd_utc_before) > 0, "Alta: updated_at = created_at y updated_at_utc válido");
+    std::this_thread::sleep_for(std::chrono::milliseconds(1200));
+    // Iniciar sesión y consultar no cambian updated_at
+    TEST_CHECK(account_svc->login("dueno_b4", owner_pwd).is_success(), "Login repetido");
+    TEST_CHECK(cat_svc->get_product_by_id(prod_id).is_success(), "Consulta de producto");
+    TEST_CHECK(q("SELECT updated_at FROM products WHERE id = '" + prod_id + "';") == upd_before, "Leer no cambia updated_at");
+    TEST_CHECK(q("SELECT updated_at FROM users WHERE id = 'user-dueno_b4';") == "2026-10-01 07:00:00", "Iniciar sesión no cambia users.updated_at");
+    UpdateProductDto up;
+    up.product_id = prod_id;
+    up.name = "Cafe B4 Grande";
+    TEST_CHECK(cat_svc->update_product(up).is_success(), "Editar producto");
+    TEST_CHECK(q("SELECT created_at FROM products WHERE id = '" + prod_id + "';") == created_before, "Editar no cambia created_at");
+    TEST_CHECK(q("SELECT updated_at FROM products WHERE id = '" + prod_id + "';") != upd_before, "Editar cambia updated_at");
+    TEST_CHECK(q("SELECT updated_at_utc FROM products WHERE id = '" + prod_id + "';") != upd_utc_before, "Editar cambia updated_at_utc");
+
+    // --- Venta nueva: local y UTC del mismo instante; folio por caja ---
+    auto sell_on = [&](const std::string& reg, const std::string& key) -> SaleConfirmationDto {
+        TEST_CHECK(shift_svc->open_shift(reg, Money::from_cents(10000)).is_success(), "Abrir turno en " + reg);
+        TEST_CHECK(cart_svc->add_item(prod_id, 1, "").is_success(), "Agregar al carrito en " + reg);
+        auto sale = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), key);
+        TEST_CHECK(sale.is_success(), "Confirmar venta en " + reg + ": " + sale.error_message());
+        return sale.value();
+    };
+    auto close_current = [&]() { TEST_CHECK(shift_svc->close_shift(Money::from_cents(10000)).is_success(), "Cerrar turno"); };
+
+    const auto before_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    auto sale1 = sell_on("reg-01", "key-b4-1");
+    const auto after_ms = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count();
+    TEST_CHECK(sale1.folio == "V-C1-00001", "Primer folio de la caja C1: " + sale1.folio);
+    const std::string sid = "'" + sale1.sale_id + "'";
+    const std::string sale_utc = q("SELECT created_at_utc FROM sales WHERE id = " + sid + ";");
+    const std::string sale_local = q("SELECT created_at FROM sales WHERE id = " + sid + ";");
+    const std::int64_t utc_ms = parse_utc_ms(sale_utc);
+    TEST_CHECK(utc_ms >= before_ms - 1 && utc_ms <= after_ms + 1, "created_at_utc de la venta es el instante actual en UTC");
+    auto from_utc = app::domain::timestamp_from(std::chrono::system_clock::time_point(std::chrono::milliseconds(utc_ms)));
+    TEST_CHECK(from_utc.local == sale_local && from_utc.utc == sale_utc, "La hora local y la UTC de la venta son el mismo instante");
+    TEST_CHECK(sale1.created_at == sale_local, "El DTO devuelve la hora local guardada");
+    // El mismo instante en pago, caja, existencias y auditoría de esa venta
+    TEST_CHECK(q("SELECT created_at_utc FROM payment_records WHERE sale_id = " + sid + ";") == sale_utc, "payment_records comparte el instante");
+    TEST_CHECK(q("SELECT created_at_utc FROM cash_movements WHERE description LIKE 'Venta V-C1-00001%';") == sale_utc, "cash_movements comparte el instante");
+    TEST_CHECK(q("SELECT created_at_utc FROM audit_events WHERE event_type = 'SALE_CONFIRMED' AND details LIKE '%V-C1-00001%';") == sale_utc, "audit_events comparte el instante");
+    TEST_CHECK(q("SELECT COUNT(*) FROM shifts WHERE opened_at_utc IS NOT NULL;") == "1", "El turno nuevo guarda opened_at_utc");
+    TEST_CHECK(q("SELECT COUNT(*) FROM audit_events WHERE created_at_utc IS NULL;") == "1", "Todo evento nuevo guarda created_at_utc (solo queda el antiguo en NULL)");
+
+    // Reintento idempotente: mismo folio, sin venta duplicada
+    TEST_CHECK(cart_svc->add_item(prod_id, 1, "").is_success(), "Carrito para reintento");
+    auto retry = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "key-b4-1");
+    TEST_CHECK(retry.is_success() && retry.value().folio == sale1.folio && retry.value().sale_id == sale1.sale_id, "El reintento devuelve el mismo folio");
+    TEST_CHECK(q("SELECT COUNT(*) FROM sales WHERE idempotency_key = 'key-b4-1';") == "1", "No se duplica la venta en el reintento");
+
+    // Segunda venta en la misma caja (el carrito del reintento sigue lleno): secuencia por caja
+    auto s2 = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "key-b4-2");
+    TEST_CHECK(s2.is_success(), "Venta 2: " + s2.error_message());
+    const std::string folio2 = s2.value().folio;
+    TEST_CHECK(folio2 == "V-C1-00002", "Segundo folio de C1: " + folio2);
+    close_current();
+
+    // Segunda caja: folio con su propio código, sin chocar con la primera
+    auto sale_c2 = sell_on("reg-02", "key-b4-3");
+    TEST_CHECK(sale_c2.folio == "V-C2-00001", "Primer folio de la caja C2: " + sale_c2.folio);
+    TEST_CHECK(sale_c2.folio != sale1.folio, "Folios de cajas distintas no chocan");
+    close_current();
+
+    // Respaldo cuando una caja no tiene código: A-Z0-9, máximo 4 caracteres
+    TEST_CHECK(db.execute("INSERT INTO cash_registers (id, name) VALUES ('caja-larga-9', 'Caja sin codigo');").is_success(), "Caja sin código");
+    TEST_CHECK(db.execute("INSERT INTO cash_registers (id, name, code) VALUES ('reg-largo', 'Caja codigo largo', 'abc-defgh');").is_success(), "Caja con código largo");
+    TEST_CHECK(db.execute("INSERT INTO cash_registers (id, name) VALUES ('---', 'Caja sin alfanumericos');").is_success(), "Caja sin caracteres válidos");
+    auto sale_x = sell_on("caja-larga-9", "");
+    TEST_CHECK(sale_x.folio == "V-CAJA-00001", "Caja sin código usa su id saneado (4 máx): " + sale_x.folio);
+    close_current();
+    auto sale_y = sell_on("reg-largo", "");
+    TEST_CHECK(sale_y.folio == "V-ABCD-00001", "Código largo se limita a 4 caracteres A-Z0-9: " + sale_y.folio);
+    close_current();
+    auto sale_z = sell_on("---", "");
+    TEST_CHECK(sale_z.folio == "V-X-00001", "Sin caracteres válidos se usa X: " + sale_z.folio);
+    close_current();
+    for (const std::string& f : {sale1.folio, folio2, sale_c2.folio, sale_x.folio, sale_y.folio, sale_z.folio}) {
+        TEST_CHECK(f.size() <= 12, "El folio no excede 12 caracteres: " + f);
+        auto t = sale_svc->get_ticket(f);
+        TEST_CHECK(t.is_success() && t.value().folio == f, "Cada folio nuevo se recupera con get_ticket: " + f);
+    }
+    TEST_CHECK(q("SELECT COUNT(DISTINCT folio) FROM sales;") == "7", "Los 7 folios (1 antiguo + 6 nuevos) son distintos");
+
+    db.close();
+    std::error_code ec;
+    fs::remove_all(base_dir, ec);
+    std::cout << "  -> Identificadores, UTC, updated_at, folios por caja y migración 010 verificados." << std::endl;
+}
+
 int main() {
     std::cout << "=== PRUEBAS DE ALMACENAMIENTO SQLITE, PERSISTENCIA Y SEGURIDAD (Debug y Release) ===" << std::endl;
     test_sqlite_lifecycle_and_persistence();
@@ -3204,6 +3510,7 @@ int main() {
     test_i2_print_config_service_permissions();
     test_i2_print_config_atomic_save_and_isolation();
     test_b4a_permission_titles_migration();
+    test_b4_ids_clock_folios_and_migration();
     std::cout << "\n>>> TODAS LAS PRUEBAS DE ALMACENAMIENTO PASARON CON EXITO! <<<\n" << std::endl;
     return 0;
 }

@@ -1,4 +1,6 @@
 #include "app/services/sqlite_shift_service.hpp"
+#include "app/services/identifiers.hpp"
+#include "app/domain/clock.hpp"
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -7,23 +9,6 @@
 namespace app::services {
 
 namespace {
-
-std::string current_timestamp() {
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
-    return ss.str();
-}
-
-std::string generate_id(const std::string& prefix) {
-    static std::atomic<std::uint64_t> counter{0};
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    std::stringstream ss;
-    ss << prefix << "-" << now_ms << "-" << ++counter;
-    return ss.str();
-}
 
 } // namespace
 
@@ -171,12 +156,13 @@ contracts::Result<contracts::ShiftDto> SqliteShiftService::open_shift(
 
     // 3. Insertar el nuevo turno
     std::string shift_id = generate_id("shift");
-    std::string now = current_timestamp();
+    const auto ts = domain::now();
+    const std::string& now = ts.local;
 
     {
         auto prep = db_.prepare(
-            "INSERT INTO shifts (id, register_id, cashier_user_id, opened_at, initial_cash_cents, is_open) "
-            "VALUES (?, ?, ?, ?, ?, 1);"
+            "INSERT INTO shifts (id, register_id, cashier_user_id, opened_at, opened_at_utc, initial_cash_cents, is_open) "
+            "VALUES (?, ?, ?, ?, ?, ?, 1);"
         );
         if (!prep.is_success()) {
             db_.execute("ROLLBACK;");
@@ -187,7 +173,8 @@ contracts::Result<contracts::ShiftDto> SqliteShiftService::open_shift(
         stmt.bind_text(2, register_id);
         stmt.bind_text(3, cur_user.value().id);
         stmt.bind_text(4, now);
-        stmt.bind_int64(5, initial_cash.cents());
+        stmt.bind_text(5, ts.utc);
+        stmt.bind_int64(6, initial_cash.cents());
 
         auto step = stmt.step();
         if (!step.is_success()) {
@@ -202,8 +189,8 @@ contracts::Result<contracts::ShiftDto> SqliteShiftService::open_shift(
     {
         std::string move_id = generate_id("cm");
         auto prep_cm = db_.prepare(
-            "INSERT INTO cash_movements (id, shift_id, movement_type, amount_cents, description, created_at) "
-            "VALUES (?, ?, 'INITIAL_CASH', ?, 'Fondo inicial de turno', ?);"
+            "INSERT INTO cash_movements (id, shift_id, movement_type, amount_cents, description, created_at, created_at_utc) "
+            "VALUES (?, ?, 'INITIAL_CASH', ?, 'Fondo inicial de turno', ?, ?);"
         );
         if (!prep_cm.is_success()) {
             db_.execute("ROLLBACK;");
@@ -214,6 +201,7 @@ contracts::Result<contracts::ShiftDto> SqliteShiftService::open_shift(
         stmt_cm.bind_text(2, shift_id);
         stmt_cm.bind_int64(3, initial_cash.cents());
         stmt_cm.bind_text(4, now);
+        stmt_cm.bind_text(5, ts.utc);
         auto step_cm = stmt_cm.step();
         if (!step_cm.is_success()) {
             stmt_cm.reset();
@@ -278,10 +266,11 @@ contracts::OperationResult SqliteShiftService::close_shift(contracts::Money fina
         return contracts::OperationResult::fail(tx_begin.error_code(), "Error al iniciar transacción de cierre: " + tx_begin.error_message());
     }
 
-    std::string now = current_timestamp();
+    const auto ts = domain::now();
+    const std::string& now = ts.local;
     {
         auto prep = db_.prepare(
-            "UPDATE shifts SET is_open = 0, closed_at = ?, final_cash_cents = ? WHERE id = ?;"
+            "UPDATE shifts SET is_open = 0, closed_at = ?, closed_at_utc = ?, final_cash_cents = ? WHERE id = ?;"
         );
         if (!prep.is_success()) {
             db_.execute("ROLLBACK;");
@@ -289,8 +278,9 @@ contracts::OperationResult SqliteShiftService::close_shift(contracts::Money fina
         }
         auto stmt = std::move(prep.value());
         stmt.bind_text(1, now);
-        stmt.bind_int64(2, final_cash.cents());
-        stmt.bind_text(3, cur_shift.value().id);
+        stmt.bind_text(2, ts.utc);
+        stmt.bind_int64(3, final_cash.cents());
+        stmt.bind_text(4, cur_shift.value().id);
 
         auto step = stmt.step();
         if (!step.is_success()) {

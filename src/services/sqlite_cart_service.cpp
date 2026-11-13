@@ -1,4 +1,6 @@
 #include "app/services/sqlite_cart_service.hpp"
+#include "app/services/identifiers.hpp"
+#include "app/domain/clock.hpp"
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -9,23 +11,6 @@
 namespace app::services {
 
 namespace {
-
-std::string current_timestamp() {
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
-    return ss.str();
-}
-
-std::string generate_id(const std::string& prefix) {
-    static std::atomic<std::uint64_t> counter{0};
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    std::stringstream ss;
-    ss << prefix << "-" << now_ms << "-" << ++counter;
-    return ss.str();
-}
 
 bool safe_multiply(std::int64_t a, std::int64_t b, std::int64_t& result) {
     if (a > 0 && b > 0 && a > std::numeric_limits<std::int64_t>::max() / b) return false;
@@ -142,7 +127,7 @@ contracts::OperationResult SqliteCartService::touch_cart(const std::string& cart
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
     }
     auto stmt = std::move(prep.value());
-    CHECK_BIND_OP(stmt.bind_text(1, current_timestamp()));
+    CHECK_BIND_OP(stmt.bind_text(1, domain::now().local));
     CHECK_BIND_OP(stmt.bind_text(2, cart_id));
     auto step = stmt.step();
     if (!step.is_success()) {
@@ -189,7 +174,7 @@ contracts::Result<std::string> SqliteCartService::get_or_create_cart_id() {
 
     // 2. Crear nuevo carrito si no existe
     std::string cart_id = generate_id("cart");
-    std::string now = current_timestamp();
+    std::string now = domain::now().local;
     {
         auto prep = db_.prepare("INSERT INTO carts (id, register_id, user_id, updated_at) VALUES (?, ?, ?, ?);");
         if (!prep.is_success()) {

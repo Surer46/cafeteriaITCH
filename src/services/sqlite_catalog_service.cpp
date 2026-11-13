@@ -1,4 +1,6 @@
 #include "app/services/sqlite_catalog_service.hpp"
+#include "app/services/identifiers.hpp"
+#include "app/domain/clock.hpp"
 #include "app/domain/unit_converter.hpp"
 #include <chrono>
 #include <iomanip>
@@ -9,23 +11,6 @@
 namespace app::services {
 
 namespace {
-
-std::string current_timestamp() {
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
-    return ss.str();
-}
-
-std::string generate_id(const std::string& prefix) {
-    static std::atomic<std::uint64_t> counter{0};
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    std::stringstream ss;
-    ss << prefix << "-" << now_ms << "-" << ++counter;
-    return ss.str();
-}
 
 bool validate_image_header(const std::vector<std::uint8_t>& bytes, std::string& out_mime) {
     if (bytes.size() < 4) return false;
@@ -335,11 +320,12 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::create_product(co
     }
 
     std::string product_id = generate_id("prod");
-    std::string now_str = current_timestamp();
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
 
     auto prep_ins = db_.prepare(
-        "INSERT INTO products (id, sku, barcode, name, category, price_cents, is_prepared, is_active, created_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?);"
+        "INSERT INTO products (id, sku, barcode, name, category, price_cents, is_prepared, is_active, created_at, updated_at, updated_at_utc) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?);"
     );
     if (!prep_ins.is_success()) {
         return contracts::Result<contracts::ProductDto>::fail(prep_ins.error_code(), prep_ins.error_message());
@@ -358,6 +344,8 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::create_product(co
     stmt_ins.bind_int64(6, input.price.cents());
     stmt_ins.bind_int64(7, input.is_prepared ? 1 : 0);
     stmt_ins.bind_text(8, now_str);
+    stmt_ins.bind_text(9, now_str);
+    stmt_ins.bind_text(10, ts.utc);
 
     auto step_ins = stmt_ins.step();
     if (!step_ins.is_success()) {
@@ -434,7 +422,7 @@ contracts::OperationResult SqliteCatalogService::update_product(const contracts:
 
     auto prep = db_.prepare(
         "UPDATE products SET sku = ?, barcode = ?, name = ?, category = ?, "
-        "price_cents = ?, is_prepared = ?, is_active = ? WHERE id = ?;"
+        "price_cents = ?, is_prepared = ?, is_active = ?, updated_at = ?, updated_at_utc = ? WHERE id = ?;"
     );
     if (!prep.is_success()) {
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
@@ -452,7 +440,10 @@ contracts::OperationResult SqliteCatalogService::update_product(const contracts:
     stmt.bind_int64(5, new_price.cents());
     stmt.bind_int64(6, new_is_prepared ? 1 : 0);
     stmt.bind_int64(7, new_is_active ? 1 : 0);
-    stmt.bind_text(8, input.product_id);
+    const auto upd_ts = domain::now();
+    stmt.bind_text(8, upd_ts.local);
+    stmt.bind_text(9, upd_ts.utc);
+    stmt.bind_text(10, input.product_id);
 
     auto step = stmt.step();
     if (!step.is_success()) {
@@ -475,13 +466,16 @@ contracts::OperationResult SqliteCatalogService::deactivate_product(const std::s
         return contracts::OperationResult::fail(current_prod.error_code(), current_prod.error_message());
     }
 
-    auto prep = db_.prepare("UPDATE products SET is_active = 0 WHERE id = ?;");
+    auto prep = db_.prepare("UPDATE products SET is_active = 0, updated_at = ?, updated_at_utc = ? WHERE id = ?;");
     if (!prep.is_success()) {
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
     }
 
     auto stmt = std::move(prep.value());
-    stmt.bind_text(1, product_id);
+    const auto act_ts = domain::now();
+    stmt.bind_text(1, act_ts.local);
+    stmt.bind_text(2, act_ts.utc);
+    stmt.bind_text(3, product_id);
     auto step = stmt.step();
     if (!step.is_success()) {
         return contracts::OperationResult::fail(step.error_code(), step.error_message());
@@ -503,13 +497,16 @@ contracts::OperationResult SqliteCatalogService::reactivate_product(const std::s
         return contracts::OperationResult::fail(current_prod.error_code(), current_prod.error_message());
     }
 
-    auto prep = db_.prepare("UPDATE products SET is_active = 1 WHERE id = ?;");
+    auto prep = db_.prepare("UPDATE products SET is_active = 1, updated_at = ?, updated_at_utc = ? WHERE id = ?;");
     if (!prep.is_success()) {
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
     }
 
     auto stmt = std::move(prep.value());
-    stmt.bind_text(1, product_id);
+    const auto act_ts = domain::now();
+    stmt.bind_text(1, act_ts.local);
+    stmt.bind_text(2, act_ts.utc);
+    stmt.bind_text(3, product_id);
     auto step = stmt.step();
     if (!step.is_success()) {
         return contracts::OperationResult::fail(step.error_code(), step.error_message());
@@ -555,8 +552,8 @@ contracts::OperationResult SqliteCatalogService::set_product_image(
 
     std::string img_id = "img-" + product_id;
     auto prep = db_.prepare(
-        "INSERT OR REPLACE INTO product_images (id, product_id, mime_type, image_blob, thumbnail_blob) "
-        "VALUES (?, ?, ?, ?, ?);"
+        "INSERT OR REPLACE INTO product_images (id, product_id, mime_type, image_blob, thumbnail_blob, updated_at, updated_at_utc) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?);"
     );
     if (!prep.is_success()) {
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
@@ -568,6 +565,9 @@ contracts::OperationResult SqliteCatalogService::set_product_image(
     stmt.bind_text(3, detected_mime);
     stmt.bind_blob(4, image_bytes);
     stmt.bind_blob(5, image_bytes); // Miniatura preservada
+    const auto img_ts = domain::now();
+    stmt.bind_text(6, img_ts.local);
+    stmt.bind_text(7, img_ts.utc);
 
     auto step = stmt.step();
     if (!step.is_success()) {
@@ -782,9 +782,10 @@ contracts::OperationResult SqliteCatalogService::set_recipe(
     // Las ventas y consultas vigentes utilizan automáticamente la versión más reciente (ORDER BY version DESC LIMIT 1).
 
     std::string recipe_id = generate_id("rcp");
-    std::string now_str = current_timestamp();
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
 
-    auto prep_rcp = db_.prepare("INSERT INTO recipes (id, product_id, version, created_at) VALUES (?, ?, ?, ?);");
+    auto prep_rcp = db_.prepare("INSERT INTO recipes (id, product_id, version, created_at, updated_at, updated_at_utc) VALUES (?, ?, ?, ?, ?, ?);");
     if (!prep_rcp.is_success()) {
         db_.rollback_transaction();
         return contracts::OperationResult::fail(prep_rcp.error_code(), prep_rcp.error_message());
@@ -795,6 +796,8 @@ contracts::OperationResult SqliteCatalogService::set_recipe(
     stmt_rcp.bind_text(2, product_id);
     stmt_rcp.bind_int64(3, new_version);
     stmt_rcp.bind_text(4, now_str);
+    stmt_rcp.bind_text(5, now_str);
+    stmt_rcp.bind_text(6, ts.utc);
     auto step_rcp = stmt_rcp.step();
     if (!step_rcp.is_success()) {
         db_.rollback_transaction();
@@ -827,10 +830,12 @@ contracts::OperationResult SqliteCatalogService::set_recipe(
 
     // Si el producto no estaba marcado como preparado, actualizarlo a preparado
     if (!current_prod.value().is_prepared) {
-        auto prep_prep = db_.prepare("UPDATE products SET is_prepared = 1 WHERE id = ?;");
+        auto prep_prep = db_.prepare("UPDATE products SET is_prepared = 1, updated_at = ?, updated_at_utc = ? WHERE id = ?;");
         if (prep_prep.is_success()) {
             auto stmt_prep = std::move(prep_prep.value());
-            stmt_prep.bind_text(1, product_id);
+            stmt_prep.bind_text(1, ts.local);
+            stmt_prep.bind_text(2, ts.utc);
+            stmt_prep.bind_text(3, product_id);
             stmt_prep.step();
         }
     }
