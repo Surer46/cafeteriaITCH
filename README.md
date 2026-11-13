@@ -6,7 +6,7 @@ La especificación completa está en [`docs/specs.md`](docs/specs.md); las regla
 
 ## Avance
 
-**Al 2026-11-12: cerca del 42 % hacia la versión 1.0 y del 57 % hacia un piloto en caja.**
+**Al 2026-11-12 (cierre de la ronda 4): cerca del 44 % hacia la versión 1.0 y del 59 % hacia un piloto en caja.**
 
 Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cierra con pruebas del ejecutable real y, donde aplica, revisión humana y hardware.
 
@@ -17,8 +17,8 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 | **I3** Inventario, ingredientes y recetas | 0 % en pantallas | Bloqueada hasta la revisión humana de I2 y las decisiones de negocio de la sección 9 de `docs/specs.md`. Parte del backend ya existe (unidades, recetas, compras básicas). |
 | **I4** Corte de turno y reportes | 35 % | Listos: resumen diario real, pantalla de Caja y turnos, Bitácora. Faltan la conciliación del corte y la pantalla de Reportes. |
 | **I5** Respaldos y restauración | 45 % | Respaldo consistente y restauración con pruebas. Faltan su pantalla, la limpieza de respaldos viejos y el servidor externo opcional. |
-| **I6** Usuarios, roles y permisos | 85 % | Pantallas de Usuarios y de Roles. En curso: permisos con título, descripción e interruptores. |
-| **I7** Perfil táctil, instalador y entrega | 10 % | Existe el perfil táctil. No hay instalador; faltan los datos de la PC de caja. |
+| **I6** Usuarios, roles y permisos | 95 % | Pantallas de Usuarios y de Roles. Los permisos se muestran con título, descripción e interruptores, agrupados por sección. Falta dar más alto a la lista de permisos y la revisión humana. |
+| **I7** Perfil táctil, instalador y entrega | 12 % | Existe el perfil táctil. Datos preparados para más de una caja o dispositivo (identificadores únicos, hora UTC, última modificación y folio por caja). No hay instalador; faltan los datos de la PC de caja. |
 
 ### Pantallas reales hoy
 
@@ -57,7 +57,7 @@ ctest --test-dir build_release --output-on-failure
 Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
 
 - **CTest (5):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`.
-- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`.
+- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`. Solo son válidas con el escalado de Windows al 100 %. `test_i2_integration.py` necesita un ajuste tras el cambio de folio (busca `V-10001`).
 - **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
 
 Ejecutar con una carpeta de datos aparte:

@@ -294,3 +294,36 @@ Conclusión provisional: la mejora visible viene de la memoria operativa de `AGE
 - **Confirmación a 100 %:** con la pantalla a 1920x1080 y escalado 100 % (96 DPI), el orquestador repitió las cuatro pruebas fallidas con el código de F0: `test_fe08_fe09_visual_integration`, `test_f1_roles_panel`, `test_f2_audit_log` y `test_f2b_subnav` terminan con exit 0 en Release y Debug. El diagnóstico de DPI queda confirmado y la línea base GUI en esta PC es válida a 100 %. `test_i2_integration` no se repitió (pasó a 125 % según Gemini).
 
 **Verificación integrada en `main` (`2bdd6ae`, F0 + B4a):** build 0 advertencias y CTest 5/5 en Release y Debug; `test_i1_integration` exit 0 en ambos, a 100 % de escalado. No se corrió `test_f1_roles_panel` tras integrar: fallará por los textos nuevos hasta F5 (ver B4a). Tampoco `test_i2_integration`, `test_f2_audit_log`, `test_f2b_subnav` ni `test_fe08_fe09_visual_integration` tras la integración (B4a no toca venta, bitácora ni navegación).
+
+## Ronda 4 — F5 (AntiGravity, Gemini 4 Hydrogen) — auditado el 2026-11-12
+
+**F5:** aceptado. Interruptores con título y descripción en BackOffice > Roles y permisos.
+
+- Alcance: `src/frontend/toggle_switch.{hpp,cpp}` (nuevos), `CMakeLists.txt` (solo esas dos fuentes), `backoffice_roles_panel.{cpp,hpp}`, `tests/test_f1_roles_panel.py` y las capturas regeneradas por `capture_visual_qa.py` (script sin tocar). Nada fuera de lo permitido.
+- `ToggleSwitch`: dibujado propio con doble búfer, sin temporizadores; 44x24 y 60x32 por `FromDIP`; estado por posición de la perilla y marca; foco y Espacio; responde a `BM_GETCHECK`, `BM_SETCHECK` y `BM_CLICK`.
+- Panel: cuatro grupos en el orden de la barra lateral desde `section` y `sort_order`; título en negrita y descripción secundaria con ajuste de línea; separador de 1 px; clic en toda la fila; contador junto a Guardar; filtro de `backup.dev_config` conservado; `get_module_display_name` eliminado.
+- Prueba: 36 aserciones de casillas sustituidas por 57; ninguna relajada. Las de columnas de la lista (encabezado, holgura, sin `WS_HSCROLL`) se conservan. Los permisos se localizan por el título leído de SQLite. Se quitó `BS_TOP`, que solo aplicaba a `wxCheckBox`. La cadena de referencia de la columna Permisos pasó de "16" a "20".
+- Verificación del orquestador a 1920x1080 y 100 %: build sin advertencias y CTest 5/5 en Release y Debug; `test_f1_roles_panel` exit 0 en ambos; `test_i1_integration` exit 0 en ambos. Medidas: Estándar interruptor 44x24, filas de 66 px o más (86 a 960x600); Touch 60x32, filas de 78 px o más (120 a 960x600). Columnas: Estándar N=74 D=101 S=75 P=84 (cliente 336, holgura 2); Touch N=76 D=124 S=78 P=86 (cliente 366, holgura 2).
+- Capturas 09 y 10 revisadas: legibles, sin recortes ni solapes.
+- **Observación de uso (no bloquea):** el área visible de permisos es baja. A 1200x720 caben unas 3,5 filas en Estándar y menos de 2 en Touch; hay que desplazarse por 20 permisos. Candidato a un bloque corto: dar más alto a la lista (por ejemplo, compactar Nombre y Descripción o desplazar toda la tarjeta).
+- Menores: los márgenes y altos mínimos de fila (12/16, 52/68, 24) no pasan por `FromDIP`, solo el interruptor; dos colores del estado deshabilitado están fijos en `toggle_switch.cpp` porque `theme.*` no era editable. Ambos para el bloque de DPI.
+- No verificado: Tab entre interruptores (sí Espacio con foco); escalados distintos de 100 %; `test_i2_integration`, `test_f2_audit_log`, `test_f2b_subnav` y `test_fe08_fe09_visual_integration` no se repitieron (F5 no toca esos paneles).
+- Informe de Gemini 4 Hydrogen: literal; declaró el fallo inicial de compilación, las dos corridas fallidas de la prueba y su causa, y las aserciones cambiadas.
+
+## Ronda 4 — B4 (Claude Code Terminal) — auditado el 2026-11-12
+
+**B4:** aceptado en `112dc40`, integrado en `3bbf40b` por indicación del usuario.
+
+- Alcance: migración `010_sync_readiness.sql`; nuevos `identifiers` (servicios), `clock` (dominio) y `random_bytes` (crypto, autorizado en la respuesta al plan); los 6 servicios SQLite, `sqlite_sale_service.hpp`, `CMakeLists.txt` (bibliotecas, no `app_desktop`), `tests/test_storage.cpp` y `tests/test_backup.cpp`. Sin cambios en contratos, frontend, `tests/*.py` ni migraciones 001 a 009.
+- Ajustes del plan cumplidos: `generate_id` en servicios (el dominio no enlaza crypto), folio con el código de la caja del turno y calculado dentro de la transacción, respaldo de código limitado a 4 caracteres, cajas extra C2, C3... por rowid, cabecera de la 010 con el significado de UTC en NULL.
+- Pruebas: 101 `TEST_CHECK` nuevos. Tres existentes cambiados, todos justificados: versión de esquema 9 a 10 (dos) y el alta del Dueño en la prueba de esquema v7, ahora por SQL porque el servicio escribe columnas que v7 no tiene. Ninguna relajada.
+- Verificación del orquestador en el worktree: build sin advertencias y CTest 5/5 en Release y Debug.
+- **Al integrar:** `tests/test_i2_integration.py` línea 980 busca `V-10001` y fallará (primer folio nuevo `V-C1-00001`); bloque corto de Gemini para leer el folio de la base. Tras integrar, correr build, CTest, I1 e I2 a 100 % de escalado.
+- Pendientes de backend que deja a la vista:
+  - `create_verified_snapshot` (`sqlite_backup_service.cpp`) no borra `<destino>.tmp-wal` y `-shm` en la ruta de éxito: origen de los archivos sueltos vistos en B4a.
+  - `generate_next_folio` usa `substr(folio, 1, n) = ?`, que recorre toda la tabla `sales` en cada venta; cambiar a un rango sobre el índice único de `folio` antes de acumular muchas ventas.
+  - Carrito y reintento idempotente siguen fijos a `reg-01`: con una segunda caja el folio sería correcto pero el carrito y el reintento no.
+  - `generate_id` lanza `std::runtime_error` si no hay entropía y nadie lo captura (dentro de una transacción quedaría sin `ROLLBACK`); improbable en Windows.
+- No verificado: flujo real en el ejecutable ni pruebas GUI con B4; rendimiento con muchas ventas.
+
+**Verificación integrada en `main` (`3bbf40b`, F5 + B4):** build sin advertencias y CTest 5/5 en Release y Debug; `test_i1_integration` exit 0 en ambos, a 100 % de escalado. No se corrieron tras integrar: `test_i2_integration` (fallo esperado por el folio), `test_f1_roles_panel`, `test_f2_audit_log`, `test_f2b_subnav` ni `test_fe08_fe09_visual_integration`.
