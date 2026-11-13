@@ -42,6 +42,10 @@ public:
 
     // Recetas de platillos y bebidas preparados
     virtual Result<RecipeDto> get_recipe(const std::string& product_id) = 0;
+    // Costo por porción y margen del producto con el promedio móvil de cada ingrediente.
+    // Requiere inventory.manage_products (Forbidden en otro caso). Un ingrediente sin compras
+    // es de costo desconocido: la receta lo lista y no presenta margen.
+    virtual Result<RecipeCostingDto> get_recipe_costing(const std::string& product_id) = 0;
     virtual OperationResult set_recipe(
         const std::string& product_id,
         const std::vector<RecipeItemDto>& items

@@ -2,11 +2,14 @@
 #include "app/services/identifiers.hpp"
 #include "app/domain/clock.hpp"
 #include "app/domain/unit_converter.hpp"
+#include "app/domain/stock_valuation.hpp"
+#include "app/services/stock_ledger.hpp"
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <atomic>
 #include <algorithm>
+#include <limits>
 
 namespace app::services {
 
@@ -415,6 +418,12 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
     }
     std::int64_t base_units_purchased = base_units_res.value();
 
+    auto actor_user = account_service_->current_user();
+    if (!actor_user.is_success()) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
+    const std::string actor_id = actor_user.value().id;
+
     auto tx = db_.begin_transaction();
     if (!tx.is_success()) return tx;
 
@@ -426,8 +435,8 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
     // 1. Insertar entrada de compra preservando costo total y unidades base exactas
     auto prep_pe = db_.prepare(
         "INSERT INTO purchase_entries (id, ingredient_id, quantity_purchased, purchase_unit, "
-        "total_cost_cents, base_units_purchased, created_at, created_at_utc) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+        "total_cost_cents, base_units_purchased, created_at, created_at_utc, actor_user_id) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
     );
     if (!prep_pe.is_success()) {
         db_.rollback_transaction();
@@ -443,32 +452,25 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
     stmt_pe.bind_int64(6, base_units_purchased);
     stmt_pe.bind_text(7, now_str);
     stmt_pe.bind_text(8, ts.utc);
+    stmt_pe.bind_text(9, actor_id);
     auto step_pe = stmt_pe.step();
     if (!step_pe.is_success()) {
         db_.rollback_transaction();
         return contracts::OperationResult::fail(step_pe.error_code(), step_pe.error_message());
     }
 
-    // 2. Incrementar stock actual en base de datos
-    auto prep_upd = db_.prepare("UPDATE ingredients SET current_stock = current_stock + ? WHERE id = ?;");
-    if (!prep_upd.is_success()) {
+    // 2. Existencias y valuación (promedio móvil) por la función compartida, en esta misma transacción
+    auto ledger_res = apply_stock_change(
+        db_, ingredient_id, StockChangeKind::Purchase, base_units_purchased, total_cost.cents());
+    if (!ledger_res.is_success()) {
         db_.rollback_transaction();
-        return contracts::OperationResult::fail(prep_upd.error_code(), prep_upd.error_message());
-    }
-
-    auto stmt_upd = std::move(prep_upd.value());
-    stmt_upd.bind_int64(1, base_units_purchased);
-    stmt_upd.bind_text(2, ingredient_id);
-    auto step_upd = stmt_upd.step();
-    if (!step_upd.is_success()) {
-        db_.rollback_transaction();
-        return contracts::OperationResult::fail(step_upd.error_code(), step_upd.error_message());
+        return ledger_res;
     }
 
     // 3. Registrar movimiento de inventario (PURCHASE)
     auto prep_sm = db_.prepare(
-        "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at, created_at_utc) "
-        "VALUES (?, ?, 'PURCHASE', ?, 'Entrada de compra', ?, ?);"
+        "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at, created_at_utc, actor_user_id) "
+        "VALUES (?, ?, 'PURCHASE', ?, 'Entrada de compra', ?, ?, ?);"
     );
     if (!prep_sm.is_success()) {
         db_.rollback_transaction();
@@ -481,6 +483,7 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
     stmt_sm.bind_int64(3, base_units_purchased);
     stmt_sm.bind_text(4, now_str);
     stmt_sm.bind_text(5, ts.utc);
+    stmt_sm.bind_text(6, actor_id);
     auto step_sm = stmt_sm.step();
     if (!step_sm.is_success()) {
         db_.rollback_transaction();
@@ -503,6 +506,393 @@ contracts::OperationResult SqliteInventoryService::register_purchase_entry(
     }
 
     return contracts::OperationResult::ok();
+}
+
+namespace {
+
+// Cuenta caracteres Unicode (no bytes) de un texto UTF-8.
+std::size_t utf8_length(const std::string& s) {
+    std::size_t n = 0;
+    for (unsigned char ch : s) {
+        if ((ch & 0xC0) != 0x80) ++n;
+    }
+    return n;
+}
+
+std::string trim_copy(const std::string& s) {
+    const char* ws = " \t\r\n";
+    const auto first = s.find_first_not_of(ws);
+    if (first == std::string::npos) return "";
+    const auto last = s.find_last_not_of(ws);
+    return s.substr(first, last - first + 1);
+}
+
+bool is_valid_date_filter(const std::string& d) {
+    if (d.size() != 10 || d[4] != '-' || d[7] != '-') return false;
+    for (std::size_t i = 0; i < d.size(); ++i) {
+        if (i == 4 || i == 7) continue;
+        if (d[i] < '0' || d[i] > '9') return false;
+    }
+    const int month = (d[5] - '0') * 10 + (d[6] - '0');
+    const int day = (d[8] - '0') * 10 + (d[9] - '0');
+    return month >= 1 && month <= 12 && day >= 1 && day <= 31;
+}
+
+bool is_known_movement_type(const std::string& t) {
+    return t == "PURCHASE" || t == "SALE" || t == "ADJUSTMENT" || t == "WASTE" || t == "TRANSFER";
+}
+
+int normalize_limit(int limit) {
+    if (limit <= 0) return 100;
+    if (limit > 500) return 500;
+    return limit;
+}
+
+} // namespace
+
+contracts::OperationResult SqliteInventoryService::register_stock_change(
+    const char* movement_type,
+    const std::string& ingredient_id,
+    std::int64_t signed_quantity,
+    const std::string& unit,
+    const std::string& reason
+) {
+    auto perm_res = check_permission_or_fail("inventory.adjust");
+    if (!perm_res.is_success()) return perm_res;
+
+    const std::string clean_reason = trim_copy(reason);
+    if (clean_reason.empty()) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "El motivo es obligatorio");
+    }
+    if (utf8_length(clean_reason) > 200) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::InvalidInput, "El motivo no puede exceder 200 caracteres");
+    }
+    if (signed_quantity == 0) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::InvalidInput, "La cantidad no puede ser cero");
+    }
+    if (signed_quantity == std::numeric_limits<std::int64_t>::min()) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::InvalidInput, "Cantidad fuera de rango");
+    }
+    const bool negative = signed_quantity < 0;
+    const std::int64_t magnitude = negative ? -signed_quantity : signed_quantity;
+
+    auto current_ing = get_ingredient(ingredient_id);
+    if (!current_ing.is_success()) {
+        return contracts::OperationResult::fail(current_ing.error_code(), current_ing.error_message());
+    }
+    if (!domain::UnitConverter::are_compatible(unit, current_ing.value().base_unit)) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::InvalidInput,
+            "La unidad '" + unit + "' no es dimensionalmente compatible con la unidad base '" +
+                current_ing.value().base_unit + "'"
+        );
+    }
+    auto base_res = domain::UnitConverter::to_base_units(magnitude, unit);
+    if (!base_res.is_success()) {
+        return contracts::OperationResult::fail(base_res.error_code(), base_res.error_message());
+    }
+    const std::int64_t base_magnitude = base_res.value();
+    if (base_magnitude <= 0) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::InvalidInput, "La cantidad convertida debe ser positiva");
+    }
+    const std::int64_t delta = negative ? -base_magnitude : base_magnitude;
+
+    auto cur_user = account_service_->current_user();
+    if (!cur_user.is_success()) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
+
+    auto tx = db_.begin_transaction();
+    if (!tx.is_success()) return tx;
+
+    // Existencia vigente leída dentro de la transacción (BEGIN IMMEDIATE ya tomó el bloqueo de escritura).
+    std::int64_t stock_now = 0;
+    {
+        auto prep = db_.prepare("SELECT current_stock FROM ingredients WHERE id = ?;");
+        if (!prep.is_success()) {
+            db_.rollback_transaction();
+            return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
+        }
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, ingredient_id);
+        auto step = stmt.step();
+        if (!step.is_success() || !step.value()) {
+            stmt.reset();
+            db_.rollback_transaction();
+            return contracts::OperationResult::fail(contracts::ErrorCode::NotFound, "Ingrediente no encontrado");
+        }
+        stock_now = stmt.get_int64(0);
+        stmt.reset();
+    }
+
+    std::int64_t new_stock = 0;
+    if (delta < 0) {
+        if (stock_now < base_magnitude) {
+            db_.rollback_transaction();
+            return contracts::OperationResult::fail(
+                contracts::ErrorCode::InsufficientStock,
+                "Existencias insuficientes de '" + current_ing.value().name + "'. Disponible: " +
+                    std::to_string(stock_now) + " " + current_ing.value().base_unit +
+                    ", se intenta restar: " + std::to_string(base_magnitude)
+            );
+        }
+        new_stock = stock_now - base_magnitude;
+    } else {
+        if (stock_now > std::numeric_limits<std::int64_t>::max() - base_magnitude) {
+            db_.rollback_transaction();
+            return contracts::OperationResult::fail(
+                contracts::ErrorCode::InvalidInput, "Desbordamiento numérico en las existencias");
+        }
+        new_stock = stock_now + base_magnitude;
+    }
+
+    const auto ts = domain::now();
+    const std::string mov_id = generate_id("sm");
+
+    (void)new_stock; // la validación de arriba da el error claro; la función compartida aplica el cambio
+    {
+        auto ledger_res = apply_stock_change(
+            db_, ingredient_id,
+            delta < 0 ? StockChangeKind::Outflow : StockChangeKind::InflowAdjustment,
+            base_magnitude);
+        if (!ledger_res.is_success()) {
+            db_.rollback_transaction();
+            return ledger_res;
+        }
+    }
+
+    {
+        auto prep = db_.prepare(
+            "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, "
+            "created_at, created_at_utc, actor_user_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+        );
+        if (!prep.is_success()) {
+            db_.rollback_transaction();
+            return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
+        }
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, mov_id);
+        stmt.bind_text(2, ingredient_id);
+        stmt.bind_text(3, movement_type);
+        stmt.bind_int64(4, delta);
+        stmt.bind_text(5, clean_reason);
+        stmt.bind_text(6, ts.local);
+        stmt.bind_text(7, ts.utc);
+        stmt.bind_text(8, cur_user.value().id);
+        auto step = stmt.step();
+        if (!step.is_success()) {
+            stmt.reset();
+            db_.rollback_transaction();
+            return contracts::OperationResult::fail(step.error_code(), step.error_message());
+        }
+        stmt.reset();
+    }
+
+    // Auditoría dentro de la misma transacción: si falla, todo se revierte.
+    const bool is_waste = std::string(movement_type) == "WASTE";
+    auto audit = account_service_->record_audit_event(
+        is_waste ? "STOCK_WASTE" : "STOCK_ADJUSTMENT",
+        std::string(is_waste ? "Merma de " : "Ajuste de ") + current_ing.value().name + " (" + ingredient_id + "): " +
+            std::to_string(delta) + " " + current_ing.value().base_unit + ". Motivo: " + clean_reason
+    );
+    if (!audit.is_success()) {
+        db_.rollback_transaction();
+        return contracts::OperationResult::fail(audit.error_code(), "No se pudo registrar la auditoría: " + audit.error_message());
+    }
+
+    auto commit_res = db_.commit_transaction();
+    if (!commit_res.is_success()) {
+        db_.rollback_transaction();
+        return commit_res;
+    }
+    return contracts::OperationResult::ok();
+}
+
+contracts::OperationResult SqliteInventoryService::register_waste(
+    const std::string& ingredient_id,
+    std::int64_t quantity,
+    const std::string& unit,
+    const std::string& reason
+) {
+    auto perm_res = check_permission_or_fail("inventory.adjust");
+    if (!perm_res.is_success()) return perm_res;
+    if (quantity <= 0) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::InvalidInput, "La cantidad de la merma debe ser estrictamente positiva");
+    }
+    return register_stock_change("WASTE", ingredient_id, -quantity, unit, reason);
+}
+
+contracts::OperationResult SqliteInventoryService::register_adjustment(
+    const std::string& ingredient_id,
+    std::int64_t signed_quantity,
+    const std::string& unit,
+    const std::string& reason
+) {
+    return register_stock_change("ADJUSTMENT", ingredient_id, signed_quantity, unit, reason);
+}
+
+contracts::Result<std::vector<contracts::StockMovementDto>> SqliteInventoryService::list_stock_movements(
+    const contracts::StockMovementFilterDto& filter
+) {
+    using Out = contracts::Result<std::vector<contracts::StockMovementDto>>;
+    auto perm_res = check_permission_or_fail("inventory.view");
+    if (!perm_res.is_success()) return Out::fail(perm_res.error_code(), perm_res.error_message());
+
+    if (!filter.movement_type.empty() && !is_known_movement_type(filter.movement_type)) {
+        return Out::fail(contracts::ErrorCode::InvalidInput, "Tipo de movimiento desconocido");
+    }
+    if (!filter.date_from.empty() && !is_valid_date_filter(filter.date_from)) {
+        return Out::fail(contracts::ErrorCode::InvalidInput, "Fecha inicial inválida (use AAAA-MM-DD)");
+    }
+    if (!filter.date_to.empty() && !is_valid_date_filter(filter.date_to)) {
+        return Out::fail(contracts::ErrorCode::InvalidInput, "Fecha final inválida (use AAAA-MM-DD)");
+    }
+
+    std::string sql =
+        "SELECT m.id, m.ingredient_id, i.name, m.movement_type, m.quantity_base_units, i.base_unit, "
+        "m.reason, m.created_at, m.actor_user_id, u.display_name "
+        "FROM stock_movements m "
+        "JOIN ingredients i ON i.id = m.ingredient_id "
+        "LEFT JOIN users u ON u.id = m.actor_user_id "
+        "WHERE 1 = 1 ";
+    if (!filter.ingredient_id.empty()) sql += "AND m.ingredient_id = ? ";
+    if (!filter.movement_type.empty()) sql += "AND m.movement_type = ? ";
+    if (!filter.date_from.empty()) sql += "AND m.created_at >= ? ";
+    if (!filter.date_to.empty()) sql += "AND m.created_at <= ? ";
+    sql += "ORDER BY m.created_at DESC, m.rowid DESC LIMIT ?;";
+
+    auto prep = db_.prepare(sql);
+    if (!prep.is_success()) return Out::fail(prep.error_code(), prep.error_message());
+    auto stmt = std::move(prep.value());
+    int idx = 1;
+    if (!filter.ingredient_id.empty()) stmt.bind_text(idx++, filter.ingredient_id);
+    if (!filter.movement_type.empty()) stmt.bind_text(idx++, filter.movement_type);
+    if (!filter.date_from.empty()) stmt.bind_text(idx++, filter.date_from + " 00:00:00");
+    if (!filter.date_to.empty()) stmt.bind_text(idx++, filter.date_to + " 23:59:59");
+    stmt.bind_int64(idx++, normalize_limit(filter.limit));
+
+    std::vector<contracts::StockMovementDto> list;
+    while (true) {
+        auto step = stmt.step();
+        if (!step.is_success()) return Out::fail(step.error_code(), step.error_message());
+        if (!step.value()) break;
+        contracts::StockMovementDto d;
+        d.id = stmt.get_text(0);
+        d.ingredient_id = stmt.get_text(1);
+        d.ingredient_name = stmt.get_text(2);
+        d.movement_type = stmt.get_text(3);
+        d.quantity_base_units = stmt.get_int64(4);
+        d.base_unit = stmt.get_text(5);
+        d.reason = stmt.get_text(6);
+        d.created_at = stmt.get_text(7);
+        d.actor_user_id = stmt.get_text(8);
+        d.actor_name = stmt.get_text(9);
+        list.push_back(std::move(d));
+    }
+    return Out::ok(std::move(list));
+}
+
+contracts::Result<std::vector<contracts::PurchaseEntryRecordDto>> SqliteInventoryService::list_purchase_entries(
+    const contracts::PurchaseEntryFilterDto& filter
+) {
+    using Out = contracts::Result<std::vector<contracts::PurchaseEntryRecordDto>>;
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return Out::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
+    if (!account_service_->has_permission("inventory.restock") &&
+        !account_service_->has_permission("inventory.manage_products")) {
+        return Out::fail(contracts::ErrorCode::Forbidden, "Permiso insuficiente: inventory.restock");
+    }
+    if (!filter.date_from.empty() && !is_valid_date_filter(filter.date_from)) {
+        return Out::fail(contracts::ErrorCode::InvalidInput, "Fecha inicial inválida (use AAAA-MM-DD)");
+    }
+    if (!filter.date_to.empty() && !is_valid_date_filter(filter.date_to)) {
+        return Out::fail(contracts::ErrorCode::InvalidInput, "Fecha final inválida (use AAAA-MM-DD)");
+    }
+
+    std::string sql =
+        "SELECT p.id, p.ingredient_id, i.name, p.quantity_purchased, p.purchase_unit, p.total_cost_cents, "
+        "p.base_units_purchased, i.base_unit, p.created_at, p.actor_user_id, u.display_name "
+        "FROM purchase_entries p "
+        "JOIN ingredients i ON i.id = p.ingredient_id "
+        "LEFT JOIN users u ON u.id = p.actor_user_id "
+        "WHERE 1 = 1 ";
+    if (!filter.ingredient_id.empty()) sql += "AND p.ingredient_id = ? ";
+    if (!filter.date_from.empty()) sql += "AND p.created_at >= ? ";
+    if (!filter.date_to.empty()) sql += "AND p.created_at <= ? ";
+    sql += "ORDER BY p.created_at DESC, p.rowid DESC LIMIT ?;";
+
+    auto prep = db_.prepare(sql);
+    if (!prep.is_success()) return Out::fail(prep.error_code(), prep.error_message());
+    auto stmt = std::move(prep.value());
+    int idx = 1;
+    if (!filter.ingredient_id.empty()) stmt.bind_text(idx++, filter.ingredient_id);
+    if (!filter.date_from.empty()) stmt.bind_text(idx++, filter.date_from + " 00:00:00");
+    if (!filter.date_to.empty()) stmt.bind_text(idx++, filter.date_to + " 23:59:59");
+    stmt.bind_int64(idx++, normalize_limit(filter.limit));
+
+    std::vector<contracts::PurchaseEntryRecordDto> list;
+    while (true) {
+        auto step = stmt.step();
+        if (!step.is_success()) return Out::fail(step.error_code(), step.error_message());
+        if (!step.value()) break;
+        contracts::PurchaseEntryRecordDto d;
+        d.id = stmt.get_text(0);
+        d.ingredient_id = stmt.get_text(1);
+        d.ingredient_name = stmt.get_text(2);
+        d.quantity_purchased = stmt.get_int64(3);
+        d.purchase_unit = stmt.get_text(4);
+        d.total_cost = contracts::Money(stmt.get_int64(5));
+        d.base_units_purchased = stmt.get_int64(6);
+        d.base_unit = stmt.get_text(7);
+        d.created_at = stmt.get_text(8);
+        d.actor_user_id = stmt.get_text(9);
+        d.actor_name = stmt.get_text(10);
+        list.push_back(std::move(d));
+    }
+    return Out::ok(std::move(list));
+}
+
+contracts::Result<contracts::IngredientCostDto> SqliteInventoryService::get_ingredient_cost(
+    const std::string& ingredient_id,
+    std::int64_t quantity_base_units
+) {
+    using Out = contracts::Result<contracts::IngredientCostDto>;
+    auto perm_res = check_permission_or_fail("inventory.manage_products");
+    if (!perm_res.is_success()) return Out::fail(perm_res.error_code(), perm_res.error_message());
+    if (quantity_base_units < 0) {
+        return Out::fail(contracts::ErrorCode::InvalidInput, "La cantidad no puede ser negativa");
+    }
+
+    auto state = read_stock_state(db_, ingredient_id);
+    if (!state.is_success()) return Out::fail(state.error_code(), state.error_message());
+
+    contracts::IngredientCostDto dto;
+    dto.ingredient_id = ingredient_id;
+    dto.quantity_base_units = quantity_base_units;
+    dto.stock_base_units = state.value().stock;
+
+    auto cost = domain::cost_micro_for_quantity(state.value(), quantity_base_units);
+    if (!cost.is_success()) {
+        if (cost.error_code() == contracts::ErrorCode::NotFound) {
+            // Costo desconocido: nunca se presenta como 0.
+            dto.known = false;
+            dto.basis = contracts::CostBasis::Unknown;
+            return Out::ok(dto);
+        }
+        return Out::fail(cost.error_code(), cost.error_message());
+    }
+    dto.known = true;
+    dto.basis = cost.value().from_last_known ? contracts::CostBasis::LastKnown : contracts::CostBasis::CurrentAverage;
+    dto.cost_for_quantity_micro = cost.value().micro;
+    dto.cost_for_quantity = contracts::Money(domain::micro_to_cents(cost.value().micro));
+    dto.stock_value = contracts::Money(domain::micro_to_cents(state.value().value_micro));
+    return Out::ok(dto);
 }
 
 } // namespace app::services

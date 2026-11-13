@@ -3,6 +3,7 @@
 
 #include <memory>
 #include <map>
+#include "app/domain/stock_valuation.hpp"
 #include "app/contracts/account_service.hpp"
 #include "app/contracts/catalog_service.hpp"
 #include "app/contracts/cart_service.hpp"
@@ -100,6 +101,7 @@ public:
     contracts::OperationResult remove_product_image(const std::string& product_id) override;
 
     contracts::Result<contracts::RecipeDto> get_recipe(const std::string& product_id) override;
+    contracts::Result<contracts::RecipeCostingDto> get_recipe_costing(const std::string& product_id) override;
     contracts::OperationResult set_recipe(
         const std::string& product_id,
         const std::vector<contracts::RecipeItemDto>& items
@@ -158,9 +160,36 @@ public:
         const std::string& purchase_unit,
         contracts::Money total_cost
     ) override;
+    contracts::OperationResult register_waste(
+        const std::string& ingredient_id,
+        std::int64_t quantity,
+        const std::string& unit,
+        const std::string& reason
+    ) override;
+    contracts::OperationResult register_adjustment(
+        const std::string& ingredient_id,
+        std::int64_t signed_quantity,
+        const std::string& unit,
+        const std::string& reason
+    ) override;
+    contracts::Result<contracts::IngredientCostDto> get_ingredient_cost(
+        const std::string& ingredient_id, std::int64_t quantity_base_units) override;
+    contracts::Result<std::vector<contracts::StockMovementDto>> list_stock_movements(
+        const contracts::StockMovementFilterDto& filter) override;
+    contracts::Result<std::vector<contracts::PurchaseEntryRecordDto>> list_purchase_entries(
+        const contracts::PurchaseEntryFilterDto& filter) override;
 
 private:
+    contracts::OperationResult apply_mock_change(
+        const char* type, const std::string& ingredient_id, std::int64_t signed_quantity,
+        const std::string& unit, const std::string& reason);
+
+    domain::StockState& state_for(const contracts::IngredientDto& ing);
+
     std::vector<contracts::IngredientDto> ingredients_;
+    std::map<std::string, domain::StockState> states_;
+    std::vector<contracts::StockMovementDto> movements_;
+    std::vector<contracts::PurchaseEntryRecordDto> purchases_;
 };
 
 class MockSaleService : public contracts::ISaleService {

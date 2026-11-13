@@ -493,6 +493,38 @@ void test_v9_backup_restores_and_migrates(const fs::path& base, const fs::path& 
     env.cleanup();
 }
 
+void test_successful_backup_leaves_no_tmp_files(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B5: un respaldo exitoso no deja archivos .tmp y se restaura..." << std::endl;
+    Env env(base / "t10", mig);
+    env.login_owner();
+    env.add_cashier("cajero_tmp");
+    fs::path bk = env.snapshot("sin-residuos.db");
+    TEST_CHECK(fs::exists(bk), "El respaldo existe");
+    int tmp_like = 0;
+    int total = 0;
+    for (auto& e : fs::directory_iterator(bk.parent_path())) {
+        ++total;
+        const std::string name = e.path().filename().u8string();
+        if (name.find(".tmp") != std::string::npos || name.find("-wal") != std::string::npos || name.find("-shm") != std::string::npos) ++tmp_like;
+    }
+    TEST_CHECK(total == 1, "Solo existe el archivo de respaldo junto al destino");
+    TEST_CHECK(tmp_like == 0, "No quedan archivos .tmp, -wal ni -shm junto al destino");
+    // Dos respaldos seguidos al mismo destino tampoco dejan residuos
+    fs::path bk2 = env.snapshot("sin-residuos.db");
+    int total2 = 0;
+    for (auto& e : fs::directory_iterator(bk2.parent_path())) { (void)e; ++total2; }
+    TEST_CHECK(total2 == 1, "Un segundo respaldo al mismo destino no deja residuos");
+    // El respaldo pasa verificación y se restaura con sus datos
+    auto info = SqliteDatabase::inspect_file(bk);
+    TEST_CHECK(info.is_success() && info.value().integrity_ok, "El respaldo pasa la verificación de integridad");
+    env.add_cashier("cajero_posterior");
+    auto res = env.backup->restore_from_backup(bk.u8string());
+    TEST_CHECK(res.is_success(), "El respaldo se restaura: " + res.error_message());
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM users WHERE username='cajero_tmp';") == 1, "Los datos del respaldo están presentes tras restaurar");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM users WHERE username='cajero_posterior';") == 0, "Lo posterior al respaldo ya no está");
+    env.cleanup();
+}
+
 void test_failure_with_open_transaction(const fs::path& base, const fs::path& mig) {
     std::cout << "[TEST] B1: fallo de copia deja base utilizable y audita..." << std::endl;
     Env env(base / "t8", mig);
@@ -529,6 +561,7 @@ int main() {
     test_status_persists_across_reopen(base, mig);
     test_older_version_migrates(base, mig);
     test_v9_backup_restores_and_migrates(base, mig);
+    test_successful_backup_leaves_no_tmp_files(base, mig);
     test_failure_with_open_transaction(base, mig);
 
     std::error_code ec;

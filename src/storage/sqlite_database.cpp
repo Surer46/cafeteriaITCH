@@ -289,6 +289,52 @@ sqlite3* open_readonly(const std::filesystem::path& p, std::string& err) {
 
 } // namespace
 
+contracts::OperationResult SqliteDatabase::make_single_file(const std::filesystem::path& file_path) {
+    sqlite3* h = nullptr;
+#ifdef _WIN32
+    int rc = sqlite3_open16(file_path.wstring().c_str(), &h);
+#else
+    int rc = sqlite3_open_v2(file_path.c_str(), &h, SQLITE_OPEN_READWRITE, nullptr);
+#endif
+    if (rc != SQLITE_OK) {
+        std::string err = h ? sqlite3_errmsg(h) : "No se pudo abrir el archivo";
+        if (h) sqlite3_close_v2(h);
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::StorageFailure, "No se pudo abrir el respaldo para finalizarlo: " + err);
+    }
+    sqlite3_busy_timeout(h, 5000);
+
+    char* err_msg = nullptr;
+    rc = sqlite3_exec(h, "PRAGMA wal_checkpoint(TRUNCATE);", nullptr, nullptr, &err_msg);
+    if (rc != SQLITE_OK) {
+        std::string err = err_msg ? err_msg : "Error desconocido";
+        sqlite3_free(err_msg);
+        sqlite3_close_v2(h);
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::StorageFailure, "No se pudo completar el checkpoint del respaldo: " + err);
+    }
+
+    std::string mode;
+    bool ok = false;
+    {
+        sqlite3_stmt* st = nullptr;
+        if (sqlite3_prepare_v2(h, "PRAGMA journal_mode = DELETE;", -1, &st, nullptr) == SQLITE_OK) {
+            if (sqlite3_step(st) == SQLITE_ROW) {
+                const unsigned char* t = sqlite3_column_text(st, 0);
+                mode = t ? reinterpret_cast<const char*>(t) : "";
+                ok = true;
+            }
+        }
+        if (st) sqlite3_finalize(st);
+    }
+    sqlite3_close_v2(h);
+    if (!ok || mode != "delete") {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::StorageFailure, "No se pudo dejar el respaldo como archivo único");
+    }
+    return contracts::OperationResult::ok();
+}
+
 contracts::Result<BackupFileInfo> SqliteDatabase::inspect_file(const std::filesystem::path& file_path) {
     std::error_code ec;
     if (!std::filesystem::is_regular_file(file_path, ec)) {

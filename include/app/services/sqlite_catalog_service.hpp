@@ -44,6 +44,7 @@ public:
     contracts::OperationResult remove_product_image(const std::string& product_id) override;
 
     contracts::Result<contracts::RecipeDto> get_recipe(const std::string& product_id) override;
+    contracts::Result<contracts::RecipeCostingDto> get_recipe_costing(const std::string& product_id) override;
     contracts::OperationResult set_recipe(
         const std::string& product_id,
         const std::vector<contracts::RecipeItemDto>& items

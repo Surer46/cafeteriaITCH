@@ -67,8 +67,10 @@ target_include_directories(app_contracts PUBLIC
 add_library(app_domain STATIC
     src/domain/unit_converter.cpp
     src/domain/clock.cpp
+    src/domain/stock_valuation.cpp
     include/app/domain/unit_converter.hpp
     include/app/domain/clock.hpp
+    include/app/domain/stock_valuation.hpp
 )
 target_include_directories(app_domain PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -96,6 +98,7 @@ target_link_libraries(app_storage PUBLIC
 # 6. Biblioteca de Servicios (include/app/services/, src/services/)
 add_library(app_services STATIC
     src/services/identifiers.cpp
+    src/services/stock_ledger.cpp
     src/services/mock_services.cpp
     src/services/sqlite_account_service.cpp
     src/services/sqlite_backup_service.cpp
@@ -107,6 +110,7 @@ add_library(app_services STATIC
     src/services/sqlite_sale_service.cpp
     src/services/sqlite_print_config_service.cpp
     include/app/services/identifiers.hpp
+    include/app/services/stock_ledger.hpp
     include/app/services/mock_services.hpp
     include/app/services/sqlite_account_service.hpp
     include/app/services/sqlite_backup_service.hpp

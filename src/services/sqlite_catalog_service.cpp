@@ -2,6 +2,9 @@
 #include "app/services/identifiers.hpp"
 #include "app/domain/clock.hpp"
 #include "app/domain/unit_converter.hpp"
+#include "app/domain/stock_valuation.hpp"
+#include "app/services/stock_ledger.hpp"
+#include <limits>
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -714,7 +717,10 @@ contracts::Result<contracts::RecipeDto> SqliteCatalogService::get_recipe(const s
         }
     }
 
-    recipe.estimated_cost_per_portion = contracts::Money(total_estimated_cents);
+    // Los costos solo los ve quien tiene inventory.manage_products (campo obsoleto: ver get_recipe_costing).
+    const bool can_see_costs = !account_service_ ||
+        (account_service_->is_authenticated() && account_service_->has_permission("inventory.manage_products"));
+    recipe.estimated_cost_per_portion = can_see_costs ? contracts::Money(total_estimated_cents) : contracts::Money::zero();
     return contracts::Result<contracts::RecipeDto>::ok(recipe);
 }
 
@@ -854,6 +860,91 @@ contracts::OperationResult SqliteCatalogService::set_recipe(
     }
 
     return contracts::OperationResult::ok();
+}
+
+contracts::Result<contracts::RecipeCostingDto> SqliteCatalogService::get_recipe_costing(const std::string& product_id) {
+    using Out = contracts::Result<contracts::RecipeCostingDto>;
+    auto perm_res = check_permission_or_fail("inventory.manage_products");
+    if (!perm_res.is_success()) return Out::fail(perm_res.error_code(), perm_res.error_message());
+
+    auto product = get_product_by_id(product_id);
+    if (!product.is_success()) return Out::fail(product.error_code(), product.error_message());
+
+    auto prep_rec = db_.prepare("SELECT id, version FROM recipes WHERE product_id = ? ORDER BY version DESC LIMIT 1;");
+    if (!prep_rec.is_success()) return Out::fail(prep_rec.error_code(), prep_rec.error_message());
+    auto stmt_rec = std::move(prep_rec.value());
+    stmt_rec.bind_text(1, product_id);
+    auto step_rec = stmt_rec.step();
+    if (!step_rec.is_success()) return Out::fail(step_rec.error_code(), step_rec.error_message());
+    if (!step_rec.value()) {
+        return Out::fail(contracts::ErrorCode::NotFound, "No existe receta configurada para este producto");
+    }
+
+    contracts::RecipeCostingDto dto;
+    dto.product_id = product_id;
+    dto.recipe_id = stmt_rec.get_text(0);
+    dto.version = static_cast<int>(stmt_rec.get_int64(1));
+    dto.price = product.value().price;
+    stmt_rec.reset();
+
+    auto prep_items = db_.prepare(
+        "SELECT ri.ingredient_id, i.name, ri.quantity_base_units, i.base_unit "
+        "FROM recipe_items ri JOIN ingredients i ON ri.ingredient_id = i.id "
+        "WHERE ri.recipe_id = ? ORDER BY i.name ASC;"
+    );
+    if (!prep_items.is_success()) return Out::fail(prep_items.error_code(), prep_items.error_message());
+    auto stmt_items = std::move(prep_items.value());
+    stmt_items.bind_text(1, dto.recipe_id);
+
+    std::int64_t sum_micro = 0;
+    bool all_known = true;
+    while (true) {
+        auto step = stmt_items.step();
+        if (!step.is_success()) return Out::fail(step.error_code(), step.error_message());
+        if (!step.value()) break;
+
+        contracts::RecipeCostLineDto line;
+        line.ingredient_id = stmt_items.get_text(0);
+        line.ingredient_name = stmt_items.get_text(1);
+        line.quantity_base_units = stmt_items.get_int64(2);
+        line.base_unit = stmt_items.get_text(3);
+
+        auto state = read_stock_state(db_, line.ingredient_id);
+        if (!state.is_success()) return Out::fail(state.error_code(), state.error_message());
+        auto cost = domain::cost_micro_for_quantity(state.value(), line.quantity_base_units);
+        if (cost.is_success()) {
+            line.basis = cost.value().from_last_known ? contracts::CostBasis::LastKnown : contracts::CostBasis::CurrentAverage;
+            line.cost_micro = cost.value().micro;
+            line.cost = contracts::Money(domain::micro_to_cents(line.cost_micro));
+            if (cost.value().from_last_known) dto.uses_last_known_cost = true;
+            if (line.cost_micro > std::numeric_limits<std::int64_t>::max() - sum_micro) {
+                return Out::fail(contracts::ErrorCode::InvalidInput, "Desbordamiento al sumar el costo de la receta");
+            }
+            sum_micro += line.cost_micro;
+        } else if (cost.error_code() == contracts::ErrorCode::NotFound) {
+            line.basis = contracts::CostBasis::Unknown;
+            all_known = false;
+            dto.unknown_ingredient_names.push_back(line.ingredient_name);
+        } else {
+            return Out::fail(cost.error_code(), cost.error_message());
+        }
+        dto.lines.push_back(std::move(line));
+    }
+
+    // El total se redondea UNA sola vez, a partir de la suma exacta en micro-centavos.
+    dto.known_cost_subtotal = contracts::Money(domain::micro_to_cents(sum_micro));
+    dto.all_costs_known = all_known;
+    if (all_known) {
+        dto.cost_per_portion = dto.known_cost_subtotal;
+        dto.margin_known = true;
+        dto.margin = dto.price - dto.cost_per_portion;
+        auto bp = domain::margin_basis_points(dto.margin.cents(), dto.price.cents());
+        if (bp.is_success()) {
+            dto.margin_percent_known = true;
+            dto.margin_basis_points = bp.value();
+        }
+    }
+    return Out::ok(dto);
 }
 
 } // namespace app::services

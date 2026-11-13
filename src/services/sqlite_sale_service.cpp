@@ -1,5 +1,6 @@
 #include "app/services/sqlite_sale_service.hpp"
 #include "app/services/identifiers.hpp"
+#include "app/services/stock_ledger.hpp"
 #include "app/domain/clock.hpp"
 #include <chrono>
 #include <iomanip>
@@ -105,15 +106,19 @@ contracts::Result<std::string> SqliteSaleService::generate_next_folio(const std:
     const std::string prefix = "V-" + folio_register_code(register_id) + "-";
 
     auto prep = db_.prepare(
-        "SELECT COALESCE(MAX(CAST(substr(folio, ?) AS INTEGER)), 0) FROM sales WHERE substr(folio, 1, ?) = ?;"
+        "SELECT COALESCE(MAX(CAST(substr(folio, ?) AS INTEGER)), 0) FROM sales WHERE folio >= ? AND folio < ?;"
     );
     if (!prep.is_success()) {
         return contracts::Result<std::string>::fail(prep.error_code(), prep.error_message());
     }
     auto stmt = std::move(prep.value());
     stmt.bind_int64(1, static_cast<std::int64_t>(prefix.size()) + 1);
-    stmt.bind_int64(2, static_cast<std::int64_t>(prefix.size()));
-    stmt.bind_text(3, prefix);
+    // Rango por el índice único de folio: todo folio que empieza con el prefijo
+    // (el prefijo termina en '-', 0x2D; el límite superior cambia ese último byte por '.', 0x2E).
+    std::string prefix_end = prefix;
+    prefix_end.back() = '.';
+    stmt.bind_text(2, prefix);
+    stmt.bind_text(3, prefix_end);
     auto step = stmt.step();
     if (!step.is_success() || !step.value()) {
         return contracts::Result<std::string>::fail(
@@ -618,8 +623,8 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     for (const auto& [ing_id, needed] : ingredient_needed) {
         std::string mov_id = generate_id("mov");
         auto prep_mov = db_.prepare(
-            "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at, created_at_utc) "
-            "VALUES (?, ?, 'SALE', ?, ?, ?, ?);"
+            "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at, created_at_utc, actor_user_id) "
+            "VALUES (?, ?, 'SALE', ?, ?, ?, ?, ?);"
         );
         if (!prep_mov.is_success()) {
             db_.execute("ROLLBACK;");
@@ -632,6 +637,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_m.bind_text(4, "Venta " + folio);
         stmt_m.bind_text(5, now);
         stmt_m.bind_text(6, ts.utc);
+        stmt_m.bind_text(7, user_id);
 
         auto step_m = stmt_m.step();
         if (!step_m.is_success()) {
@@ -639,19 +645,11 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
             return contracts::Result<contracts::SaleConfirmationDto>::fail(step_m.error_code(), step_m.error_message());
         }
 
-        auto prep_upd = db_.prepare("UPDATE ingredients SET current_stock = current_stock - ? WHERE id = ?;");
-        if (!prep_upd.is_success()) {
+        // Existencias y valuación por la función compartida, dentro de la transacción de la venta
+        auto ledger_res = apply_stock_change(db_, ing_id, StockChangeKind::Outflow, needed);
+        if (!ledger_res.is_success()) {
             db_.execute("ROLLBACK;");
-            return contracts::Result<contracts::SaleConfirmationDto>::fail(prep_upd.error_code(), prep_upd.error_message());
-        }
-        auto stmt_u = std::move(prep_upd.value());
-        stmt_u.bind_int64(1, needed);
-        stmt_u.bind_text(2, ing_id);
-
-        auto step_u = stmt_u.step();
-        if (!step_u.is_success()) {
-            db_.execute("ROLLBACK;");
-            return contracts::Result<contracts::SaleConfirmationDto>::fail(step_u.error_code(), step_u.error_message());
+            return contracts::Result<contracts::SaleConfirmationDto>::fail(ledger_res.error_code(), ledger_res.error_message());
         }
     }
 
