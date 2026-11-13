@@ -175,7 +175,7 @@ Además de la venta mostrada en el SVG, diseñar vistas para todos los módulos 
 
 ## 8. Plan de ejecución
 
-La división detallada y ejecutable del trabajo está en [`frontend/plan.md`](frontend/plan.md) y [`backend/plan.md`](backend/plan.md). Ambos planes comparten contratos C++ y puertas de integración; “backend” designa la capa interna de la aplicación nativa, no un servidor local.
+La división detallada y ejecutable del trabajo está en [`frontend/plan.md`](../frontend/plan.md) y [`backend/plan.md`](../backend/plan.md). Ambos planes comparten contratos C++ y puertas de integración; “backend” designa la capa interna de la aplicación nativa, no un servidor local.
 
 1. **Definición operativa:** confirmar reglas pendientes de la sección 9 con responsables de caja e inventario; inventariar RAM, disco, sistema operativo y periféricos de la PC objetivo; elegir plataforma, impresora y lector con una prueba de rendimiento en ese equipo.
 2. **Diseño:** crear componentes reutilizables y prototipos de escritorio y pantalla estrecha; validar la nueva posición de la cuenta y recorridos de venta con cajeros.
@@ -279,7 +279,7 @@ La aplicación usa servicios SQLite de cuentas, catálogo, ingredientes/compras,
 
 ### Orden del siguiente trabajo con seguimiento
 
-1. **Integridad de software de I2 (BE-01/02/04/05/06 y FE-02/03) [SOFTWARE PARCIAL — ver auditoria-2026-10-18.md]:**
+1. **Integridad de software de I2 (BE-01/02/04/05/06 y FE-02/03) [SOFTWARE PARCIAL — ver Auditorias/auditoria-2026-10-18.md]:**
    - Fusión transaccional y segura en carrito: agrupación condicionada estrictamente a la coincidencia simultánea de producto, notas y precio unitario (`unit_price_cents`); ejecución dentro de `TransactionScope` (`begin_transaction` / `commit_transaction` / `rollback_transaction`) con comprobación estricta de prepare, bind, step y `carts.updated_at` (`touch_cart`); validación previa de desbordamientos aritméticos en 64 bits en subtotales de línea y totales acumulados antes de persistir, preservando el borrador intacto ante cualquier error. Probado con fallos inducidos vía triggers SQLite en `DELETE` durante fusión y en `updated_at`.
    - Instantánea inmutable del cajero en tickets: migración `007_sale_cashier_snapshot.sql` (`cashier_name TEXT` en `sales`); al confirmar la venta se guarda `display_name`; cambios posteriores de cuenta no alteran tickets emitidos ni el historial. Para ventas previas a la migración 007, se muestra explícitamente `'Nombre histórico no disponible (' || s.user_id || ')'` o `'Nombre histórico no disponible'` sin depender de `users.display_name`.
    - Autorización estricta de reimpresión: `get_ticket` y `get_recent_tickets` exigen `pos.reprint` en la capa de servicios; la venta recién confirmada permanece accesible para su vendedor autorizado (`pos.sell`). Probado con roles sin `pos.reprint` en CTest.
@@ -356,7 +356,7 @@ Avances inspeccionados: runner aislado, username, único icono de agregado, fond
 - [ ] Resolver recorte de Editar cantidad, actualización dinámica de Touch en navegación y centrado de otras entradas altas.
 - [ ] Capturas de configuración/previa 55/80 y recorridos GUI de cambio/reinicio/reimpresión sin alterar historia.
 
-Ver `auditoria-2026-10-03.md` en la raíz. I2 sigue parcial; no avanzar a I3.
+Ver `Auditorias/auditoria-2026-10-03.md`. I2 sigue parcial; no avanzar a I3.
 
 ### Resolución de pendientes de auditoría e integridad de software — 2026-10-14
 
@@ -377,6 +377,6 @@ Límites de verificación:
 
 ### Auditoría independiente 2026-10-18
 
-Ver `auditoria-2026-10-18.md`. Build desde cero y CTest 3/3 en Debug/Release confirmados; I1/I2/FE-08 GUI no repetidos. Pendientes de software: tamaño de papel 55/80 no aplicado, `MockReportService` en el registro real, gancho `CAFETERIA_SIMULATE_PRINT_ERROR` en el binario distribuible, centinela de impresora ficticio, prueba atómica insuficiente, recortes visuales y captura 08 inválida. I2 sigue **parcial en software**, hardware y aceptación humana. No avanzar a I3.
+Ver `Auditorias/auditoria-2026-10-18.md`. Build desde cero y CTest 3/3 en Debug/Release confirmados; I1/I2/FE-08 GUI no repetidos. Pendientes de software: tamaño de papel 55/80 no aplicado, `MockReportService` en el registro real, gancho `CAFETERIA_SIMULATE_PRINT_ERROR` en el binario distribuible, centinela de impresora ficticio, prueba atómica insuficiente, recortes visuales y captura 08 inválida. I2 sigue **parcial en software**, hardware y aceptación humana. No avanzar a I3.
 
-Actualización 2026-10-19: prompts A, B y C auditados (ver `auditoria-2026-10-18.md`). Los pendientes de software de la auditoría del 2026-10-18 quedan cerrados; I2 sigue parcial por hardware térmico/táctil, DPI 125/150/200 y aceptación humana (0/7). No avanzar a I3 hasta el QA humano.
+Actualización 2026-10-19: prompts A, B y C auditados (ver `Auditorias/auditoria-2026-10-18.md`). Los pendientes de software de la auditoría del 2026-10-18 quedan cerrados; I2 sigue parcial por hardware térmico/táctil, DPI 125/150/200 y aceptación humana (0/7). No avanzar a I3 hasta el QA humano.

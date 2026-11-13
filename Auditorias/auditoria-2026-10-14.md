@@ -30,7 +30,7 @@ Revisión, implementación, corrección y verificación de los seis pendientes f
 | `src/frontend/subnav_bar.cpp` | Navegación horizontal | `SubnavBar::rebuild_buttons()` preserva la subsección activa si sigue existiendo en la sección seleccionada, en lugar de resetear forzosamente a la primera. |
 | `src/frontend/pos_panel.cpp` | POS / Carrito | Ampliación de anchos mínimos de botones contextuales de carrito: «Editar cantidad» (145px Estándar, 170px Touch), «Editar nota» (125px / 145px), «Quitar línea» (125px / 145px), «Más acciones ▾» (145px / 165px). Mantiene `txt_notes_` de una sola línea nativa con fuente legible para garantizar compatibilidad con mensajes Win32 y vinculación al carrito. |
 | `tests/test_storage.cpp` | Pruebas CTest | Nueva prueba unitaria exhaustiva `test_i2_print_config_atomic_save_and_isolation()`: verifica guardado atómico, manejo de fallos simulados de E/S, preservación de estado en memoria y aislamiento de directorios con tildes y espacios. |
-| `specs.md` | Especificación | Registro formal de la resolución de pendientes de auditoría del 2026-10-14 y delimitación explícita de hardware y QA humano pendiente. |
+| `docs/specs.md` | Especificación | Registro formal de la resolución de pendientes de auditoría del 2026-10-14 y delimitación explícita de hardware y QA humano pendiente. |
 | `frontend/plan.md` | Plan frontend | Actualización de tareas y resolución de pendientes. |
 | `frontend/task.md` | Checklist frontend | Actualización de tareas resueltas con `[x]`. |
 | `backend/plan.md` | Plan backend | Actualización de tareas y resolución de pendientes. |

@@ -1,5 +1,5 @@
 -- Migración 002: Catálogo de permisos, asignación a roles y optimización de auditoría
--- Reglas de AGENTS.md y specs.md:
+-- Reglas de AGENTS.md y docs/specs.md:
 -- 1. Permisos granulares por acción y módulo.
 -- 2. El permiso backup.dev_config es EXCLUSIVO del rol Desarrollador y no puede ser concedido por roles configurables.
 -- 3. Cero contraseñas o secretos en auditoría.

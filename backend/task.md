@@ -4,7 +4,7 @@
 
 ### Auditoría independiente — 2026-09-30
 
-Consultar `../auditoria-2026-09-30.md` para evidencia y pendientes actuales. La entrega aporta funciones compilables y casos favorables, pero no demuestra cierre completo de I2 en software. Se detectaron fusión de líneas sin transacción/precio/comprobación completa, nombre histórico del cajero dependiente de la cuenta actual, historial/reimpresión autorizados por pos.sell en lugar de pos.reprint y formatos monetarios ambiguos. Las afirmaciones de cierre/exhaustividad de la entrega del 29 de septiembre quedan limitadas por esta revisión.
+Consultar `Auditorias/auditoria-2026-09-30.md` para evidencia y pendientes actuales. La entrega aporta funciones compilables y casos favorables, pero no demuestra cierre completo de I2 en software. Se detectaron fusión de líneas sin transacción/precio/comprobación completa, nombre histórico del cajero dependiente de la cuenta actual, historial/reimpresión autorizados por pos.sell en lugar de pos.reprint y formatos monetarios ambiguos. Las afirmaciones de cierre/exhaustividad de la entrega del 29 de septiembre quedan limitadas por esta revisión.
 
 ### Cierre de integridad y funcionalidad I2 — 2026-09-29
 
@@ -16,7 +16,7 @@ La entrega de Gemini del 2026-09-29 informó los siguientes avances. La auditor�
 5. **Historial de tickets e impresión nativa:** Implementado `get_recent_tickets(limit)` y `TicketHistoryDialog` para búsqueda y reimpresión por folio; integrado el subsistema de impresión nativo wxWidgets (`wxPrinter` / `wxPrintout`) con manejo de cancelación y error sin anular ventas confirmadas.
 6. **Endurecimiento de pruebas gráficas:** `tests/test_i1_integration.py` y `tests/test_i2_integration.py` filtran ventanas exclusivamente por PID (`GetWindowThreadProcessId`), usan `PostMessageW` para evitar bloqueos en ShowModal, aplican timeouts diagnósticos y limpian únicamente sus procesos hijos.
 
-Revisión de código y compilación actual. El detalle ejecutable está en `plan.md`; el orden compartido en `../specs.md`, sección 12. Las notas del 2026-09-25 al final son históricas, no el estado actual.
+Revisión de código y compilación actual. El detalle ejecutable está en `plan.md`; el orden compartido en `docs/specs.md`, sección 12. Las notas del 2026-09-25 al final son históricas, no el estado actual.
 
 - [x] BE-02: contratos, migración 004 y servicios de correo/avatar presentes; alta inicial y creación con correo, BLOB y operaciones de consulta/cambio/eliminación de avatar.
 - [x] BE-03: catálogo SQLite, CRUD de productos/ingredientes, recetas versionadas con consulta exclusiva de la activa, búsqueda paginada e índices de migración 003; cubiertos por casos de `StorageTest`.
@@ -128,15 +128,15 @@ Estado anterior registrado tras BE-02 y la revalidación formal de I1. Se conser
 ### Histórico 2. Pendientes que existían al 2026-09-25
 
 - [ ] **BE-02 — Correo y avatar de cuentas:**
-  - El esquema `users` y los contratos actuales todavía no incluyen correo ni avatar. Crear una migración nueva para correo y `user_avatars`, actualizar alta inicial y alta de cuentas, validar correo único y permitir imagen opcional según `specs.md`.
+  - El esquema `users` y los contratos actuales todavía no incluyen correo ni avatar. Crear una migración nueva para correo y `user_avatars`, actualizar alta inicial y alta de cuentas, validar correo único y permitir imagen opcional según `docs/specs.md`.
 - [ ] **BE-02 — Sesión endurecida:**
   - Completar bloqueo por inactividad y límite de intentos; el servicio actual autentica y permite cerrar sesión, pero no cubre todavía estos controles.
 - [ ] **BE-02 — Identidad Desarrollador (Pendiente por decisión de arquitectura abierta):**
-  - Mantener pendiente la conclusión al 100% de BE-02 hasta definir el mecanismo formal de aprovisionamiento y recuperación de la identidad técnica Desarrollador (Decisión 11 de `specs.md`), sin contraseñas maestras cableadas en código ni puertas traseras.
+  - Mantener pendiente la conclusión al 100% de BE-02 hasta definir el mecanismo formal de aprovisionamiento y recuperación de la identidad técnica Desarrollador (Decisión 11 de `docs/specs.md`), sin contraseñas maestras cableadas en código ni puertas traseras.
 - [ ] **BE-03 — Catálogo, ingredientes y recetas:**
   - Implementar repositorios y servicios conectados a SQLite para productos, ingredientes y recetas, reemplazando `MockCatalogService`.
 - [ ] **BE-04 — Compras e inventario:**
-  - Implementar existencias, entradas y movimientos transaccionales (`stock_movements`, `purchase_entries`), reemplazando `MockInventoryService` y aplicando las decisiones operativas pendientes de `specs.md`.
+  - Implementar existencias, entradas y movimientos transaccionales (`stock_movements`, `purchase_entries`), reemplazando `MockInventoryService` y aplicando las decisiones operativas pendientes de `docs/specs.md`.
 - [ ] **BE-05 — Carrito y venta real para I2:**
   - Sustituir los mocks de carrito y ventas por servicios SQLite, con método de pago declarado, notas por línea, confirmación idempotente y datos inmutables de ticket; integrar la pregunta de impresión definida en `frontend/plan.md`.
 - [ ] **Límites de lo verificado:**
@@ -182,7 +182,7 @@ Límites de verificación:
 - [x] **Aislamiento del runner de prueba:** Argumentos `--test-idempotency-key`, `--test-user` y `--test-pass` y fallback `admin/admin` retirados de `app_desktop.exe`. Creado binario dedicado `tests/test_idempotency_runner.exe` con lectura segura de credenciales por `std::cin`. Autenticación obligatoria por servicio y comparación de invariabilidad fila por fila en 8 tablas operacionales (excluyendo evento de login).
 - [x] **Servicio de configuración de impresión:** Contrato `IPrintConfigService` y servicio persistente `SqlitePrintConfigService` implementados en `station_printer.cfg`. Requiere permiso `config.manage`. Validación estricta de 55 mm y 80 mm; rechazo de 58 mm.
 - [x] **Invariabilidad de datos históricos:** Alternar perfiles no modifica ventas registradas ni tickets previos. Verificado en CTest.
-- [x] **Formato de ticket con precio unitario:** `TicketDto::to_formatted_text()` desglosa el precio unitario cuando cantidad > 1 (`4 x $45.00`), satisfaciendo `specs.md` y la prueba de integración.
+- [x] **Formato de ticket con precio unitario:** `TicketDto::to_formatted_text()` desglosa el precio unitario cuando cantidad > 1 (`4 x $45.00`), satisfaciendo `docs/specs.md` y la prueba de integración.
 - [x] **CTest 3/3 en Release y Debug:** `ContractsTest`, `StorageTest` (con prueba de permisos de print config y fallo de bind), y `TicketPrintingTest` (con pruebas de perfiles 55/80 mm y áreas insuficientes) superadas al 100%.
 - [x] **Integración I2 (9 requerimientos):** `tests/test_i2_integration.py` superado al 100% en Release y Debug con bases SQLite temporales aisladas.
 - [ ] Hardware físico (impresora térmica real y monitor táctil en PC de caja) y aceptación visual humana de los 7 casos en `frontend/qa-visual.md` pendientes.
@@ -198,7 +198,7 @@ Avances inspeccionados: runner aislado, username, único icono de agregado, fond
 - [ ] Resolver recorte de Editar cantidad, actualización dinámica de Touch en navegación y centrado de otras entradas altas.
 - [ ] Capturas de configuración/previa 55/80 y recorridos GUI de cambio/reinicio/reimpresión sin alterar historia.
 
-Ver `auditoria-2026-10-03.md` en la raíz. I2 sigue parcial; no avanzar a I3.
+Ver `Auditorias/auditoria-2026-10-03.md`. I2 sigue parcial; no avanzar a I3.
 
 ### Resolución de tareas backend — 2026-10-14
 
@@ -209,7 +209,7 @@ Ver `auditoria-2026-10-03.md` en la raíz. I2 sigue parcial; no avanzar a I3.
 - [x] **Preservación estricta de historial:** Verificado que la configuración de impresión y los cambios de perfil térmico no mutan ninguna tabla operativa en SQLite.
 - [ ] **Límites:** Impresora térmica física real en la PC de caja, monitor táctil real y los 7 casos de aceptación visual humana permanecen pendientes. La puerta I2 permanece **PARCIAL**. No avanzar a I3.
 
-## Auditoría 2026-10-18 (ver `../auditoria-2026-10-18.md`)
+## Auditoría 2026-10-18 (ver `Auditorias/auditoria-2026-10-18.md`)
 
 - [x] Retirar `MockReportService` de `ServiceRegistry::create_sqlite_registry`.
 - [x] Encerrar `CAFETERIA_SIMULATE_PRINT_ERROR` tras opción de compilación exclusiva de pruebas.

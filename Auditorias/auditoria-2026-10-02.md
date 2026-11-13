@@ -37,7 +37,7 @@ Revisión de terminal y código tras el bloque de correcciones I2. La terminal t
 - [x] Validación de perfiles: admite estrictamente 55 mm (28 columnas) y 80 mm (42 columnas); rechaza perfiles no soportados (ej. 58 mm).
 - [x] Panel en `BackOffice -> Configuración -> Impresión` con selector, nombre de impresora y previsualización en vivo.
 - [x] `TicketPrintLayout` distingue ancho nominal de perfil del área imprimible real del DC (`usable_w / char_w_`), cancelando limpiamente si el área es insuficiente (<20 cols).
-- [x] Formato de ticket `TicketDto::to_formatted_text()` desglosa el precio unitario en líneas con cantidad > 1 (`4 x $45.00`), satisfaciendo `specs.md` e integración.
+- [x] Formato de ticket `TicketDto::to_formatted_text()` desglosa el precio unitario en líneas con cantidad > 1 (`4 x $45.00`), satisfaciendo `docs/specs.md` e integración.
 - [x] Verificado en CTest que cambiar de perfil o reimprimir no modifica datos históricos; probado 55 mm explícitamente en `test_ticket_printing.cpp` y `test_storage.cpp`.
 
 ## Verificación completa de la entrega

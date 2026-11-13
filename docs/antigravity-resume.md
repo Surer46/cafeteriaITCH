@@ -1,6 +1,6 @@
 # Reanudar AntiGravity
 
-El estado del proyecto, las rondas en curso y los comandos para reanudar a cada agente están en **`ORQUESTADOR.md`** (sección «Reanudar agentes»). Este archivo se conserva solo como puntero.
+El estado del proyecto, las rondas en curso y los comandos para reanudar a cada agente están en **`docs/ORQUESTADOR.md`** (sección «Reanudar agentes»). Este archivo se conserva solo como puntero.
 
 Conversaciones de AntiGravity con historial:
 

@@ -149,7 +149,7 @@ Los checks de implementación y pruebas automatizadas no sustituyen la aceptaci�
 
 ### Inspección independiente de capturas — 2026-10-03
 
-Capturas 01/02: se confirma único icono add, username y ausencia de parches de texto. Cantidad aparece centrada. Editar cantidad todavía se recorta en ambos perfiles; navegación lateral permanece compacta en la captura Touch. Búsqueda/notas en Touch no están centradas verticalmente. Falta evidencia gráfica de configuración/previa térmica 55/80. Todos los casos humanos siguen pendientes; ver auditoria-2026-10-03.md.
+Capturas 01/02: se confirma único icono add, username y ausencia de parches de texto. Cantidad aparece centrada. Editar cantidad todavía se recorta en ambos perfiles; navegación lateral permanece compacta en la captura Touch. Búsqueda/notas en Touch no están centradas verticalmente. Falta evidencia gráfica de configuración/previa térmica 55/80. Todos los casos humanos siguen pendientes; ver Auditorias/auditoria-2026-10-03.md.
 
 ### Verificación y resolución técnica de capturas — 2026-10-14
 

@@ -2,9 +2,9 @@
 
 ## Propósito y límites
 
-Implementar la interfaz **nativa** en C++17 y wxWidgets descrita en [`../specs.md`](../specs.md). Este frente construye ventanas, navegación, formularios, tablas, diálogos, impresión visual y estados de interacción. La lógica de negocio, permisos efectivos, cálculos definitivos y persistencia pertenecen al [plan de backend](../backend/plan.md). Ambos se enlazan dentro de **un solo proceso**; no hay navegador, servidor HTTP ni API de red local.
+Implementar la interfaz **nativa** en C++17 y wxWidgets descrita en [`docs/specs.md`](../docs/specs.md). Este frente construye ventanas, navegación, formularios, tablas, diálogos, impresión visual y estados de interacción. La lógica de negocio, permisos efectivos, cálculos definitivos y persistencia pertenecen al [plan de backend](../backend/plan.md). Ambos se enlazan dentro de **un solo proceso**; no hay navegador, servidor HTTP ni API de red local.
 
-La navegación tiene **cuatro secciones principales** en la sidebar: Punto de Venta, Inventario, Caja y Reportes, BackOffice. Sus subsecciones se muestran en una barra horizontal central bajo el encabezado de la cafetería y por encima de la búsqueda o contenido. El mapa exacto está en la sección 3 de `specs.md`; ninguna subsección se agrega a la sidebar.
+La navegación tiene **cuatro secciones principales** en la sidebar: Punto de Venta, Inventario, Caja y Reportes, BackOffice. Sus subsecciones se muestran en una barra horizontal central bajo el encabezado de la cafetería y por encima de la búsqueda o contenido. El mapa exacto está en la sección 3 de `docs/specs.md`; ninguna subsección se agrega a la sidebar.
 
 La PC objetivo tiene un i5 de segunda generación y una estimación de 4–6 GB de RAM. Se confirmarán sistema operativo, arquitectura, resolución y periféricos antes de cerrar el paquete distribuible. La vista Lista del punto de venta será la predeterminada; el catálogo con imágenes será opcional.
 
@@ -17,7 +17,7 @@ La PC objetivo tiene un i5 de segunda generación y una estimación de 4–6 GB 
 
 ## Tareas por bloque
 
-Estado revisado el 2026-09-29: `[x]` marca avances concretos construidos/compilados o verificados según la evidencia de `task.md`; `[ ]` marca lo pendiente o parcial. Los paneles compilados y CTest de servicios no cierran las puertas que requieren interacción con el ejecutable real. Seguir el orden de `specs.md`, sección 12.
+Estado revisado el 2026-09-29: `[x]` marca avances concretos construidos/compilados o verificados según la evidencia de `task.md`; `[ ]` marca lo pendiente o parcial. Los paneles compilados y CTest de servicios no cierran las puertas que requieren interacción con el ejecutable real. Seguir el orden de `docs/specs.md`, sección 12.
 
 ### FE-00 — Preparación y esqueleto nativo
 
@@ -72,7 +72,7 @@ Estado revisado el 2026-09-29: `[x]` marca avances concretos construidos/compila
 - [x] Ejecutar y revisar `tests/test_i2_integration.py` en Release y Debug: apertura explícita de turno con $350.00, venta con tres líneas, notas, pago, consumo de ingredientes, movimiento de caja `SALE`, snapshot de cajero y Ahora no persistidos en SQLite.
 - [x] Completar integridad de software de I2 según auditoría: fusión atómica condicionada a producto, notas y precio con rollback estricto ante fallo (en `DELETE` o `updated_at`), pre-validación de desbordamiento en subtotales/totales de 64 bits, tickets históricos previos a migración 007 desacoplados de `users.display_name`, permiso `pos.reprint` obligatorio en servicios para historial y formato de ticket a columnas dinámicas con división por palabras. Probado en CTest (Debug/Release, 3/3 targets: `ContractsTest`, `StorageTest`, `TicketPrintingTest`) y suites de integración.
 - [ ] Validar periférico físico de impresión de tickets (hardware físico de impresora térmica en PC de caja) y pantalla táctil física.
-- **Criterio de terminado (pendiente):** I2 permanece formalmente parcial por hardware físico (impresora térmica/táctil) y aceptación humana (0/7 casos de `frontend/qa-visual.md` aceptados). Software de I2 aún parcial según `auditoria-2026-10-18.md`.
+- **Criterio de terminado (pendiente):** I2 permanece formalmente parcial por hardware físico (impresora térmica/táctil) y aceptación humana (0/7 casos de `frontend/qa-visual.md` aceptados). Software de I2 aún parcial según `Auditorias/auditoria-2026-10-18.md`.
 
 ### FE-04 — Catálogo, ingredientes e inventario
 
@@ -113,7 +113,7 @@ Estado revisado el 2026-09-29: `[x]` marca avances concretos construidos/compila
 - [ ] Revisar atajos, recorrido de foco, lectura de etiquetas, navegación por teclado y tamaños de control.
 - [ ] Medir arranque y memoria de la ventana, búsqueda, 20 líneas de carrito y catálogo con/sin imágenes en la PC real; ajustar tamaño de miniaturas y paginación.
 - [ ] Probar pantalla estrecha, alta densidad/escala, datos largos y nombres de producto amplios.
-- **Terminado:** se cumplen las metas de `specs.md` o se documentan medidas y ajustes acordados en la PC objetivo.
+- **Terminado:** se cumplen las metas de `docs/specs.md` o se documentan medidas y ajustes acordados en la PC objetivo.
 
 ### FE-08 — Perfil táctil para monitores grandes
 
@@ -160,11 +160,11 @@ Estado revisado el 2026-09-29: `[x]` marca avances concretos construidos/compila
 | I6: navegación | [ ] Cuentas tiene panel; faltan UI de roles, filtros de permiso y prueba integrada. | Solo cuatro secciones laterales; subsecciones correctas en barra central bajo título; BackOffice permite crear cuenta y rol sin exponer configuración técnica al Dueño. |
 | I7: modo táctil | [ ] Diseño e implementación pendientes (FE-08). | Perfil persistente, botones/espacios cómodos, acciones contextuales, teclado sin solapamientos, venta completa por toque en monitor grande confirmado. |
 
-El frontend no se considera completo por mostrar todas las pantallas: **cada puerta debe ejecutarse con la implementación real**, datos persistidos y evidencia de resultado. Las decisiones de negocio aún abiertas en `specs.md` se registran antes de codificar el flujo afectado.
+El frontend no se considera completo por mostrar todas las pantallas: **cada puerta debe ejecutarse con la implementación real**, datos persistidos y evidencia de resultado. Las decisiones de negocio aún abiertas en `docs/specs.md` se registran antes de codificar el flujo afectado.
 
 ### Estado y verificación de software I2 — 2026-10-02
 
-Los cinco pendientes de software de I2 fueron declarados completados por el agente; `auditoria-2026-10-18.md` los deja parciales:
+Los cinco pendientes de software de I2 fueron declarados completados por el agente; `Auditorias/auditoria-2026-10-18.md` los deja parciales:
 
 - [x] Corte de palabras UTF-8 en límites de puntos de código sin caracteres corruptos (`split_long_word_utf8`).
 - [x] Tipado exacto `PDWORD_PTR` (`ULONG_PTR = ctypes.c_size_t`) en `SendMessageTimeoutW` y comprobación de errores Win32 en pruebas.
@@ -204,7 +204,7 @@ Avances inspeccionados: runner aislado, username, único icono de agregado, fond
 - [ ] Resolver recorte de Editar cantidad, actualización dinámica de Touch en navegación y centrado de otras entradas altas.
 - [ ] Capturas de configuración/previa 55/80 y recorridos GUI de cambio/reinicio/reimpresión sin alterar historia.
 
-Ver `auditoria-2026-10-03.md` en la raíz. I2 sigue parcial; no avanzar a I3.
+Ver `Auditorias/auditoria-2026-10-03.md`. I2 sigue parcial; no avanzar a I3.
 
 ### Resolución de pendientes de auditoría — 2026-10-14
 
@@ -219,4 +219,4 @@ Los pendientes de frontend de la auditoría 2026-10-03 fueron implementados y ve
 
 ## Auditoría 2026-10-18
 
-Ver `../auditoria-2026-10-18.md` y la sección homónima de `task.md`. I2 parcial en software, hardware y aceptación humana; no avanzar a I3.
+Ver `Auditorias/auditoria-2026-10-18.md` y la sección homónima de `task.md`. I2 parcial en software, hardware y aceptación humana; no avanzar a I3.

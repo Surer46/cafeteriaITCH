@@ -1,6 +1,6 @@
 # Memoria del orquestador — Cafetería ITCH II
 
-Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo compartido está en `AGENTS.md` (Memoria operativa) y `coordinacion-agentes.md`. Leerlo al inicio de cada sesión en lugar de reconstruir el contexto. Actualizarlo al cerrar cada ronda.
+Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo compartido está en `AGENTS.md` (Memoria operativa) y `docs/coordinacion-agentes.md`. Leerlo al inicio de cada sesión en lugar de reconstruir el contexto. Actualizarlo al cerrar cada ronda.
 
 Última actualización: 2026-11-12.
 
@@ -9,20 +9,20 @@ Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo
 - **Puertas:** I1 cerrada (revalidada con el ejecutable real tras integrar B1). I2: software cerrado; falta QA humano (0/7 en `frontend/qa-visual.md`), impresora térmica 55/80, monitor táctil y DPI 125/150/200. I3–I7 abiertas. **No iniciar I3 hasta el QA humano.**
 - **Pantallas reales:** Venta, Caja y turnos, Usuarios y cuentas, Configuración (impresión), Roles y permisos (F1/F1b), Bitácora (F2). El resto de las 16 subsecciones son marcadores de posición.
 - **Backend real nuevo:** respaldo seguro y restauración (B1, migración 008, `backup.restore` solo Dueño) y reportes diarios (B2, `payments_total` y `payments_mismatch_cents`).
-- **Estimación de release** (dada el 2026-10-19): piloto en 4–6 semanas y 1.0 en 8–12, si se resuelven la sección 9 de `specs.md` y los datos de la PC de caja e impresora.
+- **Estimación de release** (dada el 2026-10-19): piloto en 4–6 semanas y 1.0 en 8–12, si se resuelven la sección 9 de `docs/specs.md` y los datos de la PC de caja e impresora.
 
 ## Ronda en curso
 
-Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilidades `ui_helpers`) y **F2b** (`dba641a`, resaltado de subsección) aceptados; capturas 10 y 11 regeneradas. En cola, prompts en `prompts-2026-11-12-ronda4.md`: **B4a** (Claude, títulos de permisos, migración 009; rama `backend/b4a` ya al día con `main`) -> **F5** (Gemini, interruptores; requiere B4a integrado) y **B4** (Claude, ajustes de datos, migraciones desde 010; tras B4a). Después F3 (UI Respaldos) y F4 (UI Reportes).
+Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilidades `ui_helpers`) y **F2b** (`dba641a`, resaltado de subsección) aceptados; capturas 10 y 11 regeneradas. En cola, prompts en `Prompts/prompts-2026-11-12-ronda4.md`: **B4a** (Claude, títulos de permisos, migración 009; rama `backend/b4a` ya al día con `main`) -> **F5** (Gemini, interruptores; requiere B4a integrado) y **B4** (Claude, ajustes de datos, migraciones desde 010; tras B4a). Después F3 (UI Respaldos) y F4 (UI Reportes).
 
 ## Decisiones del usuario
 
-- 2026-11-08: el Dueño edita los permisos del Cajero; no puede renombrarlo ni eliminarlo. Dueño en solo lectura. Desarrollador nunca visible (registrado en `specs.md` §9.5).
+- 2026-11-08: el Dueño edita los permisos del Cajero; no puede renombrarlo ni eliminarlo. Dueño en solo lectura. Desarrollador nunca visible (registrado en `docs/specs.md` §9.5).
 - 2026-11-08: Claude Code Terminal con `opusplan` como backend; AntiGravity como frontend; skill caveman en ambos (solo estilo).
-- 2026-11-08: regla de dos pasadas. Un detalle de interfaz que Gemini no cierra en dos pasadas va a Claude Code Terminal (detalles en `coordinacion-agentes.md`, protocolo punto 6). Primer caso: B3a, detalles del panel de roles tras F1 y F1b.
+- 2026-11-08: regla de dos pasadas. Un detalle de interfaz que Gemini no cierra en dos pasadas va a Claude Code Terminal (detalles en `docs/coordinacion-agentes.md`, protocolo punto 6). Primer caso: B3a, detalles del panel de roles tras F1 y F1b.
 - El usuario quiere ver los movimientos de los agentes: no enviar prompts por `agy -p`; el usuario pega los prompts en terminales interactivas.
 
-- 2026-11-12: los permisos de un rol se activan con interruptores (estilo ajustes de teléfono) en lugar de casillas, más grandes en Touch. Bloque **F5** para Gemini, prompt al final de `prompts-2026-11-12-ronda4.md`; enviar tras aceptar F2b e integrar B3b (`c71d586`, pendiente de merge en `main`). Además cada permiso lleva título y descripción en lenguaje llano, separador entre permisos y agrupación por las cuatro secciones de la barra lateral (el Dueño es una persona mayor): bloque **B4a** (Claude, migración 009 con `title`, `section`, `sort_order`), que debe integrarse antes de F5. B4 usa migraciones desde 010 y va después de B4a.
+- 2026-11-12: los permisos de un rol se activan con interruptores (estilo ajustes de teléfono) en lugar de casillas, más grandes en Touch. Bloque **F5** para Gemini, prompt al final de `Prompts/prompts-2026-11-12-ronda4.md`; enviar tras aceptar F2b e integrar B3b (`c71d586`, pendiente de merge en `main`). Además cada permiso lleva título y descripción en lenguaje llano, separador entre permisos y agrupación por las cuatro secciones de la barra lateral (el Dueño es una persona mayor): bloque **B4a** (Claude, migración 009 con `title`, `section`, `sort_order`), que debe integrarse antes de F5. B4 usa migraciones desde 010 y va después de B4a.
 
 - 2026-11-12: títulos y descripciones de los 20 permisos aprobados por el usuario (tabla en el prompt B4a).
 - 2026-11-12: salió Gemini 4 Hydrogen en AntiGravity. Recomendación del orquestador: no cambiar a mitad de F2b; probarlo en F5 como ensayo y comparar contra el perfil de 3.8 Flash (exageración en informes, anchos a ojo, pruebas débiles). Decisión del usuario: seguir con 3.8 Flash; en su plan Pro los modelos Gemini 4 (Carbon, Argon, Hydrogen) aparecen como «Unavailable» en el selector. Revisar de nuevo si se habilitan.
@@ -42,13 +42,13 @@ Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilid
 3. Pruebas nuevas: ¿miden lo que afirman? ¿Se relajó algún umbral?
 4. Compilar (desde cero si el bloque toca mucho) y CTest en Release y Debug; las pruebas GUI pertinentes con el escritorio libre.
 5. Capturas: medir en píxeles con PIL, no a ojo (error propio en la ronda del prompt B).
-6. Registrar en `auditoria-2026-10-18.md` (sección por bloque), hacer commit y actualizar este archivo.
+6. Registrar en `Auditorias/auditoria-2026-10-18.md` (sección por bloque), hacer commit y actualizar este archivo.
 
 ## Perfil de los agentes
 
 - **Claude Code Terminal (opusplan):** B1 sin caveman: plan sólido, informe exacto (salvo contar 80 `TEST_CHECK` en lugar de 102) y límites declarados con honestidad. Revisar su plan antes de aprobar: aportó 5 ajustes útiles. Puede reescribir finales de línea (ya resuelto con `.gitattributes`).
 - **AntiGravity (Gemini 3.8 Flash high):** rápido en cableado de UI. Patrones: compila y corre pruebas sin haber editado (unos 7 min en F1); bloques de razonamiento de 7–9 min; exagera en informes («sin recorte» falso en F1, captura 08 inválida en 2026-10-14); fija anchos a ojo; sus pruebas miden solo lo que le es fácil (F1: botones sí, columnas no). Con aserciones estrictas y prompts pequeños funciona bien (prompts A y C). Pierde «», ≥ y ▾ al pegar: escribir sus prompts sin esos caracteres.
-- **Caveman:** su README mide ~3 % de ahorro de salida (ruido). Ronda 2 comparada en `auditoria-2026-10-18.md`: la mejora visible vino de la memoria operativa, los prompts acotados y las pruebas estrictas; sin evidencia separable de caveman. El orquestador no lo usa (decisión del usuario).
+- **Caveman:** su README mide ~3 % de ahorro de salida (ruido). Ronda 2 comparada en `Auditorias/auditoria-2026-10-18.md`: la mejora visible vino de la memoria operativa, los prompts acotados y las pruebas estrictas; sin evidencia separable de caveman. El orquestador no lo usa (decisión del usuario).
 
 ## Pendientes conocidos (no asignados)
 
@@ -57,7 +57,7 @@ Ronda 4 parcial, integrada el 2026-11-12 (`af4e4bc`): **B3b** (`c71d586`, utilid
 - Candidatos de backend para B3: build `build_hooks` con `-DCAFETERIA_TEST_HOOKS=ON` para el requerimiento 8 de I2; retención y limpieza de `backups/`; persistir `get_developer_server_config`; conciliación del corte de turno (I4, depende en parte de la sección 9).
 - F1b menores: encabezado «Descripción» recortado, filas de la lista de roles sin altura táctil, texto arriba en campos de 48 px en Touch.
 
-- Sección 9 de `specs.md`: 10 decisiones de negocio abiertas (bloquean I3/I4).
+- Sección 9 de `docs/specs.md`: 10 decisiones de negocio abiertas (bloquean I3/I4).
 - Datos de la PC de caja e impresora (bloquean el empaquetado y el cierre de I2). Sin instalador todavía.
 - Requerimiento 8 de `test_i2_integration.py` solo corre con un build `-DCAFETERIA_TEST_HOOKS=ON` (no existe aún un `build_hooks`).
 - Página de impresión fija de 200 mm en rollo térmico: revisar con hardware.

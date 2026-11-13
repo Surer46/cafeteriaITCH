@@ -2,7 +2,7 @@
 
 ## Propósito y límites
 
-Implementar en C++17 la lógica de negocio, repositorios SQLite, autenticación, permisos, cálculos, ventas, inventario, caja, reportes y respaldos definidos en [`../specs.md`](../specs.md). “Backend” significa **capa interna de una aplicación de escritorio nativa**, enlazada con el [frontend wxWidgets](../frontend/plan.md) en un solo proceso. No se levanta un servidor HTTP local ni se exige instalar MySQL/PostgreSQL. El único servidor externo es un destino opcional de copias.
+Implementar en C++17 la lógica de negocio, repositorios SQLite, autenticación, permisos, cálculos, ventas, inventario, caja, reportes y respaldos definidos en [`docs/specs.md`](../docs/specs.md). “Backend” significa **capa interna de una aplicación de escritorio nativa**, enlazada con el [frontend wxWidgets](../frontend/plan.md) en un solo proceso. No se levanta un servidor HTTP local ni se exige instalar MySQL/PostgreSQL. El único servidor externo es un destino opcional de copias.
 
 La PC objetivo tiene un i5 de segunda generación y RAM estimada en 4–6 GB. El sistema operativo y periféricos siguen pendientes de comprobar; las bibliotecas y el empaquetado final se validarán en el equipo real.
 
@@ -18,7 +18,7 @@ La navegación de la aplicación agrupa servicios bajo cuatro secciones: **Punto
 
 ## Tareas por bloque
 
-Estado revisado el 2026-09-29: `[x]` señala un avance concreto implementado y cubierto por la verificación indicada en `task.md`; `[ ]` señala pendiente o implementación parcial. La existencia de una tabla, contrato o mock no cierra un módulo. Seguir el orden de `specs.md`, sección 12, antes de extender funciones.
+Estado revisado el 2026-09-29: `[x]` señala un avance concreto implementado y cubierto por la verificación indicada en `task.md`; `[ ]` señala pendiente o implementación parcial. La existencia de una tabla, contrato o mock no cierra un módulo. Seguir el orden de `docs/specs.md`, sección 12, antes de extender funciones.
 
 ### BE-00 — Estructura y compilación
 
@@ -163,7 +163,7 @@ Se pueden implementar esquemas y contratos mientras estas decisiones se aclaran;
 
 ### Estado y verificación de software I2 — 2026-10-02
 
-Los cinco pendientes de software de I2 fueron declarados completados por el agente; `auditoria-2026-10-18.md` los deja parciales:
+Los cinco pendientes de software de I2 fueron declarados completados por el agente; `Auditorias/auditoria-2026-10-18.md` los deja parciales:
 
 - [x] Corte seguro de caracteres UTF-8 en `split_long_word_utf8` al envolver palabras largas, sin fragmentar secuencias multibyte.
 - [x] Tipado exacto `PDWORD_PTR` (`ULONG_PTR = ctypes.c_size_t`) en `SendMessageTimeoutW` y comprobación de errores en helpers Win32 de pruebas.
@@ -204,7 +204,7 @@ Avances inspeccionados: runner aislado, username, único icono de agregado, fond
 - [ ] Resolver recorte de Editar cantidad, actualización dinámica de Touch en navegación y centrado de otras entradas altas.
 - [ ] Capturas de configuración/previa 55/80 y recorridos GUI de cambio/reinicio/reimpresión sin alterar historia.
 
-Ver `auditoria-2026-10-03.md` en la raíz. I2 sigue parcial; no avanzar a I3.
+Ver `Auditorias/auditoria-2026-10-03.md`. I2 sigue parcial; no avanzar a I3.
 
 ### Resolución de pendientes de backend — 2026-10-14
 
@@ -218,4 +218,4 @@ Los pendientes de backend de la auditoría 2026-10-03 fueron implementados y ver
 
 ## Auditoría 2026-10-18
 
-Ver `../auditoria-2026-10-18.md` y la sección homónima de `task.md`. I2 parcial en software, hardware y aceptación humana; no avanzar a I3.
+Ver `Auditorias/auditoria-2026-10-18.md` y la sección homónima de `task.md`. I2 parcial en software, hardware y aceptación humana; no avanzar a I3.

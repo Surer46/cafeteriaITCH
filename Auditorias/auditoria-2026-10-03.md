@@ -36,4 +36,4 @@ ctest --test-dir build_debug --output-on-failure
 - Release: compilación código 0; CTest 3/3, 19.74 s.
 - Debug: compilación código 0; CTest 3/3, 81.10 s.
 - No se repitieron I1/I2 GUI ni suite geométrica. Se inspeccionaron las capturas actuales de Venta; no hay aceptación humana nueva.
-- Archivos modificados por auditoría: este informe, specs.md, ambos plan.md/task.md y frontend/qa-visual.md. Solo documentación, sin cambios a producción/pruebas.
+- Archivos modificados por auditoría: este informe, docs/specs.md, ambos plan.md/task.md y frontend/qa-visual.md. Solo documentación, sin cambios a producción/pruebas.

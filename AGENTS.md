@@ -2,7 +2,7 @@
 
 ## Fuentes de verdad y alcance
 
-- Leer `specs.md`, `frontend/plan.md` y `backend/plan.md` antes de implementar. Mantenerlos coherentes cuando cambie una decisión técnica o un flujo.
+- Leer `docs/specs.md`, `frontend/plan.md` y `backend/plan.md` antes de implementar. Mantenerlos coherentes cuando cambie una decisión técnica o un flujo.
 - La aplicación es **de escritorio nativa**: C++17, wxWidgets y SQLite embebido en un solo proceso. No introducir navegador, Electron, servidor HTTP local, MySQL o PostgreSQL para la operación diaria.
 - La base SQLite local es la única fuente de datos operativa. El servidor externo es opcional y solo almacena respaldos; una falla de red nunca debe bloquear ventas.
 - No asumir el sistema operativo de la PC de caja. El entorno de desarrollo actual puede ser distinto; comprobar plataforma, arquitectura y periféricos de destino antes de fijar empaquetado o rutas.
@@ -38,7 +38,7 @@
 Datos ya verificados. Úsalos en lugar de explorar el entorno. Mantener breve: cada línea se carga en cada sesión de cada agente.
 
 - **Toolchain (Windows):** anteponer al `PATH` `D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll`. GCC 16.1 (MinGW), CMake, Ninja y wxWidgets 3.3.3 (`wxWidgets_ROOT_DIR=D:/Temp/wxwidgets`, `wxWidgets_LIB_DIR=D:/Temp/wxwidgets/lib/gcc1610_x64_dll`, `wxWidgets_CONFIGURATION=mswu`). No buscar otros compiladores.
-- **Copias de trabajo (git):** `main` en `D:\Cafetería_ITCH` es del frontend (AntiGravity); el backend (Claude Code Terminal) trabaja en el worktree `D:\Cafeteria_ITCH_backend`, rama `backend/<bloque>`. Los agentes no hacen commits. Propiedad de archivos y protocolo en `coordinacion-agentes.md`.
+- **Copias de trabajo (git):** `main` en `D:\Cafetería_ITCH` es del frontend (AntiGravity); el backend (Claude Code Terminal) trabaja en el worktree `D:\Cafeteria_ITCH_backend`, rama `backend/<bloque>`. Los agentes no hacen commits. Propiedad de archivos y protocolo en `docs/coordinacion-agentes.md`.
 - **Compilación:** frontend usa `build_release` y `build_debug`; backend usa `build_be_release` y `build_be_debug`. Ya están configurados: basta `cmake --build <dir> --parallel 2` y `ctest --test-dir <dir> --output-on-failure`.
 - **No compilar ni correr pruebas antes de editar:** la línea base del commit actual ya está verificada por el orquestador.
 - **Pruebas:** CTest = ContractsTest, StorageTest, BackupTest, TicketPrintingTest. GUI (solo el agente de frontend, nunca dos a la vez): `tests/test_i1_integration.py`, `tests/test_i2_integration.py`, `tests/test_fe08_fe09_visual_integration.py`, `tests/test_f1_roles_panel.py`; capturas con `tests/capture_visual_qa.py` en `qa_visual/screenshots/`.

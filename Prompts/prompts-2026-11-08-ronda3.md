@@ -1,8 +1,8 @@
 # Prompts del 2026-11-08 — ronda 3
 
-Línea base: `main` actual. Reglas en `coordinacion-agentes.md` (protocolo, incluida la regla de dos pasadas).
+Línea base: `main` actual. Reglas en `docs/coordinacion-agentes.md` (protocolo, incluida la regla de dos pasadas).
 
-- **F2** (AntiGravity, Bitácora): el prompt está en `prompts-2026-11-08-ronda2.md`, sección F2. Envíalo tal cual.
+- **F2** (AntiGravity, Bitácora): el prompt está en `Prompts/prompts-2026-11-08-ronda2.md`, sección F2. Envíalo tal cual.
 - **B3a** (Claude Code Terminal): detalles del panel de roles que Gemini no cerró en dos pasadas (F1 y F1b). Corre en paralelo con F2 sin choque: F2 crea archivos nuevos y no toca `backoffice_roles_panel.*`, `test_f1_roles_panel.py` ni el panel de roles.
 
 Recuerda `/caveman` al inicio de cada sesión nueva de agente.
@@ -12,7 +12,7 @@ Recuerda `/caveman` al inicio de cada sesión nueva de agente.
 ## B3a — Claude Code Terminal (worktree `D:\Cafeteria_ITCH_backend`, rama `backend/b3`)
 
 ```text
-Tarea de frontend escalada por la regla de dos pasadas (coordinacion-agentes.md, protocolo punto 6). Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b3. Solo puedes editar src/frontend/backoffice_roles_panel.cpp, src/frontend/backoffice_roles_panel.hpp y tests/test_f1_roles_panel.py. No toques tests/capture_visual_qa.py, otros archivos de src/frontend/, contratos ni servicios. No hagas commits. Compila en build_be_debug y build_be_release (incluyen app_desktop) y corre CTest. NO ejecutes pruebas GUI (tests/*.py): el otro agente puede estar usando el escritorio; el orquestador las corre al integrar.
+Tarea de frontend escalada por la regla de dos pasadas (docs/coordinacion-agentes.md, protocolo punto 6). Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b3. Solo puedes editar src/frontend/backoffice_roles_panel.cpp, src/frontend/backoffice_roles_panel.hpp y tests/test_f1_roles_panel.py. No toques tests/capture_visual_qa.py, otros archivos de src/frontend/, contratos ni servicios. No hagas commits. Compila en build_be_debug y build_be_release (incluyen app_desktop) y corre CTest. NO ejecutes pruebas GUI (tests/*.py): el otro agente puede estar usando el escritorio; el orquestador las corre al integrar.
 
 Presenta primero un plan corto para revision.
 

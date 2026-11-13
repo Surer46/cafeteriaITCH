@@ -1,6 +1,6 @@
 # Prompts del 2026-11-08 — ronda 2 (con caveman)
 
-Línea base: commit `eeed1aa` en `main`. Reglas en `coordinacion-agentes.md`.
+Línea base: commit `eeed1aa` en `main`. Reglas en `docs/coordinacion-agentes.md`.
 
 - **B2** (Claude Code Terminal) y **F1b** (AntiGravity) corren en paralelo: no comparten archivos.
 - **F2** (AntiGravity) se envía solo después de auditar F1b, porque usa la misma copia de trabajo.
@@ -53,7 +53,7 @@ Entrega: archivos, contrato final, comandos con codigo de salida, conteo de prue
 ## F1b — AntiGravity (`D:\Cafetería_ITCH`, rama `main`)
 
 ```text
-Agente de frontend de Cafeteria ITCH II. Mismas reglas que F1 (lee coordinacion-agentes.md): solo src/frontend/, tests/*.py y qa_visual/; no toques contratos, servicios ni documentos de estado; no hagas commits. No recompiles ni corras pruebas antes de editar: el codigo actual ya esta verificado.
+Agente de frontend de Cafeteria ITCH II. Mismas reglas que F1 (lee docs/coordinacion-agentes.md): solo src/frontend/, tests/*.py y qa_visual/; no toques contratos, servicios ni documentos de estado; no hagas commits. No recompiles ni corras pruebas antes de editar: el codigo actual ya esta verificado.
 
 Tarea F1b: correcciones del panel Roles y permisos (src/frontend/backoffice_roles_panel.cpp) segun la auditoria.
 

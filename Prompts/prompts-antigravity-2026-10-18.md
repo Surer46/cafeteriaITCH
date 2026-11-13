@@ -14,7 +14,7 @@ agy --conversation=36c58871-cb3f-45c6-88ad-07be0a8992e5
 ## Prompt A — integridad del binario e impresión (sin cambios visuales)
 
 ```text
-Lee AGENTS.md y auditoria-2026-10-18.md antes de editar. Trabaja SOLO en los 4 puntos siguientes; no toques estilos, layouts, capturas ni otros módulos. No marques I2 como completada ni inicies I3.
+Lee AGENTS.md y Auditorias/auditoria-2026-10-18.md antes de editar. Trabaja SOLO en los 4 puntos siguientes; no toques estilos, layouts, capturas ni otros módulos. No marques I2 como completada ni inicies I3.
 
 1. Mock fuera del ejecutable real.
    En src/services/mock_services.cpp, ServiceRegistry::create_sqlite_registry asigna MockReportService. Quítalo: deja report_service = nullptr y verifica con grep que ninguna pantalla lo desreferencia sin comprobar nulo. No implementes el servicio de reportes en este bloque.
@@ -42,7 +42,7 @@ Verificación obligatoria, con PATH = D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp
    python -u tests/test_i2_integration.py
 Compila primero; si falla, corrige antes de seguir. Si compilas más de 3 veces seguidas sin cambiar código, detente y reporta el error textual.
 
-Entrega: lista de archivos modificados, comandos ejecutados con su código de salida y conteo de pruebas, casos omitidos y por qué, y límites (sin impresora física, papel no verificado). Actualiza solo las casillas de backend/task.md y frontend/task.md en la sección "Auditoría 2026-10-18" que correspondan a lo hecho. No reescribas otras secciones de specs.md ni de los planes.
+Entrega: lista de archivos modificados, comandos ejecutados con su código de salida y conteo de pruebas, casos omitidos y por qué, y límites (sin impresora física, papel no verificado). Actualiza solo las casillas de backend/task.md y frontend/task.md en la sección "Auditoría 2026-10-18" que correspondan a lo hecho. No reescribas otras secciones de docs/specs.md ni de los planes.
 ```
 
 ---
@@ -50,7 +50,7 @@ Entrega: lista de archivos modificados, comandos ejecutados con su código de sa
 ## Prompt B — recortes visuales y evidencia (enviar después de auditar A)
 
 ```text
-Lee AGENTS.md, frontend/design-system.md y auditoria-2026-10-18.md. Trabaja SOLO en interfaz y en el script de capturas; no toques servicios, SQL ni pruebas C++ salvo que no compile. No marques I2 ni casos de qa-visual.md como aceptados.
+Lee AGENTS.md, frontend/design-system.md y Auditorias/auditoria-2026-10-18.md. Trabaja SOLO en interfaz y en el script de capturas; no toques servicios, SQL ni pruebas C++ salvo que no compile. No marques I2 ni casos de qa-visual.md como aceptados.
 
 1. Recortes a corregir (ambos perfiles, 1216×759 y 960×600):
    - «Más acciones ▾» en Estándar: la «M» queda tapada por el icono (pos_panel.cpp).
@@ -79,7 +79,7 @@ Verificación: compilar y CTest en Release y Debug, ejecutar tests/test_fe08_fe0
 Escrito sin comillas angulares, flechas ni el signo "mayor o igual" porque esos caracteres se pierden al pegarlos en la terminal de AntiGravity.
 
 ```text
-Lee AGENTS.md y la seccion "Revision del prompt B" de auditoria-2026-10-18.md. Trabaja SOLO en estos 3 puntos. No toques servicios, SQL, pruebas C++, otros paneles ni capturas fuera de 01 y 02. No marques I2 ni casos de qa-visual.md.
+Lee AGENTS.md y la seccion "Revision del prompt B" de Auditorias/auditoria-2026-10-18.md. Trabaja SOLO en estos 3 puntos. No toques servicios, SQL, pruebas C++, otros paneles ni capturas fuera de 01 y 02. No marques I2 ni casos de qa-visual.md.
 
 1. Altura del selector de producto en Touch (src/frontend/pos_panel.cpp).
    En la captura 02 choice_products_ mide unos 30 px y la busqueda 48 px; CB_SETITEMHEIGHT de la linea 122 no tiene efecto visible. Antes de cambiar codigo, mide con GetWindowRect la altura real del HWND del selector en Touch y reportala. Luego corrige con UNA de estas rutas, en este orden:

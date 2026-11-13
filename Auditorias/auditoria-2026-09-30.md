@@ -24,7 +24,7 @@ python -u tests/test_i2_integration.py
 - [x] I2 favorable: código 0, ambas variantes; apertura 35000 centavos, tres líneas/cuatro unidades, venta 15500, recibido 20000, cambio 4500, notas, consumo, INITIAL_CASH/SALE, carrito vacío y auditoría. Se elige Ahora no.
 - [ ] Edición/historial/reimpresión desde GUI, cancelación/error de impresión, renderizado de ticket largo, hardware físico y QA visual humano: no verificados por estos recorridos.
 
-Archivos modificados durante la auditoría: este informe, `specs.md`, `frontend/plan.md`, `backend/plan.md`, ambos `task.md` y `antigravity-resume.md` (estado para retomar). No se cambiaron pruebas ni servicios.
+Archivos modificados durante la auditoría: este informe, `docs/specs.md`, `frontend/plan.md`, `backend/plan.md`, ambos `task.md` y `docs/antigravity-resume.md` (estado para retomar). No se cambiaron pruebas ni servicios.
 
 ## Resolución de pendientes de software de I2 (2026-09-30)
 
@@ -72,7 +72,7 @@ ctest --test-dir build_debug --output-on-failure
 - Release: compilación código 0; CTest 2/2, 13.15 s.
 - Debug: compilación código 0; CTest 2/2, 40.95 s.
 - No se repitieron I1/I2 GUI ni impresión en esta auditoría. Las pruebas aprobadas no cubren los pendientes de software enumerados arriba.
-- Archivos documentales actualizados: este informe, specs.md, frontend/plan.md, backend/plan.md y ambos task.md. Sin cambios a código de producción o pruebas.
+- Archivos documentales actualizados: este informe, docs/specs.md, frontend/plan.md, backend/plan.md y ambos task.md. Sin cambios a código de producción o pruebas.
 
 ## Resolución de observaciones de la auditoría independiente — 2026-09-30 (Segunda Entrega)
 

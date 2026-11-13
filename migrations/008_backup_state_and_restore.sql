@@ -1,5 +1,5 @@
 -- Migración 008: estado persistente de respaldos y permiso de restauración.
--- Reglas de AGENTS.md y specs.md:
+-- Reglas de AGENTS.md y docs/specs.md:
 -- 1. El estado del respaldo sobrevive al reinicio (sin rutas absolutas del usuario).
 -- 2. backup.restore se asigna solo al rol Dueño; nunca a role-dev por defecto.
 -- 3. Repetible e idempotente.

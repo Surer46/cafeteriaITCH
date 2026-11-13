@@ -41,11 +41,11 @@
 
 ### Dirección visual solicitada — 2026-09-30
 
-- [x] Implementar FE-09: tema nativo compartido Cupertino / ITCH II (`src/frontend/theme.hpp`/`.cpp`), tipografía Roboto local en memoria, 20 iconos Material SVG cargados y tintados en memoria con caché por DPI, `CardPanel`, `StatusBadge`, encabezado con estado en vivo y toggle Estándar/Touch, barra lateral burdeos `#991B1B` con píldoras de sección, subnav segmentada, controles contextuales del POS (`Editar cantidad`, `Editar nota`, `Quitar artículo`, `Más acciones...`, `Historial / Reimpresión`), diálogo de cobro y diálogo de impresión estilizados. Corrección de manifiesto MinGW (`cmake/no-default-manifest.specs`) y soporte comctl32 v6.0. Compilación en Debug y Release con CTest 2/2, I1 e I2 superados en ambos binarios, y 6 capturas generadas para QA visual en `qa_visual/screenshots/`. Los casos humanos de `qa-visual.md` y los hallazgos de integridad de `auditoria-2026-09-30.md` permanecen pendientes.
+- [x] Implementar FE-09: tema nativo compartido Cupertino / ITCH II (`src/frontend/theme.hpp`/`.cpp`), tipografía Roboto local en memoria, 20 iconos Material SVG cargados y tintados en memoria con caché por DPI, `CardPanel`, `StatusBadge`, encabezado con estado en vivo y toggle Estándar/Touch, barra lateral burdeos `#991B1B` con píldoras de sección, subnav segmentada, controles contextuales del POS (`Editar cantidad`, `Editar nota`, `Quitar artículo`, `Más acciones...`, `Historial / Reimpresión`), diálogo de cobro y diálogo de impresión estilizados. Corrección de manifiesto MinGW (`cmake/no-default-manifest.specs`) y soporte comctl32 v6.0. Compilación en Debug y Release con CTest 2/2, I1 e I2 superados en ambos binarios, y 6 capturas generadas para QA visual en `qa_visual/screenshots/`. Los casos humanos de `qa-visual.md` y los hallazgos de integridad de `Auditorias/auditoria-2026-09-30.md` permanecen pendientes.
 
 ### Auditoría independiente — 2026-09-30
 
-Consultar `../auditoria-2026-09-30.md`. Edición, historial y wxPrinter están implementados; el script I2 no acciona esas rutas, solo agrega, cobra y elige Ahora no. Quedan pruebas gráficas de edición/historial tras reapertura, permisos, cancelación/error y ticket largo sin recortes. La impresión anuncia una sola página sin ajuste de notas al ancho/alto imprimible. No considerar cerrado software ni pendiente solo hardware.
+Consultar `Auditorias/auditoria-2026-09-30.md`. Edición, historial y wxPrinter están implementados; el script I2 no acciona esas rutas, solo agrega, cobra y elige Ahora no. Quedan pruebas gráficas de edición/historial tras reapertura, permisos, cancelación/error y ticket largo sin recortes. La impresión anuncia una sola página sin ajuste de notas al ancho/alto imprimible. No considerar cerrado software ni pendiente solo hardware.
 
 ### Cierre de integridad y funcionalidad I2 — 2026-09-29
 
@@ -56,7 +56,7 @@ Consultar `../auditoria-2026-09-30.md`. Edición, historial y wxPrinter están i
 - [x] Impresión nativa: integrado `wxPrinter` / `wxPrintout` (`TicketPrintout`) con ajuste de página y manejo de cancelación/fallo sin duplicar la venta.
 - [ ] Validación física en hardware de caja: falta conectar y comprobar la salida física en la impresora térmica real. La puerta I2 permanece parcial en hardware.
 
-Revisión de código y compilación actual. El detalle ejecutable está en `plan.md`; el orden compartido en `../specs.md`, sección 12. Las notas del 2026-09-25 al final son históricas. Los paneles compilados no equivalen a una demostración completa del flujo desde la ventana.
+Revisión de código y compilación actual. El detalle ejecutable está en `plan.md`; el orden compartido en `docs/specs.md`, sección 12. Las notas del 2026-09-25 al final son históricas. Los paneles compilados no equivalen a una demostración completa del flujo desde la ventana.
 
 - [x] FE-01: alta inicial incluye correo, contraseña y confirmación; navegación nativa de cuatro secciones y subsección técnica filtrada.
 - [x] FE-02: `PosPanel` conecta búsqueda, agregado con nota, edición de cantidad/nota, quitar, cancelar y consulta de carrito a servicios SQLite; contador y total se actualizan desde DTO.
@@ -133,7 +133,7 @@ Estado anterior registrado tras BE-02 y la revalidación de I1. Se conserva la e
 - [ ] Completar revisión Touch fuera de las acciones de Venta: las capturas aún muestran controles compactos en encabezado, navegación y subsecciones. La prueba de siete botones de Venta no demuestra que todos los controles de la aplicación alcancen el mínimo táctil.
 - [ ] Verificar escalas 125%, 150% y 200%, y ergonomía en monitor táctil real. Esta entrega declara comprobación automatizada únicamente a 96 DPI (100%).
 
-La terminal informa compilación correcta, CTest 2/2, I1, escenario automatizado I2 y suite geométrica aprobados en Debug y Release. Esta auditoría revisó salida y capturas; no repitió esas ejecuciones. Se mantienen abiertos los hallazgos de integridad de `../auditoria-2026-09-30.md`, I2 completo y aceptación humana (0 casos).
+La terminal informa compilación correcta, CTest 2/2, I1, escenario automatizado I2 y suite geométrica aprobados en Debug y Release. Esta auditoría revisó salida y capturas; no repitió esas ejecuciones. Se mantienen abiertos los hallazgos de integridad de `Auditorias/auditoria-2026-09-30.md`, I2 completo y aceptación humana (0 casos).
 
 ### Resolución de software e integración gráfica I2 — 2026-09-30
 
@@ -185,7 +185,7 @@ Evidencia y criterios en `qa-visual.md`, sección QA humano recibido — 2026-10
 
 ### Revisión independiente de la entrega del Bloque 1 — 2026-10-02
 
-Las cinco correcciones anteriores de I2 tienen implementación y pruebas. Antes de distribuir, queda separar --test-idempotency-key/--test-user/--test-pass del binario operativo, quitar fallback admin/admin y evitar contraseña en argumentos de proceso. Precisar alcance de snapshots y comparación de ticket. Consultar `auditoria-2026-10-02.md` en la raíz.
+Las cinco correcciones anteriores de I2 tienen implementación y pruebas. Antes de distribuir, queda separar --test-idempotency-key/--test-user/--test-pass del binario operativo, quitar fallback admin/admin y evitar contraseña en argumentos de proceso. Precisar alcance de snapshots y comparación de ticket. Consultar `Auditorias/auditoria-2026-10-02.md` en la raíz.
 
 - [ ] Corregir aislamiento del mecanismo de prueba y documentación de cobertura.
 - [ ] Bloque 2 aún pendiente: QA humano, username en encabezado y perfiles térmicos 55/80 mm.
@@ -202,7 +202,7 @@ Avances inspeccionados: runner aislado, username, único icono de agregado, fond
 - [ ] Resolver recorte de Editar cantidad, actualización dinámica de Touch en navegación y centrado de otras entradas altas.
 - [ ] Capturas de configuración/previa 55/80 y recorridos GUI de cambio/reinicio/reimpresión sin alterar historia.
 
-Ver `auditoria-2026-10-03.md` en la raíz. I2 sigue parcial; no avanzar a I3.
+Ver `Auditorias/auditoria-2026-10-03.md`. I2 sigue parcial; no avanzar a I3.
 
 ### Resolución de tareas frontend — 2026-10-14
 
@@ -214,7 +214,7 @@ Ver `auditoria-2026-10-03.md` en la raíz. I2 sigue parcial; no avanzar a I3.
 - [x] **Evidencia visual 01–08 generada:** Capturas generadas en `qa_visual/screenshots/` con base aislada e inspeccionadas formalmente.
 - [ ] **Límites:** Impresora física, monitor táctil real y los 7 casos de QA humano (`qa-visual.md`) permanecen sin completar. I2 sigue **PARCIAL**.
 
-## Auditoría 2026-10-18 (ver `../auditoria-2026-10-18.md`)
+## Auditoría 2026-10-18 (ver `Auditorias/auditoria-2026-10-18.md`)
 
 - [x] Configurar tamaño de papel 55/80 en `wxPrintData` o documentar dependencia del controlador; «Continuar» con impresora ausente debe usar la predeterminada.
 - [x] Sustituir centinela «Impresora Térmica Predeterminada» por cadena vacía en panel, diálogo y servicio.

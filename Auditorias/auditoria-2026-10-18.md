@@ -2,7 +2,7 @@
 
 ## Alcance
 
-Contraste de la entrega Sonnet/Gemini descrita en `auditoria-2026-10-14.md` (redactada por el propio agente ejecutor) contra el código actual, capturas en `qa_visual/screenshots/` y una compilación desde cero. Sin cambios a código de producción ni pruebas; solo documentación.
+Contraste de la entrega Sonnet/Gemini descrita en `Auditorias/auditoria-2026-10-14.md` (redactada por el propio agente ejecutor) contra el código actual, capturas en `qa_visual/screenshots/` y una compilación desde cero. Sin cambios a código de producción ni pruebas; solo documentación.
 
 ## Verificación ejecutada en esta auditoría
 
@@ -38,7 +38,7 @@ ctest --test-dir build_debug --output-on-failure
 3. **Nombre de impresora ficticio:** el valor por defecto `"Impresora Térmica Predeterminada"` es un centinela mágico repetido en tres archivos; el diálogo de ticket lo muestra como «Impresora configurada» (captura 04), mientras el panel muestra «(Predeterminada del sistema)». Usar cadena vacía como «predeterminada».
 4. Código sin sentido: `SetOrientation(wxLANDSCAPE == wxLANDSCAPE ? wxPORTRAIT : wxPORTRAIT)`.
 5. `SqlitePrintConfigService` no usa SQLite (archivo plano); `db_` sin uso. El cambio de configuración no genera evento de auditoría.
-6. Documentación: `specs.md` rotula I2 «SOFTWARE COMPLETADO Y AUDITADO»; los planes afirman «todos los requerimientos de software de I2 resueltos». No es cierto según esta tabla.
+6. Documentación: `docs/specs.md` rotula I2 «SOFTWARE COMPLETADO Y AUDITADO»; los planes afirman «todos los requerimientos de software de I2 resueltos». No es cierto según esta tabla.
 
 ## Estado de la puerta I2
 
@@ -57,7 +57,7 @@ Compilar Debug/Release, CTest en ambos y repetir I1/I2/FE-08 antes de declarar t
 
 ## Archivos modificados por esta auditoría
 
-`auditoria-2026-10-18.md` (nuevo), `specs.md`, `frontend/task.md`, `backend/task.md`, `antigravity-resume.md`.
+`Auditorias/auditoria-2026-10-18.md` (nuevo), `docs/specs.md`, `frontend/task.md`, `backend/task.md`, `docs/antigravity-resume.md`.
 
 ---
 
@@ -82,7 +82,7 @@ Observaciones abiertas (no bloquean A):
 
 Desempeño del agente: dentro del alcance, sin bucles ni compilaciones repetidas; una llamada perdida (`git grep` en carpeta sin git) y una búsqueda recursiva costosa en `D:\Temp\wxwidgets`. Informe final coherente con el código en esta ocasión.
 
-Siguiente: prompt B (`prompts-antigravity-2026-10-18.md`).
+Siguiente: prompt B (`Prompts/prompts-antigravity-2026-10-18.md`).
 
 ---
 
@@ -148,7 +148,7 @@ Estado: los pendientes de software de la auditoría del 2026-10-18 quedan cerrad
 
 ## Bloque B1 (Claude Code Terminal, opusplan) — 2026-11-08
 
-Primer bloque con dos agentes en paralelo (ver `coordinacion-agentes.md`). Trabajado en el worktree `D:\Cafeteria_ITCH_backend`, rama `backend/b1`, commit `3931ba6`. Sin la skill caveman (línea base para comparar).
+Primer bloque con dos agentes en paralelo (ver `docs/coordinacion-agentes.md`). Trabajado en el worktree `D:\Cafeteria_ITCH_backend`, rama `backend/b1`, commit `3931ba6`. Sin la skill caveman (línea base para comparar).
 
 Plan revisado antes de ejecutar; aprobado con la opción A y cinco ajustes: `main_app.cpp` pasa `migrations_dir` en el mismo bloque; rechazo previo por `page_size`; rechazo de origen sin Dueño activo; invalidación del estado en memoria; auditoría `BACKUP_RESTORE_FAILED`. Los cinco quedaron implementados y probados.
 
@@ -182,7 +182,7 @@ Correcto:
 
 Falso en el informe: «geometría estricta sin recorte». En la captura 09, las columnas de «Roles Registrados» están recortadas (Descrip…, Si…, Pe) y hay barra horizontal: anchos fijos a ojo de 68/78/38/42 px (`backoffice_roles_panel.cpp:146-149`), contra lo pedido. Las etiquetas de permisos se envuelven a unos 270 px aunque sobra espacio, y la casilla queda alineada con la segunda línea. La prueba solo mide recorte en botones, no en columnas ni casillas.
 
-Error del orquestador: el prompt F1 pidió roles de sistema en solo lectura. El servicio permite editar los permisos del Cajero (`role-cashier`, `is_system = 1`) y solo protege Dueño y Desarrollador; `specs.md` dice que el Dueño configura los permisos. Pendiente de decisión del usuario.
+Error del orquestador: el prompt F1 pidió roles de sistema en solo lectura. El servicio permite editar los permisos del Cajero (`role-cashier`, `is_system = 1`) y solo protege Dueño y Desarrollador; `docs/specs.md` dice que el Dueño configura los permisos. Pendiente de decisión del usuario.
 
 Desempeño: arranque lento (unos 7 min compilando y corriendo CTest sin cambios, más 2 min de razonamiento antes de escribir). Dos fallos de su prueba GUI resueltos con diagnóstico, sin relajar umbrales. Unos 45 minutos en total.
 

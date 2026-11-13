@@ -1,6 +1,6 @@
 # Prompts del 2026-11-12 — ronda 4
 
-Línea base: `main` en `9b0ec95`. Reglas en `coordinacion-agentes.md`. Los dos bloques corren en paralelo sin tocar los mismos archivos.
+Línea base: `main` en `9b0ec95`. Reglas en `docs/coordinacion-agentes.md`. Los dos bloques corren en paralelo sin tocar los mismos archivos.
 
 - **B3b** (Claude Code Terminal, rama `backend/b3b`): utilidades compartidas de columnas y campo centrado, aplicadas a Roles y Bitácora.
 - **F2b** (AntiGravity, `main`): subsección activa sin resaltar cuando su nombre lleva acento.
@@ -14,7 +14,7 @@ Excepción de esta ronda: los dos agentes ejecutan pruebas GUI. Para no chocar, 
 ## B3b — Claude Code Terminal (worktree `D:\Cafeteria_ITCH_backend`, rama `backend/b3b`)
 
 ```text
-Tarea de frontend por la regla de dos pasadas (coordinacion-agentes.md, protocolo punto 6). Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b3b (ya parte de main, incluye B3a y el panel de Bitacora). No hagas commits.
+Tarea de frontend por la regla de dos pasadas (docs/coordinacion-agentes.md, protocolo punto 6). Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b3b (ya parte de main, incluye B3a y el panel de Bitacora). No hagas commits.
 
 Motivo: el ajuste de columnas de listas y el centrado vertical de texto en campos han fallado en tres paneles distintos. B3a los resolvio dentro de backoffice_roles_panel.cpp. Hay que sacarlos a un lugar comun para que los paneles nuevos los reutilicen.
 
@@ -154,10 +154,10 @@ Entrega corta: archivos, comandos con codigo de salida y limites.
 
 ## B4 — Claude Code Terminal (enviar cuando B4a esté aceptado; rama `backend/b4`)
 
-Origen: `auditoria-general-2026-11-12.md`, apartado B. Aprobado por el usuario el 2026-11-12. El cliente no ha definido el tipo de versión móvil; estos ajustes sirven para cualquiera.
+Origen: `Auditorias/auditoria-general-2026-11-12.md`, apartado B. Aprobado por el usuario el 2026-11-12. El cliente no ha definido el tipo de versión móvil; estos ajustes sirven para cualquiera.
 
 ```text
-Bloque B4 de backend. Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b4. No hagas commits. No compiles ni corras pruebas antes de editar. Lee auditoria-general-2026-11-12.md, apartado B.
+Bloque B4 de backend. Trabaja SOLO en D:\Cafeteria_ITCH_backend, rama backend/b4. No hagas commits. No compiles ni corras pruebas antes de editar. Lee Auditorias/auditoria-general-2026-11-12.md, apartado B.
 
 Objetivo: cuatro ajustes de datos que hoy cuestan poco y con ventas acumuladas costarian mucho. No construyas sincronizacion, servidor ni nada de red.
 

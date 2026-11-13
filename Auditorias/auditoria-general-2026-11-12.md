@@ -2,7 +2,7 @@
 
 Pregunta: ¿la aplicación planificada está completa?, ¿qué convendría agregar sabiendo que en el futuro se quiere una versión móvil?
 
-Base revisada: `specs.md` secciones 1 a 11, `backend/plan.md`, migración 001 y los generadores de identificadores, fechas y folio en `src/services/`. No se revisó `frontend/plan.md` línea por línea ni se comprobó si las casillas sin marcar de `backend/plan.md` siguen vigentes. Nada de esto se ejecutó: es lectura de documentos y código.
+Base revisada: `docs/specs.md` secciones 1 a 11, `backend/plan.md`, migración 001 y los generadores de identificadores, fechas y folio en `src/services/`. No se revisó `frontend/plan.md` línea por línea ni se comprobó si las casillas sin marcar de `backend/plan.md` siguen vigentes. Nada de esto se ejecutó: es lectura de documentos y código.
 
 ## Veredicto
 

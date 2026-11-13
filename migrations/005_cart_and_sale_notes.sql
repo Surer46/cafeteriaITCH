@@ -1,5 +1,5 @@
 -- Migración 005: Notas por línea en carrito y ventas para personalización de preparación
--- Reglas de specs.md y AGENTS.md:
+-- Reglas de docs/specs.md y AGENTS.md:
 -- 1. Captura de notas opcionales de hasta 250 caracteres por línea (ej. «sin hielo», «bien cocido»).
 -- 2. Dos productos iguales con diferente nota se guardan como líneas separadas.
 -- 3. La nota se persiste en el borrador (cart_items) y se copia como instantánea inmutable (sale_items).

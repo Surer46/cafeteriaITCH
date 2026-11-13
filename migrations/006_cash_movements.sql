@@ -1,5 +1,5 @@
 -- Migración 006: Movimientos de caja para control de efectivo y turnos
--- Reglas de AGENTS.md y specs.md:
+-- Reglas de AGENTS.md y docs/specs.md:
 -- 1. Registro auditable de flujo de efectivo por turno (VENTA, FONDO INICIAL, ENTRADA, SALIDA).
 -- 2. Integridad referencial con turnos y ventas.
 -- 3. Repetible e idempotente.
