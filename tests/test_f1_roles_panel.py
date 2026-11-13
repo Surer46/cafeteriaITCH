@@ -1,31 +1,42 @@
 #!/usr/bin/env python3
 """
-test_f1_roles_panel.py - Verificación rigurosa de panel BackOffice > Roles y permisos (Puertas I6 / Tareas F1 y F1b).
+test_f1_roles_panel.py - Verificación rigurosa de panel BackOffice > Roles y permisos (Puertas I6 / Tareas F1, F1b y F5).
 
-Comprobaciones exigidas por especificación y auditoría F1b:
+Comprobaciones exigidas por especificación y auditoría:
 1. Base temporal aislada y ejecutable real, tanto en Release como en Debug.
 2. Rol Cajero (role-cashier):
-   - Dueño puede editar permisos: casillas y botón Guardar habilitados.
+   - Dueño puede editar permisos: interruptores y botón Guardar habilitados.
    - Nombre, Descripción y Eliminar deshabilitados.
    - Aviso explícito: "Rol de sistema: solo se pueden cambiar sus permisos."
-   - Marcar permiso nuevo, guardar, cerrar, reabrir y comprobar persistencia íntegra.
+   - Activar permiso nuevo (localizado por título leído de SQLite), guardar, cerrar, reabrir y comprobar persistencia íntegra.
 3. Rol Dueño (role-owner):
-   - Todo en solo lectura: Nombre, Descripción, Eliminar, Guardar y casillas deshabilitados.
+   - Todo en solo lectura: Nombre, Descripción, Eliminar, Guardar e interruptores deshabilitados.
+   - Clic en interruptor no cambia el estado.
    - Aviso explícito: "Rol de sistema (solo lectura: no editable ni eliminable)".
 4. role-dev y backup.dev_config no aparecen en ningún control visible de la UI.
 5. Columnas de lista "Roles Registrados":
    - LVM_GETCOLUMNWIDTH >= ancho medido del encabezado y texto más largo + 8 px (excepto Descripción con puntos suspensivos).
-   - Sin estilo WS_HSCROLL visible en la lista a 1216x759 en ambos perfiles (Estándar y Touch).
-6. Matriz de permisos:
-   - Casilla alineada con la primera línea de texto (estilo BS_TOP y tolerancia <= 3 px).
-   - Texto completo visible (ancho >= texto medido o alto suficiente para cubrir todas las líneas envueltas).
+   - Sin estilo WS_HSCROLL visible en la lista en ambos perfiles (Estándar y Touch).
+6. Matriz de permisos con ToggleSwitch (F5):
+   - 20 interruptores visibles (uno por permiso visible en SQLite).
+   - Tamaño del interruptor >= 44x24 en Estándar y >= 60x32 en Touch (GetWindowRect).
+   - Alto de fila >= 52 en Estándar y >= 68 en Touch.
+   - Título y descripción no vacíos, iguales a SQLite; título encima de descripción, sin recorte ni solapamiento con el interruptor.
+   - Exactamente 4 encabezados de grupo en orden de la barra lateral: Punto de Venta, Inventario, Caja y Reportes, BackOffice.
+   - Separador horizontal de 1 px detectado por píxeles entre cada par consecutivo de permisos del mismo grupo.
+   - Centro vertical del interruptor a <= 3 px del centro de su fila.
+   - Borde derecho de todos los interruptores alineado (<= 2 px) y ninguno recortado por el área visible.
+   - Posición de la perilla leída por píxeles (derecha si BM_GETCHECK == 1, izquierda si 0).
+   - Clic en interruptor, en título, en descripción y Espacio con foco cambian el estado.
+   - Contador junto a Guardar coincide con el número de interruptores activados.
 7. Roles creados por el Dueño:
-   - Nombre, descripción, casillas, Guardar y Eliminar 100% editables y persistentes.
-8. Geometría estricta a 1216x759 y 960x600 en ambos perfiles; en Touch, controles interactivos con altura >= 48 px.
+   - Nombre, descripción, interruptores, Guardar y Eliminar 100% editables y persistentes.
+8. Geometría estricta a 1200x720 y 960x600 en ambos perfiles; en Touch, filas de lista >= 40 px, campos >= 48 px centrados y botones >= 48 px.
 """
 
 import ctypes
 from ctypes import wintypes
+import re
 import time
 import subprocess
 import os
@@ -76,8 +87,12 @@ user32.GetParent.argtypes = [wintypes.HWND]
 user32.GetParent.restype = wintypes.HWND
 user32.GetDC.argtypes = [wintypes.HWND]
 user32.GetDC.restype = wintypes.HDC
+user32.GetWindowDC.argtypes = [wintypes.HWND]
+user32.GetWindowDC.restype = wintypes.HDC
 user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
 user32.ReleaseDC.restype = ctypes.c_int
+user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, wintypes.UINT]
+user32.PrintWindow.restype = wintypes.BOOL
 user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.GetWindowLongW.restype = wintypes.LONG
 
@@ -87,6 +102,14 @@ gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
 gdi32.SelectObject.restype = wintypes.HGDIOBJ
 gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
 gdi32.GetPixel.restype = wintypes.COLORREF
+gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
+gdi32.CreateCompatibleDC.restype = wintypes.HDC
+gdi32.DeleteDC.argtypes = [wintypes.HDC]
+gdi32.DeleteDC.restype = wintypes.BOOL
+gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
+gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
+gdi32.DeleteObject.restype = wintypes.BOOL
 
 user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
 user32.ClientToScreen.restype = wintypes.BOOL
@@ -112,11 +135,6 @@ except AttributeError:
 
 GWL_STYLE = -16
 WS_HSCROLL = 0x00100000
-BS_CHECKBOX = 0x0002
-BS_AUTOCHECKBOX = 0x0003
-BS_3STATE = 0x0005
-BS_AUTO3STATE = 0x0006
-BS_TOP = 0x0400
 LVM_GETCOLUMNWIDTH = 0x1000 + 29
 LVM_GETNEXTITEM = 0x1000 + 12
 LVM_GETITEMRECT = 0x1000 + 14
@@ -125,6 +143,7 @@ LVIR_BOUNDS = 0
 WM_VSCROLL = 0x0115
 SB_LINEUP = 0
 SB_LINEDOWN = 1
+SB_TOP = 6
 PROCESS_VM_OPERATION = 0x0008
 PROCESS_VM_READ = 0x0010
 PROCESS_VM_WRITE = 0x0020
@@ -134,7 +153,6 @@ MEM_RELEASE = 0x8000
 PAGE_READWRITE = 0x04
 CLR_INVALID = 0xFFFFFFFF
 
-WM_SETFOCUS = 0x0007
 WM_SETTEXT = 0x000C
 WM_GETTEXT = 0x000D
 WM_GETTEXTLENGTH = 0x000E
@@ -145,10 +163,19 @@ BM_GETCHECK = 0x00F0
 BM_SETCHECK = 0x00F1
 WM_KEYDOWN = 0x0100
 WM_KEYUP = 0x0101
+VK_SPACE = 0x20
 WM_LBUTTONDOWN = 0x0201
 WM_LBUTTONUP = 0x0202
 SWP_NOZORDER = 0x0004
 SWP_NOMOVE = 0x0002
+
+SIDEBAR_SECTIONS = ["Punto de Venta", "Inventario", "Caja y Reportes", "BackOffice"]
+
+def norm_ws(text):
+    return " ".join(text.split())
+
+def colorref_to_rgb(c):
+    return (c & 0xFF, (c >> 8) & 0xFF, (c >> 16) & 0xFF)
 
 def get_window_pid(hwnd):
     pid = wintypes.DWORD()
@@ -184,6 +211,9 @@ def get_child_controls(parent_hwnd):
         return True
     user32.EnumChildWindows(parent_hwnd, WNDENUMPROC(enum_child_cb), 0)
     return controls
+
+def get_direct_children(parent_hwnd):
+    return [c for c in get_child_controls(parent_hwnd) if user32.GetParent(c[0]) == parent_hwnd]
 
 def wait_for_window_by_pid(target_pid, title_substring, exclude_substrings=None, timeout_sec=12.0, step_name=""):
     start = time.time()
@@ -237,10 +267,18 @@ def send_click_button(hwnd):
 def post_click_button(hwnd):
     user32.PostMessageW(hwnd, BM_CLICK, 0, 0)
 
+def click_control_at(hwnd, x=None, y=None):
+    _, _, _, _, w, h = get_rect(hwnd)
+    cx = (w // 2) if x is None else max(1, min(w - 2, x))
+    cy = (h // 2) if y is None else max(1, min(h - 2, y))
+    lparam = (cy << 16) | (cx & 0xFFFF)
+    user32.PostMessageW(hwnd, WM_LBUTTONDOWN, 1, lparam)
+    time.sleep(0.05)
+    user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
+    time.sleep(0.25)
+
 def remote_get_item_rect(hwnd_list, index, code=LVIR_BOUNDS):
-    """LVM_GETITEMRECT entre procesos: el RECT debe vivir en la memoria de la app, no en la de la prueba.
-    Cualquier fallo de OpenProcess/VirtualAllocEx/WriteProcessMemory/ReadProcessMemory FALLA la prueba
-    (nunca se omite la comprobación). La memoria remota se libera siempre con VirtualFreeEx."""
+    """LVM_GETITEMRECT entre procesos: el RECT debe vivir en la memoria de la app, no en la de la prueba."""
     pid = get_window_pid(hwnd_list)
     access = PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_QUERY_INFORMATION
     hproc = kernel32.OpenProcess(access, False, pid)
@@ -252,7 +290,7 @@ def remote_get_item_rect(hwnd_list, index, code=LVIR_BOUNDS):
         remote = kernel32.VirtualAllocEx(hproc, None, size, MEM_COMMIT_RESERVE, PAGE_READWRITE)
         if not remote:
             raise AssertionError(f"LVM_GETITEMRECT: VirtualAllocEx falló (error {ctypes.get_last_error()})")
-        rect_in = wintypes.RECT(code, 0, 0, 0)  # LVM_GETITEMRECT recibe el código en rc.left
+        rect_in = wintypes.RECT(code, 0, 0, 0)
         written = ctypes.c_size_t(0)
         if not kernel32.WriteProcessMemory(hproc, remote, ctypes.byref(rect_in), size, ctypes.byref(written)) or written.value != size:
             raise AssertionError(f"LVM_GETITEMRECT: WriteProcessMemory falló (error {ctypes.get_last_error()}, escritos {written.value}/{size})")
@@ -288,6 +326,13 @@ def get_client_size(hwnd):
     assert user32.GetClientRect(hwnd, ctypes.byref(r)), "GetClientRect falló"
     return r.right - r.left, r.bottom - r.top
 
+def get_client_screen_rect(hwnd):
+    rc = wintypes.RECT()
+    assert user32.GetClientRect(hwnd, ctypes.byref(rc)), "GetClientRect falló"
+    pt = wintypes.POINT(0, 0)
+    assert user32.ClientToScreen(hwnd, ctypes.byref(pt)), "ClientToScreen falló"
+    return pt.x, pt.y, pt.x + rc.right, pt.y + rc.bottom
+
 def get_window_dpi(hwnd):
     if HAS_GET_DPI:
         dpi = user32.GetDpiForWindow(hwnd)
@@ -300,11 +345,196 @@ def get_window_dpi(hwnd):
         return dpi
     return 96
 
+def load_visible_permissions_from_db(db_path):
+    con = sqlite3.connect(db_path)
+    cur = con.cursor()
+    cur.execute("""
+        SELECT id, title, description, section, sort_order
+        FROM permissions
+        WHERE id != 'backup.dev_config'
+        ORDER BY sort_order ASC
+    """)
+    rows = cur.fetchall()
+    con.close()
+    assert len(rows) > 0, "No se encontraron permisos visibles en SQLite"
+    return [
+        {"id": r[0], "title": r[1], "description": r[2], "section": r[3], "sort_order": r[4]}
+        for r in rows
+    ]
+
+def collect_permission_rows(parent_hwnd, db_perms):
+    """Descubre cada fila de permiso en la UI usando el título leído de la tabla permissions de SQLite."""
+    ctrls = get_child_controls(parent_hwnd)
+    by_title = {norm_ws(p["title"]): p for p in db_perms}
+
+    rows = []
+    seen_sw = set()
+    for hwnd_sw, cls, txt in ctrls:
+        if "button" in cls.lower() or cls.lower() in ("static", "edit", "syslistview32"):
+            continue
+        ntxt = norm_ws(txt)
+        if not ntxt or ntxt not in by_title or hwnd_sw in seen_sw:
+            continue
+        h_row = user32.GetParent(hwnd_sw)
+        if not h_row:
+            continue
+        row_children = get_direct_children(h_row)
+        statics = [c for c in row_children if c[1].lower() == "static"]
+        if len(statics) != 2:
+            continue
+        statics_sorted = sorted(statics, key=lambda c: get_rect(c[0])[1])
+        h_title = statics_sorted[0][0]
+        h_desc = statics_sorted[1][0]
+        seen_sw.add(hwnd_sw)
+        rows.append({
+            "perm": by_title[ntxt],
+            "h_scroll": user32.GetParent(h_row),
+            "h_row": h_row,
+            "h_title": h_title,
+            "h_desc": h_desc,
+            "h_sw": hwnd_sw,
+        })
+
+    # Ordenar visualmente de arriba a abajo
+    rows.sort(key=lambda r: get_rect(r["h_row"])[1])
+    return rows
+
+def find_toggle_by_perm_id(parent_hwnd, db_perms, perm_id):
+    rows = collect_permission_rows(parent_hwnd, db_perms)
+    match = next((r for r in rows if r["perm"]["id"] == perm_id), None)
+    assert match is not None, f"Interruptor para permiso '{perm_id}' no encontrado en la UI"
+    return match
+
+def ensure_rect_visible_in_scroll(h_scroll, target_top, target_bottom, label=""):
+    """Desplaza h_scroll con WM_VSCROLL hasta que [target_top, target_bottom] quede dentro del área visible."""
+    for _ in range(500):
+        _, s_top, _, s_bottom = get_client_screen_rect(h_scroll)
+        if target_top >= s_top and target_bottom <= s_bottom:
+            time.sleep(0.08)
+            return
+        cmd = SB_LINEDOWN if target_bottom > s_bottom else SB_LINEUP
+        user32.SendMessageW(h_scroll, WM_VSCROLL, cmd, 0)
+        time.sleep(0.02)
+        # Actualizar coordenadas relativas tras scroll: no aplica si el caller pasa coords fijas; usar ensure_row_visible
+    raise AssertionError(f"No se pudo traer a la vista '{label}' con WM_VSCROLL")
+
+def ensure_row_visible(h_scroll, h_row, label=""):
+    for _ in range(500):
+        _, rt, _, rb, _, _ = get_rect(h_row)
+        _, s_top, _, s_bottom = get_client_screen_rect(h_scroll)
+        if rt >= s_top and rb <= s_bottom:
+            time.sleep(0.08)
+            return
+        cmd = SB_LINEDOWN if rb > s_bottom else SB_LINEUP
+        user32.SendMessageW(h_scroll, WM_VSCROLL, cmd, 0)
+        time.sleep(0.02)
+    raise AssertionError(f"No se pudo traer la fila '{label}' a la vista con WM_VSCROLL")
+
+def ensure_pair_boundary_visible(h_scroll, h_row_a, h_row_b, label=""):
+    ensure_row_visible(h_scroll, h_row_a, label)
+    for _ in range(200):
+        _, _, _, ab, _, _ = get_rect(h_row_a)
+        _, bt, _, _, _, _ = get_rect(h_row_b)
+        _, s_top, _, s_bottom = get_client_screen_rect(h_scroll)
+        if ab - 3 >= s_top and bt + 3 <= s_bottom:
+            time.sleep(0.08)
+            return
+        cmd = SB_LINEDOWN if bt + 3 > s_bottom else SB_LINEUP
+        user32.SendMessageW(h_scroll, WM_VSCROLL, cmd, 0)
+        time.sleep(0.02)
+    raise AssertionError(f"No se pudo traer el separador '{label}' a la vista con WM_VSCROLL")
+
+def verify_knob_pixels(h_sw, expected_checked, label):
+    """Lee píxeles del interruptor para verificar en qué lado está la perilla blanca."""
+    _, _, _, _, sw_w, sw_h = get_rect(h_sw)
+    hdc = user32.GetDC(h_sw)
+    assert hdc, f"GetDC falló para interruptor '{label}'"
+    try:
+        mid_x = sw_w // 2
+        left_knob = 0
+        right_knob = 0
+        for y in range(4, max(5, sw_h - 4)):
+            for x in range(4, max(5, mid_x - 2)):
+                v = gdi32.GetPixel(hdc, x, y)
+                if v != CLR_INVALID:
+                    r, g, b = colorref_to_rgb(v)
+                    if min(r, g, b) >= 242:
+                        left_knob += 1
+            for x in range(mid_x + 2, max(mid_x + 3, sw_w - 4)):
+                v = gdi32.GetPixel(hdc, x, y)
+                if v != CLR_INVALID:
+                    r, g, b = colorref_to_rgb(v)
+                    if min(r, g, b) >= 242:
+                        right_knob += 1
+    finally:
+        user32.ReleaseDC(h_sw, hdc)
+
+    assert left_knob >= 10 or right_knob >= 10, (
+        f"Perilla no detectada en interruptor '{label}' (izq={left_knob}px, der={right_knob}px, {sw_w}x{sw_h})"
+    )
+    if expected_checked:
+        assert right_knob > left_knob and right_knob >= 10, (
+            f"Interruptor '{label}' activado (BM_GETCHECK=1) pero perilla no está a la derecha "
+            f"(izq={left_knob}px, der={right_knob}px)"
+        )
+    else:
+        assert left_knob > right_knob and left_knob >= 10, (
+            f"Interruptor '{label}' desactivado (BM_GETCHECK=0) pero perilla no está a la izquierda "
+            f"(izq={left_knob}px, der={right_knob}px)"
+        )
+
+def verify_separator_pixels(hwnd_main, h_scroll, row_a, row_b):
+    """Detecta por píxeles la línea separadora horizontal entre row_a y row_b del mismo grupo."""
+    ensure_pair_boundary_visible(h_scroll, row_a["h_row"], row_b["h_row"],
+                                 f"{row_a['perm']['id']} -> {row_b['perm']['id']}")
+
+    ml, mt, _, _, mw, mh = get_rect(hwnd_main)
+    rl, _, rr, ab, _, _ = get_rect(row_a["h_row"])
+    _, bt, _, _, _, _ = get_rect(row_b["h_row"])
+    assert bt >= ab, f"Fila '{row_b['perm']['id']}' solapa verticalmente a '{row_a['perm']['id']}': {bt} < {ab}"
+
+    hwnd_dc = user32.GetWindowDC(hwnd_main)
+    assert hwnd_dc, "GetWindowDC falló al inspeccionar separador"
+    mem_dc = gdi32.CreateCompatibleDC(hwnd_dc)
+    bmp = gdi32.CreateCompatibleBitmap(hwnd_dc, mw, mh)
+    old_bmp = gdi32.SelectObject(mem_dc, bmp)
+    try:
+        ok = user32.PrintWindow(hwnd_main, mem_dc, 2)
+        assert ok, "PrintWindow falló al inspeccionar separador"
+        xs = [rl + 12, (rl + rr) // 2, rr - 12]
+        xs = [x for x in xs if rl < x < rr]
+        found_sep = False
+        seen_samples = []
+        for y in range(ab - 1, bt + 2):
+            hits = 0
+            row_cols = []
+            for x in xs:
+                v = gdi32.GetPixel(mem_dc, x - ml, y - mt)
+                if v == CLR_INVALID:
+                    continue
+                r, g, b = colorref_to_rgb(v)
+                row_cols.append((r, g, b))
+                # Theme::ColorBorderSubtle = #E2E8F0 (226, 232, 240); fondo = #FFFFFF (255, 255, 255)
+                if abs(r - 226) <= 10 and abs(g - 232) <= 10 and abs(b - 240) <= 10:
+                    hits += 1
+            seen_samples.append((y, row_cols))
+            if hits == len(xs) and hits > 0:
+                found_sep = True
+                break
+        assert found_sep, (
+            f"No se detectó línea separadora horizontal (#E2E8F0) por píxeles entre "
+            f"'{row_a['perm']['id']}' (bottom={ab}) y '{row_b['perm']['id']}' (top={bt}); muestras={seen_samples}"
+        )
+    finally:
+        gdi32.SelectObject(mem_dc, old_bmp)
+        gdi32.DeleteObject(bmp)
+        gdi32.DeleteDC(mem_dc)
+        user32.ReleaseDC(hwnd_main, hwnd_dc)
+
 def verify_list_columns(hwnd_list, profile_name):
-    """Anchos de columna: encabezado medido con la fuente REAL del encabezado, contenido con la de la lista,
-    sin WS_HSCROLL y sin holgura desaprovechada contra el área cliente (sin barra vertical)."""
+    """Anchos de columna: encabezado medido con la fuente REAL del encabezado, contenido con la de la lista."""
     style = user32.GetWindowLongW(hwnd_list, GWL_STYLE)
-    assert (style & WS_HSCROLL) == 0, f"Lista tiene barra horizontal WS_HSCROLL visible a 1216x759 en {profile_name}"
+    assert (style & WS_HSCROLL) == 0, f"Lista tiene barra horizontal WS_HSCROLL visible en {profile_name}"
 
     hdr = user32.SendMessageW(hwnd_list, LVM_GETHEADER, 0, 0)
     assert hdr, f"LVM_GETHEADER no devolvió el encabezado de la lista en {profile_name}"
@@ -313,26 +543,21 @@ def verify_list_columns(hwnd_list, profile_name):
     titles = ["Nombre", "Descripción", "Sistema", "Permisos"]
     for i, title in enumerate(titles):
         hdr_ext, _ = measure_text_extent(hdr, title)
-        assert hdr_ext > 0, f"No se pudo medir el encabezado '{title}' con la fuente del encabezado en {profile_name}"
+        assert hdr_ext > 0, f"No se pudo medir el encabezado '{title}' en {profile_name}"
         assert col_widths[i] >= hdr_ext + 8, (
-            f"Encabezado '{title}' recortado: columna {col_widths[i]}px < {hdr_ext + 8}px "
-            f"(texto {hdr_ext}px con la fuente del encabezado) en {profile_name}")
+            f"Encabezado '{title}' recortado: columna {col_widths[i]}px < {hdr_ext + 8}px en {profile_name}")
 
-    # Col 0: Nombre (contenido con la fuente de la lista)
     ext_cajero, _ = measure_text_extent(hwnd_list, "Cajero")
     ext_dueno, _ = measure_text_extent(hwnd_list, "Dueño")
     max_col0 = max(ext_cajero, ext_dueno)
     assert col_widths[0] >= max_col0 + 8, f"Columna 0 ('Nombre') {col_widths[0]}px < {max_col0 + 8}px en {profile_name}"
 
-    # Col 2: Sistema
     ext_si, _ = measure_text_extent(hwnd_list, "Sí")
     assert col_widths[2] >= ext_si + 8, f"Columna 2 ('Sistema') {col_widths[2]}px < {ext_si + 8}px en {profile_name}"
 
-    # Col 3: Permisos
-    ext_num, _ = measure_text_extent(hwnd_list, "16")
+    ext_num, _ = measure_text_extent(hwnd_list, "20")
     assert col_widths[3] >= ext_num + 8, f"Columna 3 ('Permisos') {col_widths[3]}px < {ext_num + 8}px en {profile_name}"
 
-    # Holgura: la suma de columnas debe usar el área cliente (sin barra vertical) con a lo sumo 8 px libres
     client_w, _ = get_client_size(hwnd_list)
     total = sum(col_widths)
     assert total <= client_w, f"Columnas ({total}px) exceden el área cliente ({client_w}px) en {profile_name}"
@@ -342,117 +567,142 @@ def verify_list_columns(hwnd_list, profile_name):
     print(f"  [{profile_name}] Columnas medidas: N={col_widths[0]}px, D={col_widths[1]}px, S={col_widths[2]}px, P={col_widths[3]}px "
           f"(cliente {client_w}px, holgura {client_w - total}px, sin WS_HSCROLL)")
 
-def ensure_checkbox_visible(h_cb):
-    """Desplaza (WM_VSCROLL) la ventana con scroll que contiene la casilla hasta dejarla completamente visible.
-    Si no lo logra, FALLA: una casilla fuera de vista no se puede medir con GetPixel."""
-    parent = user32.GetParent(h_cb)
-    assert parent, "La casilla no tiene ventana padre"
-    for _ in range(400):
-        _, ct, _, cb, _, _ = get_rect(h_cb)
-        rc = wintypes.RECT()
-        assert user32.GetClientRect(parent, ctypes.byref(rc)), "GetClientRect del padre falló"
-        pt = wintypes.POINT(0, 0)
-        assert user32.ClientToScreen(parent, ctypes.byref(pt)), "ClientToScreen del padre falló"
-        top, bottom = pt.y, pt.y + rc.bottom
-        if ct >= top and cb <= bottom:
-            time.sleep(0.12)
-            return
-        user32.SendMessageW(parent, WM_VSCROLL, SB_LINEDOWN if cb > bottom else SB_LINEUP, 0)
-        time.sleep(0.02)
-    raise AssertionError(f"No se pudo traer a la vista la casilla '{get_ctrl_text(h_cb)[:25]}' con WM_VSCROLL")
+def get_perm_counter_text(hwnd_main):
+    ctrls = get_child_controls(hwnd_main)
+    return next(
+        (txt for (_, cls, txt) in ctrls if cls.lower() == "static" and re.fullmatch(r"\d+ de \d+ permisos", txt)),
+        None,
+    )
 
-def measure_checkbox_glyph_and_text(h_cb, txt, cw, ch):
-    """Devuelve ((glifo_top, glifo_bottom), (texto_top, texto_bottom)) en filas del control, o None en cada
-    rango no detectado. Se compara contra el color de fondo REAL del control, nunca contra blanco.
-    Fondo: píxel libre a la derecha del texto; si no lo hay, una esquina sin glifo ni texto; si no hay ninguno, FALLA."""
-    longest = max(txt.split('\n'), key=len)
-    tw, _ = measure_text_extent(h_cb, longest)
-    hdc = user32.GetDC(h_cb)
-    assert hdc, f"GetDC falló para la casilla '{txt[:25]}'"
-    try:
-        def px(x, y):
-            if x < 0 or y < 0 or x >= cw or y >= ch:
-                return None
-            v = gdi32.GetPixel(hdc, x, y)
-            return None if v == CLR_INVALID else v
+def verify_permission_matrix(hwnd_main, db_perms, profile_name, check_pixels=True):
+    """Verificación geométrica y visual completa de los interruptores, filas, textos, encabezados y separadores."""
+    rows = collect_permission_rows(hwnd_main, db_perms)
+    assert len(rows) == len(db_perms), (
+        f"Se esperaban {len(db_perms)} interruptores visibles en {profile_name}, encontrados {len(rows)}"
+    )
 
-        candidates = []
-        if cw - 3 > tw + 24:                          # a la derecha del texto
-            candidates += [(cw - 3, 2), (cw - 3, ch // 2), (cw - 3, ch - 3)]
-        if ch >= 24:                                  # esquina inferior izquierda (bajo el glifo, sin texto)
-            candidates.append((3, ch - 3))
-        candidates += [(cw - 3, 2), (cw - 3, ch - 3)]  # esquinas derechas
-        bg = None
-        for (x, y) in candidates:
-            v = px(x, y)
-            if v is not None:
-                bg = v
-                break
-        assert bg is not None, f"Casilla '{txt[:25]}': no hay ningún píxel libre para el color de fondo (¿fuera de vista?)"
+    h_scroll = rows[0]["h_scroll"]
+    assert h_scroll, f"Contenedor con scroll no encontrado en {profile_name}"
+    user32.SendMessageW(h_scroll, WM_VSCROLL, SB_TOP, 0)
+    time.sleep(0.1)
 
-        # Glifo: columnas 0..15, primeras filas del control
-        glyph_rows = []
-        for y in range(0, min(ch, 24)):
-            if any((px(x, y) is not None and px(x, y) != bg) for x in range(0, 16)):
-                glyph_rows.append(y)
-        glyph = (glyph_rows[0], glyph_rows[-1]) if glyph_rows else None
-
-        # Tinta de la primera línea de texto: a la derecha del glifo, dentro de una altura de línea
-        _, line_h = measure_text_extent(h_cb, longest)
-        text_rows = []
-        for y in range(0, min(ch, max(line_h, 1) + 2)):
-            if any((px(x, y) is not None and px(x, y) != bg) for x in range(18, min(cw - 4, tw + 22))):
-                text_rows.append(y)
-        text = (text_rows[0], text_rows[-1]) if text_rows else None
-        return glyph, text
-    finally:
-        user32.ReleaseDC(h_cb, hdc)
-
-def verify_permission_checkboxes(parent_hwnd, profile_name):
-    """Verifica que cada casilla tenga BS_TOP, texto visible y glifo alineado con la primera línea (TODAS)."""
-    ctrls = get_child_controls(parent_hwnd)
-    cb_ctrls = [
-        (h, txt) for (h, cls, txt) in ctrls
-        if cls.lower() == "button" and (user32.GetWindowLongW(h, GWL_STYLE) & 0x0F) in (BS_CHECKBOX, BS_AUTOCHECKBOX, BS_3STATE, BS_AUTO3STATE) and len(txt) > 0
+    # 1. Exactamente 4 encabezados de grupo en el orden de la barra lateral
+    scroll_statics = [c for c in get_direct_children(h_scroll) if c[1].lower() == "static"]
+    group_headers = [
+        (h, txt, get_rect(h)[1]) for (h, _, txt) in scroll_statics
+        if txt in SIDEBAR_SECTIONS
     ]
-    assert len(cb_ctrls) >= 8, f"Casillas insuficientes ({len(cb_ctrls)}) en {profile_name}"
+    group_headers.sort(key=lambda g: g[2])
+    found_sections = [g[1] for g in group_headers]
+    assert found_sections == SIDEBAR_SECTIONS, (
+        f"Encabezados de grupo incorrectos en {profile_name}: {found_sections} != {SIDEBAR_SECTIONS}"
+    )
 
-    for h_cb, txt in cb_ctrls:
-        cl, ct, cr, cb, cw, ch = get_rect(h_cb)
+    min_sw_w = 60 if profile_name == "Touch" else 44
+    min_sw_h = 32 if profile_name == "Touch" else 24
+    min_row_h = 68 if profile_name == "Touch" else 52
 
-        # 1. Estilo Win32: BS_TOP debe estar presente
-        style = user32.GetWindowLongW(h_cb, GWL_STYLE)
-        assert (style & BS_TOP) == BS_TOP, f"Casilla '{txt[:25]}' sin estilo BS_TOP (style={hex(style)})"
+    s_left, _, s_right, _ = get_client_screen_rect(h_scroll)
+    right_edges = []
 
-        # 2. Glifo alineado con la primera línea (tolerancia <= 3 px) en TODAS las casillas.
-        #    Si no se detecta el glifo, la prueba FALLA.
-        ensure_checkbox_visible(h_cb)
-        cl, ct, cr, cb, cw, ch = get_rect(h_cb)
-        glyph, text_ink = measure_checkbox_glyph_and_text(h_cb, txt, cw, ch)
-        assert glyph is not None, f"Glifo de la casilla '{txt[:25]}' NO detectado en {profile_name} (no se omite la comprobación)"
-        assert text_ink is not None, f"Tinta del texto de la casilla '{txt[:25]}' NO detectada en {profile_name} (no se omite la comprobación)"
-        glyph_center = (glyph[0] + glyph[1]) / 2.0
-        text_center = (text_ink[0] + text_ink[1]) / 2.0
-        assert abs(glyph_center - text_center) <= 3, (
-            f"Glifo de casilla '{txt[:20]}' no alineado con la primera línea: centro del glifo {glyph_center:.1f} "
-            f"(filas {glyph[0]}-{glyph[1]}) vs centro del texto {text_center:.1f} (filas {text_ink[0]}-{text_ink[1]}); "
-            f"diferencia {abs(glyph_center - text_center):.1f}px > 3px en {profile_name}")
+    for r in rows:
+        p = r["perm"]
+        rl, rt, rr, rb, rw, rh = get_rect(r["h_row"])
+        tl, tt, tr, tb, tw, th = get_rect(r["h_title"])
+        dl, dt, dr, db_y, dw, dh = get_rect(r["h_desc"])
+        sl, st, sr, sb, sw, sh = get_rect(r["h_sw"])
 
-        # 3. Texto completo visible
-        lines = txt.count('\n') + 1
-        if lines == 1:
-            tw, th = measure_text_extent(h_cb, txt)
-            assert cw >= tw + 16, f"Casilla '{txt}' recortada: {cw}px < {tw+16}px en {profile_name}"
-        else:
-            first_line = txt.split('\n')[0]
-            tw1, th1 = measure_text_extent(h_cb, first_line)
-            assert ch >= lines * th1, f"Casilla multilínea '{first_line[:20]}' altura insuficiente: {ch}px < {lines * th1}px"
+        # Tamaño del interruptor y alto de fila
+        assert sw >= min_sw_w and sh >= min_sw_h, (
+            f"Interruptor '{p['id']}' en {profile_name} demasiado pequeño: {sw}x{sh} < {min_sw_w}x{min_sw_h}"
+        )
+        assert rh >= min_row_h, (
+            f"Fila '{p['id']}' en {profile_name} altura insuficiente: {rh}px < {min_row_h}px"
+        )
 
-    print(f"  [{profile_name}] {len(cb_ctrls)} casillas de permisos verificadas con BS_TOP y centro del glifo a <= 3 px del centro del texto de la primera línea.")
+        # Título y descripción no vacíos, iguales a SQLite, sin solaparse ni recortarse
+        ui_title = get_ctrl_text(r["h_title"])
+        ui_desc = get_ctrl_text(r["h_desc"])
+        assert ui_title.strip() and norm_ws(ui_title) == norm_ws(p["title"]), (
+            f"Título distinto a SQLite en '{p['id']}': '{ui_title}' != '{p['title']}'"
+        )
+        assert ui_desc.strip() and norm_ws(ui_desc) == norm_ws(p["description"]), (
+            f"Descripción distinta a SQLite en '{p['id']}': '{ui_desc}' != '{p['description']}'"
+        )
+        assert tb <= dt, (
+            f"Título no queda encima de descripción en '{p['id']}': tb={tb} > dt={dt}"
+        )
+        assert tr <= sl and dr <= sl, (
+            f"Texto solapa al interruptor en '{p['id']}': tr={tr}, dr={dr}, sl={sl}"
+        )
+
+        title_lines = [ln for ln in ui_title.split("\n") if ln]
+        for ln in title_lines:
+            lw, lh = measure_text_extent(r["h_title"], ln)
+            assert tw >= lw, f"Título '{ln}' recortado horizontalmente en '{p['id']}': {tw}px < {lw}px"
+        _, one_th = measure_text_extent(r["h_title"], title_lines[0])
+        assert th >= len(title_lines) * one_th - 2, (
+            f"Título '{p['id']}' recortado verticalmente: {th}px < {len(title_lines) * one_th}px"
+        )
+
+        desc_lines = [ln for ln in ui_desc.split("\n") if ln]
+        for ln in desc_lines:
+            lw, lh = measure_text_extent(r["h_desc"], ln)
+            assert dw >= lw, f"Descripción '{ln[:25]}' recortada horizontalmente en '{p['id']}': {dw}px < {lw}px"
+        _, one_dh = measure_text_extent(r["h_desc"], desc_lines[0])
+        assert dh >= len(desc_lines) * one_dh - 2, (
+            f"Descripción '{p['id']}' recortada verticalmente: {dh}px < {len(desc_lines) * one_dh}px"
+        )
+
+        # Centro vertical del interruptor a <= 3 px del centro de su fila
+        row_cy = (rt + rb) / 2.0
+        sw_cy = (st + sb) / 2.0
+        assert abs(sw_cy - row_cy) <= 3.0, (
+            f"Interruptor '{p['id']}' descentrado verticalmente en {profile_name}: "
+            f"centro interruptor {sw_cy:.1f} vs fila {row_cy:.1f} (dif {abs(sw_cy - row_cy):.1f}px > 3px)"
+        )
+
+        # Borde derecho dentro del área visible
+        assert sr <= s_right and sl >= s_left, (
+            f"Interruptor '{p['id']}' recortado por área visible en {profile_name}: [{sl}, {sr}] vs [{s_left}, {s_right}]"
+        )
+        right_edges.append(sr)
+
+        # Posición de la perilla leída por píxeles
+        if check_pixels:
+            ensure_row_visible(h_scroll, r["h_row"], p["id"])
+            user32.SetForegroundWindow(hwnd_main)
+            time.sleep(0.03)
+            chk = user32.SendMessageW(r["h_sw"], BM_GETCHECK, 0, 0)
+            verify_knob_pixels(r["h_sw"], chk == 1, f"{p['id']} ({profile_name})")
+
+    assert max(right_edges) - min(right_edges) <= 2, (
+        f"Bordes derechos de interruptores desalineados en {profile_name}: "
+        f"min={min(right_edges)}, max={max(right_edges)} (dif={max(right_edges)-min(right_edges)}px > 2px)"
+    )
+
+    # Separador horizontal por píxeles entre cada par consecutivo de permisos del mismo grupo
+    if check_pixels:
+        for i in range(len(rows) - 1):
+            if rows[i]["perm"]["section"] == rows[i + 1]["perm"]["section"]:
+                verify_separator_pixels(hwnd_main, h_scroll, rows[i], rows[i + 1])
+
+    # Contador junto a Guardar coincide con el número de interruptores activados
+    on_count = sum(1 for r in rows if user32.SendMessageW(r["h_sw"], BM_GETCHECK, 0, 0) == 1)
+    expected_counter = f"{on_count} de {len(rows)} permisos"
+    counter_lbl = get_perm_counter_text(hwnd_main)
+    assert counter_lbl == expected_counter, (
+        f"Contador junto a Guardar incorrecto en {profile_name}: '{counter_lbl}' != '{expected_counter}'"
+    )
+
+    sample_sw = get_rect(rows[0]["h_sw"])
+    sample_row = get_rect(rows[0]["h_row"])
+    print(f"  [{profile_name}] {len(rows)} interruptores ({sample_sw[4]}x{sample_sw[5]}px), "
+          f"filas (>={sample_row[5]}px), 4 grupos, separadores, alineación y perillas por píxel verificados. Contador: '{counter_lbl}'.")
+    return rows
 
 def ink_vertical_extent(h_edit, text):
-    """Rango vertical (coordenadas de pantalla) de los píxeles de texto de un campo Edit.
-    Fondo: píxel libre a la derecha del texto. FALLA si no hay texto, fondo o tinta."""
+    """Rango vertical (coordenadas de pantalla) de los píxeles de texto de un campo Edit."""
     l, t, r, b, w, h = get_rect(h_edit)
     tw, _ = measure_text_extent(h_edit, text)
     assert 0 < tw < w - 16, f"Texto '{text}' ({tw}px) no cabe en el campo ({w}px) para medir centrado"
@@ -513,9 +763,16 @@ def verify_touch_roles_list_and_fields(hwnd_main, hwnd_list, texts=("Supervisor 
             f"(diferencia {abs(ink_center - box_center):.1f}px > 3px)")
     print("  [Touch] Nombre y Descripción editables y centrados verticalmente (tolerancia 3 px).")
 
+def verify_guardar_visible_without_scroll(hwnd_main):
+    _, mt, _, mb, _, _ = get_rect(hwnd_main)
+    btn_save = next((h for (h, cls, txt) in get_child_controls(hwnd_main) if cls.lower() == "button" and txt == "Guardar"), None)
+    assert btn_save is not None, "Botón 'Guardar' no encontrado"
+    _, bt, _, bb, _, _ = get_rect(btn_save)
+    assert bt >= mt and bb <= mb, f"Botón 'Guardar' no visible sin desplazarse: [{bt}, {bb}] vs ventana [{mt}, {mb}]"
+
 def run_f1_test_for_binary(exe_path, work_dir, config_name):
     print(f"\n=======================================================")
-    print(f"VERIFICACIÓN ROLES Y PERMISOS F1 / F1b [{config_name}]:")
+    print(f"VERIFICACIÓN ROLES Y PERMISOS F1 / F1b / F5 [{config_name}]:")
     print(f"  Binario:  {exe_path}")
     print(f"=======================================================")
     assert os.path.exists(exe_path), f"Binario no encontrado: {exe_path}"
@@ -564,6 +821,9 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         dpi1 = get_window_dpi(hwnd_main1)
         print(f"[DPI] DPI detectado: {dpi1} ({int(round(dpi1/96.0*100))}%).")
 
+        db_perms = load_visible_permissions_from_db(db_path)
+        assert len(db_perms) == 20, f"Se esperaban 20 permisos visibles en SQLite, encontrados {len(db_perms)}"
+
         # Navegar a BackOffice > Roles y permisos
         main_ctrls1 = get_child_controls(hwnd_main1)
         main_btns1 = [(h, txt) for (h, cls, txt) in main_ctrls1 if cls.lower() == "button"]
@@ -590,9 +850,9 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         print("[OK] Ni 'role-dev' ni 'backup.dev_config' aparecen en ningún control visible de la UI.")
 
         # -------------------------------------------------------------
-        # CASO 2: Roles de Sistema (Cajero editable en permisos, Dueño solo lectura)
+        # CASO 2: Roles de Sistema (Cajero editable, Dueño solo lectura) + Interacciones F5
         # -------------------------------------------------------------
-        print("\n--- CASO 2: Rol Cajero (permisos editables) y Rol Dueño (solo lectura) ---")
+        print("\n--- CASO 2: Rol Cajero (interruptores editables) y Rol Dueño (solo lectura) ---")
         lists = [h for (h, cls, txt) in panel_ctrls if "list" in cls.lower()]
         assert len(lists) >= 1, "Lista de roles (SysListView32) no encontrada"
         hwnd_role_list = lists[0]
@@ -600,10 +860,7 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         btn_save = next((h for (h, cls, txt) in panel_ctrls if cls.lower() == "button" and txt == "Guardar"), None)
         btn_del = next((h for (h, cls, txt) in panel_ctrls if cls.lower() == "button" and txt == "Eliminar"), None)
         btn_new = next((h for (h, cls, txt) in panel_ctrls if cls.lower() == "button" and txt == "Nuevo rol"), None)
-
-        assert btn_save is not None, "Botón 'Guardar' no encontrado"
-        assert btn_del is not None, "Botón 'Eliminar' no encontrado"
-        assert btn_new is not None, "Botón 'Nuevo rol' no encontrado"
+        assert btn_save is not None and btn_del is not None and btn_new is not None
 
         # 2.1: Rol Cajero (fila 0)
         select_list_item(hwnd_role_list, 0)
@@ -617,27 +874,48 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert user32.IsWindowEnabled(btn_del) == 0, "Botón 'Eliminar' debe estar deshabilitado para rol Cajero"
         assert user32.IsWindowEnabled(btn_save) == 1, "Botón 'Guardar' debe estar habilitado para rol Cajero"
 
-        # Verificar aviso
         lbl_notice = next((txt for (h, cls, txt) in c_ctrls if "solo se pueden cambiar sus permisos" in txt), None)
         assert lbl_notice is not None, "Aviso 'Rol de sistema: solo se pueden cambiar sus permisos.' no encontrado"
         print(f"[OK] Aviso Cajero confirmado: '{lbl_notice}'")
 
-        # Modificar permiso del Cajero: marcar 'audit.view' ('Consulta de bitácora y eventos auditados')
-        cb_audit = next((h for (h, cls, txt) in c_ctrls if cls.lower() == "button" and "Consulta de bitácora" in txt), None)
-        assert cb_audit is not None, "Casilla 'Consulta de bitácora' no encontrada"
-        assert user32.IsWindowEnabled(cb_audit) == 1, "Casilla de permisos debe estar habilitada para Cajero"
-        init_chk = user32.SendMessageW(cb_audit, BM_GETCHECK, 0, 0)
-        assert init_chk == 0, "Permiso 'audit.view' no debería estar asignado inicialmente a Cajero"
+        # Interacción completa sobre 'audit.view': clic interruptor, clic título, clic descripción y Espacio con foco
+        row_audit = find_toggle_by_perm_id(hwnd_main1, db_perms, "audit.view")
+        sw_audit = row_audit["h_sw"]
+        assert user32.IsWindowEnabled(sw_audit) == 1, "Interruptor de permisos debe estar habilitado para Cajero"
+        assert user32.SendMessageW(sw_audit, BM_GETCHECK, 0, 0) == 0, "Permiso 'audit.view' debe iniciar desactivado para Cajero"
 
-        send_click_button(cb_audit)
-        time.sleep(0.2)
-        assert user32.SendMessageW(cb_audit, BM_GETCHECK, 0, 0) == 1, "Permiso 'audit.view' debe quedar marcado"
+        ensure_row_visible(row_audit["h_scroll"], row_audit["h_row"], "audit.view")
+
+        # 1) Clic en interruptor (0 -> 1)
+        click_control_at(sw_audit)
+        assert user32.SendMessageW(sw_audit, BM_GETCHECK, 0, 0) == 1, "Clic en interruptor no activó 'audit.view'"
+
+        # 2) Clic en título (1 -> 0)
+        click_control_at(row_audit["h_title"], x=12, y=8)
+        assert user32.SendMessageW(sw_audit, BM_GETCHECK, 0, 0) == 0, "Clic en título no desactivó 'audit.view'"
+
+        # 3) Clic en descripción (0 -> 1)
+        click_control_at(row_audit["h_desc"], x=12, y=8)
+        assert user32.SendMessageW(sw_audit, BM_GETCHECK, 0, 0) == 1, "Clic en descripción no activó 'audit.view'"
+
+        # 4) Tecla Espacio con foco (1 -> 0 y luego 0 -> 1 para dejarlo activado)
+        user32.PostMessageW(sw_audit, WM_KEYDOWN, VK_SPACE, 0x00390001)
+        time.sleep(0.05)
+        user32.PostMessageW(sw_audit, WM_KEYUP, VK_SPACE, 0xC0390001)
+        time.sleep(0.25)
+        assert user32.SendMessageW(sw_audit, BM_GETCHECK, 0, 0) == 0, "Espacio con el foco no desactivó 'audit.view'"
+
+        user32.PostMessageW(sw_audit, WM_KEYDOWN, VK_SPACE, 0x00390001)
+        time.sleep(0.05)
+        user32.PostMessageW(sw_audit, WM_KEYUP, VK_SPACE, 0xC0390001)
+        time.sleep(0.25)
+        assert user32.SendMessageW(sw_audit, BM_GETCHECK, 0, 0) == 1, "Espacio con el foco no activó 'audit.view'"
+        print("[OK] Clic en interruptor, clic en título, clic en descripción y Espacio con foco probados en 'audit.view'.")
 
         # Guardar cambios del Cajero
         send_click_button(btn_save)
         time.sleep(0.8)
 
-        # Comprobar persistencia inmediata en SQLite
         con_c = sqlite3.connect(db_path)
         cur_c = con_c.cursor()
         cur_c.execute("SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-cashier' AND permission_id = 'audit.view';")
@@ -656,24 +934,34 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert user32.IsWindowEnabled(btn_save) == 0, "Botón 'Guardar' debe estar deshabilitado para Dueño"
         assert user32.IsWindowEnabled(btn_del) == 0, "Botón 'Eliminar' debe estar deshabilitado para Dueño"
 
-        d_cb = next((h for (h, cls, txt) in d_ctrls if cls.lower() == "button" and "Venta y cobro" in txt), None)
-        assert d_cb is not None and user32.IsWindowEnabled(d_cb) == 0, "Casillas de permisos deben estar deshabilitadas para Dueño"
+        row_sell_d = find_toggle_by_perm_id(hwnd_main1, db_perms, "pos.sell")
+        assert user32.IsWindowEnabled(row_sell_d["h_sw"]) == 0, "Interruptores de permisos deben estar deshabilitados para Dueño"
+        before_d = user32.SendMessageW(row_sell_d["h_sw"], BM_GETCHECK, 0, 0)
+        assert before_d == 1, "Dueño debe tener 'pos.sell' activado"
+        ensure_row_visible(row_sell_d["h_scroll"], row_sell_d["h_row"], "pos.sell (Dueño)")
+        click_control_at(row_sell_d["h_sw"])
+        assert user32.SendMessageW(row_sell_d["h_sw"], BM_GETCHECK, 0, 0) == before_d, (
+            "Con rol Dueño, un clic en el interruptor cambió su estado"
+        )
+        click_control_at(row_sell_d["h_title"], x=12, y=8)
+        assert user32.SendMessageW(row_sell_d["h_sw"], BM_GETCHECK, 0, 0) == before_d, (
+            "Con rol Dueño, un clic en el título cambió su estado"
+        )
 
         lbl_notice_d = next((txt for (h, cls, txt) in d_ctrls if "Rol de sistema (solo lectura" in txt), None)
         assert lbl_notice_d is not None, "Aviso de solo lectura para Dueño no encontrado"
-        print(f"[OK] Rol Dueño en solo lectura estricta: '{lbl_notice_d}'")
+        print(f"[OK] Rol Dueño en solo lectura estricta (clic no cambia estado): '{lbl_notice_d}'")
 
         # -------------------------------------------------------------
-        # CASO 3: Geometría Estricta, Columnas y Casillas en Estándar y Touch
+        # CASO 3: Geometría Estricta, Columnas e Interruptores en Estándar y Touch
         # -------------------------------------------------------------
-        print("\n--- CASO 3: Verificación Geométrica, Columnas y Accesibilidad Táctil ---")
-        # 3.1: En Estándar 1200x720 / 1216x759
+        print("\n--- CASO 3: Verificación Geométrica, Columnas e Interruptores (Estándar y Touch) ---")
         user32.SetWindowPos(hwnd_main1, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
         time.sleep(0.5)
         verify_list_columns(hwnd_role_list, "Estándar")
-        verify_permission_checkboxes(hwnd_main1, "Estándar")
+        verify_permission_matrix(hwnd_main1, db_perms, "Estándar", check_pixels=True)
+        verify_guardar_visible_without_scroll(hwnd_main1)
 
-        # Botones de acción en Estándar
         main_l, main_t, main_r, main_b, main_w, main_h = get_rect(hwnd_main1)
         active_ctrls = get_child_controls(hwnd_main1)
         panel_buttons = [
@@ -690,13 +978,15 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         # 3.2: Ventana Estrecha 960x600 en Estándar
         user32.SetWindowPos(hwnd_main1, 0, 0, 0, 960, 600, SWP_NOMOVE | SWP_NOZORDER)
         time.sleep(0.5)
+        verify_guardar_visible_without_scroll(hwnd_main1)
+        verify_permission_matrix(hwnd_main1, db_perms, "Estándar", check_pixels=False)
         n_l, n_t, n_r, n_b, n_w, n_h = get_rect(hwnd_main1)
         ctrls_960 = get_child_controls(hwnd_main1)
         for h, cls, txt in ctrls_960:
             if cls.lower() in ["button", "edit", "static"]:
                 cl, ct, cr, cb, cw, ch = get_rect(h)
                 assert cr <= n_r + 4, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en 960x600: {cr} > {n_r}"
-        print("[OK] Geometría 960x600 en Estándar: Sin desbordamientos horizontales.")
+        print("[OK] Geometría 960x600 en Estándar: Sin desbordamientos horizontales y Guardar visible.")
 
         # 3.3: Alternar a Perfil Touch
         user32.SetWindowPos(hwnd_main1, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
@@ -716,7 +1006,6 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         send_click_button(btn_touch_toggle)
         time.sleep(0.8)
 
-        # Volver a ingresar a BackOffice > Roles y permisos tras recarga de perfil
         t_ctrls = get_child_controls(hwnd_main1)
         t_btns = [(h, txt) for (h, cls, txt) in t_ctrls if cls.lower() == "button"]
         btn_bo_t = next((h for (h, t) in t_btns if "BackOffice" in t), None)
@@ -730,14 +1019,13 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
                 send_click_button(btn_roles_t)
                 time.sleep(0.8)
 
-        # Verificar columnas y casillas en Touch a 1216x759
         t_lists = [h for (h, cls, txt) in get_child_controls(hwnd_main1) if "list" in cls.lower()]
         assert len(t_lists) >= 1, "Lista de roles no encontrada en Touch"
         verify_list_columns(t_lists[0], "Touch")
-        verify_permission_checkboxes(hwnd_main1, "Touch")
+        verify_permission_matrix(hwnd_main1, db_perms, "Touch", check_pixels=True)
+        verify_guardar_visible_without_scroll(hwnd_main1)
         verify_touch_roles_list_and_fields(hwnd_main1, t_lists[0])
 
-        # En Touch: Verificar que todos los botones de acción del panel tengan al menos 48 px de alto
         touch_ctrls = get_child_controls(hwnd_main1)
         touch_action_btns = [
             (h, txt) for (h, cls, txt) in touch_ctrls
@@ -751,15 +1039,17 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         # 3.4: Ventana estrecha 960x600 en Touch
         user32.SetWindowPos(hwnd_main1, 0, 0, 0, 960, 600, SWP_NOMOVE | SWP_NOZORDER)
         time.sleep(0.5)
+        verify_guardar_visible_without_scroll(hwnd_main1)
+        verify_permission_matrix(hwnd_main1, db_perms, "Touch", check_pixels=False)
         tn_l, tn_t, tn_r, tn_b, tn_w, tn_h = get_rect(hwnd_main1)
         t_ctrls_960 = get_child_controls(hwnd_main1)
         for h, cls, txt in t_ctrls_960:
             if cls.lower() in ["button", "edit", "static"]:
                 cl, ct, cr, cb, cw, ch = get_rect(h)
                 assert cr <= tn_r + 4, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en Touch 960x600: {cr} > {tn_r}"
-        print("[OK] Geometría 960x600 en Touch: Controles contenidos sin recortes.")
+        print("[OK] Geometría 960x600 en Touch: Controles contenidos sin recortes y Guardar visible.")
 
-        # Regresar a perfil Estándar y tamaño normal para la creación de rol
+        # Regresar a perfil Estándar y tamaño normal para creación de rol
         user32.SetWindowPos(hwnd_main1, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
         time.sleep(0.3)
         btn_touch_toggle2 = None
@@ -776,7 +1066,6 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
             send_click_button(btn_touch_toggle2)
             time.sleep(0.8)
 
-        # Reingresar a BackOffice > Roles y permisos
         r_ctrls = get_child_controls(hwnd_main1)
         r_btns = [(h, txt) for (h, cls, txt) in r_ctrls if cls.lower() == "button"]
         btn_bo_r = next((h for (h, t) in r_btns if "BackOffice" in t), None)
@@ -791,9 +1080,9 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
                 time.sleep(0.8)
 
         # -------------------------------------------------------------
-        # CASO 4: Crear Rol Personalizado, Marcar 2 Permisos y Guardar
+        # CASO 4: Crear Rol Personalizado, Activar 2 Permisos y Guardar
         # -------------------------------------------------------------
-        print("\n--- CASO 4: Crear Rol Personalizado, Marcar 2 Permisos y Guardar ---")
+        print("\n--- CASO 4: Crear Rol Personalizado, Activar 2 Permisos y Guardar ---")
         cur_ctrls = get_child_controls(hwnd_main1)
         btn_new_act = next((h for (h, cls, txt) in cur_ctrls if cls.lower() == "button" and txt == "Nuevo rol"), None)
         assert btn_new_act is not None, "Botón 'Nuevo rol' no encontrado"
@@ -815,32 +1104,31 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         set_text(txt_desc, test_role_desc)
         time.sleep(0.2)
 
-        cb_sell = next((h for (h, cls, txt) in cur_ctrls if cls.lower() == "button" and "Venta y cobro" in txt), None)
-        cb_inv = next((h for (h, cls, txt) in cur_ctrls if cls.lower() == "button" and "Consulta de existencias" in txt), None)
+        row_sell = find_toggle_by_perm_id(hwnd_main1, db_perms, "pos.sell")
+        row_inv = find_toggle_by_perm_id(hwnd_main1, db_perms, "inventory.view")
 
-        assert cb_sell is not None, "Casilla de permiso 'pos.sell' no encontrada"
-        assert cb_inv is not None, "Casilla de permiso 'inventory.view' no encontrada"
+        assert user32.IsWindowEnabled(row_sell["h_sw"]) == 1, "Interruptor 'pos.sell' debe estar habilitado"
+        assert user32.IsWindowEnabled(row_inv["h_sw"]) == 1, "Interruptor 'inventory.view' debe estar habilitado"
 
-        assert user32.IsWindowEnabled(cb_sell) == 1, "Casilla 'pos.sell' debe estar habilitada para edición"
-        assert user32.IsWindowEnabled(cb_inv) == 1, "Casilla 'inventory.view' debe estar habilitada para edición"
+        ensure_row_visible(row_sell["h_scroll"], row_sell["h_row"], "pos.sell")
+        click_control_at(row_sell["h_sw"])
+        ensure_row_visible(row_inv["h_scroll"], row_inv["h_row"], "inventory.view")
+        click_control_at(row_inv["h_sw"])
 
-        send_click_button(cb_sell)
-        time.sleep(0.1)
-        send_click_button(cb_inv)
-        time.sleep(0.2)
+        assert user32.SendMessageW(row_sell["h_sw"], BM_GETCHECK, 0, 0) == 1, "Interruptor 'pos.sell' debe quedar activado"
+        assert user32.SendMessageW(row_inv["h_sw"], BM_GETCHECK, 0, 0) == 1, "Interruptor 'inventory.view' debe quedar activado"
 
-        assert user32.SendMessageW(cb_sell, BM_GETCHECK, 0, 0) == 1, "Casilla 'pos.sell' debe estar marcada"
-        assert user32.SendMessageW(cb_inv, BM_GETCHECK, 0, 0) == 1, "Casilla 'inventory.view' debe estar marcada"
-        print("[OK] Dos permisos seleccionados exitosamente ('pos.sell' e 'inventory.view').")
+        ctrls_after_toggle = get_child_controls(hwnd_main1)
+        counter_2 = get_perm_counter_text(hwnd_main1)
+        assert counter_2 == "2 de 20 permisos", f"Contador esperado '2 de 20 permisos', encontrado '{counter_2}'"
+        print("[OK] Dos permisos activados exitosamente ('pos.sell' e 'inventory.view'); contador = '2 de 20 permisos'.")
 
-        btn_save_act = next((h for (h, cls, txt) in cur_ctrls if cls.lower() == "button" and txt == "Guardar"), None)
-        assert btn_save_act is not None, "Botón 'Guardar' no encontrado"
-        assert user32.IsWindowEnabled(btn_save_act) == 1, "Botón 'Guardar' debe estar habilitado"
+        btn_save_act = next((h for (h, cls, txt) in ctrls_after_toggle if cls.lower() == "button" and txt == "Guardar"), None)
+        assert btn_save_act is not None and user32.IsWindowEnabled(btn_save_act) == 1
 
         send_click_button(btn_save_act)
         time.sleep(0.8)
 
-        # Validar persistencia inmediata en la base SQLite antes de cerrar
         con1 = sqlite3.connect(db_path)
         cur1 = con1.cursor()
         cur1.execute("SELECT id, name, description, is_system FROM roles WHERE name = ?;", (test_role_name,))
@@ -857,7 +1145,6 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         con1.close()
         print(f"[OK] Rol '{test_role_name}' persistido en SQLite con 2 permisos ({saved_perms}).")
 
-        # Cerrar sesión 1
         user32.PostMessageW(hwnd_main1, WM_CLOSE, 0, 0)
         p1.wait(timeout=5)
         print("[OK] Sesión 1 cerrada limpiamente.")
@@ -887,7 +1174,6 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert hwnd_main2 is not None, "MainWindow no abrió tras login en reapertura"
         time.sleep(1.0)
 
-        # Ir a BackOffice > Roles y permisos
         m2_ctrls = get_child_controls(hwnd_main2)
         m2_btns = [(h, txt) for (h, cls, txt) in m2_ctrls if cls.lower() == "button"]
         btn_bo2 = next((h for (h, t) in m2_btns if "BackOffice" in t), None)
@@ -907,8 +1193,7 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert len(lists2) >= 1, "Lista de roles no encontrada en sesión 2"
         hwnd_list2 = lists2[0][0]
 
-        # 2.1 Verificar persistencia en Cajero (fila 0): primero otra fila y luego Cajero, para que la
-        #     selección y la lectura de la casilla sean de la selección real y no del estado inicial.
+        # 2.1 Verificar persistencia en Cajero (fila 0)
         select_list_item(hwnd_list2, 1)
         time.sleep(0.3)
         select_list_item(hwnd_list2, 0)
@@ -928,10 +1213,10 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert btn2_c_save is not None and user32.IsWindowEnabled(btn2_c_save) == 1, "Guardar debe estar habilitado para Cajero"
         assert btn2_c_del is not None and user32.IsWindowEnabled(btn2_c_del) == 0, "Eliminar debe estar deshabilitado para Cajero"
 
-        # Verificar que el permiso 'audit.view' persistió marcado
-        cb2_audit = next((h for (h, cls, txt) in p2_c_ctrls if cls.lower() == "button" and "Consulta de bitácora" in txt), None)
-        assert cb2_audit is not None, "Casilla 'Consulta de bitácora' no encontrada para Cajero"
-        assert user32.SendMessageW(cb2_audit, BM_GETCHECK, 0, 0) == 1, "Permiso 'audit.view' asignado a Cajero debe permanecer marcado tras reapertura"
+        row2_audit = find_toggle_by_perm_id(hwnd_main2, db_perms, "audit.view")
+        assert user32.SendMessageW(row2_audit["h_sw"], BM_GETCHECK, 0, 0) == 1, (
+            "Permiso 'audit.view' asignado a Cajero debe permanecer activado tras reapertura"
+        )
         con_c2 = sqlite3.connect(db_path)
         cur_c2 = con_c2.cursor()
         cur_c2.execute("SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-cashier' AND permission_id = 'audit.view';")
@@ -970,14 +1255,16 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert user32.IsWindowEnabled(p2_edits[1]) == 1, "Descripción de rol personalizado debe ser editable"
         print(f"[OK] Rol personalizado '{name_val}' cargado íntegramente desde persistencia.")
 
-        cb2_sell = next((h for (h, cls, txt) in p2_ctrls if cls.lower() == "button" and "Venta y cobro" in txt), None)
-        cb2_inv = next((h for (h, cls, txt) in p2_ctrls if cls.lower() == "button" and "Consulta de existencias" in txt), None)
-        cb2_shift = next((h for (h, cls, txt) in p2_ctrls if cls.lower() == "button" and "Apertura de turno" in txt), None)
+        row2_sell = find_toggle_by_perm_id(hwnd_main2, db_perms, "pos.sell")
+        row2_inv = find_toggle_by_perm_id(hwnd_main2, db_perms, "inventory.view")
+        row2_shift = find_toggle_by_perm_id(hwnd_main2, db_perms, "shift.operate")
 
-        assert cb2_sell is not None and cb2_inv is not None and cb2_shift is not None
-        assert user32.SendMessageW(cb2_sell, BM_GETCHECK, 0, 0) == 1, "Permiso 'pos.sell' debe permanecer marcado"
-        assert user32.SendMessageW(cb2_inv, BM_GETCHECK, 0, 0) == 1, "Permiso 'inventory.view' debe permanecer marcado"
-        assert user32.SendMessageW(cb2_shift, BM_GETCHECK, 0, 0) == 0, "Permiso 'shift.operate' no marcado debe permanecer desmarcado"
+        assert user32.SendMessageW(row2_sell["h_sw"], BM_GETCHECK, 0, 0) == 1, "Permiso 'pos.sell' debe permanecer activado"
+        assert user32.SendMessageW(row2_inv["h_sw"], BM_GETCHECK, 0, 0) == 1, "Permiso 'inventory.view' debe permanecer activado"
+        assert user32.SendMessageW(row2_shift["h_sw"], BM_GETCHECK, 0, 0) == 0, "Permiso 'shift.operate' debe permanecer desactivado"
+
+        counter2 = get_perm_counter_text(hwnd_main2)
+        assert counter2 == "2 de 20 permisos", f"Contador tras reapertura incorrecto: '{counter2}'"
 
         btn2_save = next((h for (h, cls, txt) in p2_ctrls if cls.lower() == "button" and txt == "Guardar"), None)
         btn2_del = next((h for (h, cls, txt) in p2_ctrls if cls.lower() == "button" and txt == "Eliminar"), None)
@@ -989,7 +1276,7 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         p2.wait(timeout=5)
         print("[OK] Sesión 2 cerrada limpiamente.")
 
-        print(f"\n>>> TODAS LAS PRUEBAS DE TAREA F1 / F1b PASARON EXITOSAMENTE EN [{config_name}] <<<")
+        print(f"\n>>> TODAS LAS PRUEBAS DE TAREA F1 / F1b / F5 PASARON EXITOSAMENTE EN [{config_name}] <<<")
 
     finally:
         for p in [p1, p2]:
@@ -1004,17 +1291,14 @@ def main():
     debug_exe = os.path.join(repo_root, "build_debug", "app_desktop.exe")
 
     print("=================================================================")
-    print("SUITE DE PRUEBAS AUTOMATIZADA: TAREA F1 / F1b (ROLES Y PERMISOS)")
+    print("SUITE DE PRUEBAS AUTOMATIZADA: TAREA F1 / F1b / F5 (ROLES Y PERMISOS)")
     print("=================================================================")
 
-    # 1. Ejecución en Release
     run_f1_test_for_binary(release_exe, repo_root, "RELEASE")
-
-    # 2. Ejecución en Debug
     run_f1_test_for_binary(debug_exe, repo_root, "DEBUG")
 
     print("\n=================================================================")
-    print("VERIFICACIÓN COMPLETA F1 / F1b: PASARON TODAS LAS PRUEBAS EN RELEASE Y DEBUG")
+    print("VERIFICACIÓN COMPLETA F1 / F1b / F5: PASARON TODAS LAS PRUEBAS EN RELEASE Y DEBUG")
     print("=================================================================")
 
 if __name__ == "__main__":

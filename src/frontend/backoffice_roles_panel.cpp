@@ -1,51 +1,30 @@
 #include "src/frontend/backoffice_roles_panel.hpp"
 #include "src/frontend/theme.hpp"
+#include "src/frontend/toggle_switch.hpp"
 #include "src/frontend/ui_helpers.hpp"
 #include <algorithm>
+#include <array>
 #include <sstream>
 #include <vector>
-
-#ifdef __WXMSW__
-#include <windows.h>
-#include <commctrl.h>
-#endif
+#include <wx/dcbuffer.h>
+#include <wx/settings.h>
+#include <wx/wrapsizer.h>
 
 namespace app::frontend {
 
 namespace {
 
-std::string get_module_display_name(const std::string& mod) {
-    if (mod == "pos") return "Punto de Venta";
-    if (mod == "inventory") return "Inventario y Almacén";
-    if (mod == "shift") return "Caja y Turnos";
-    if (mod == "audit") return "Auditoría y Bitácora";
-    if (mod == "reports") return "Reportes Operativos";
-    if (mod == "users") return "Usuarios y Cuentas";
-    if (mod == "roles") return "Roles y Permisos";
-    if (mod == "config") return "Configuración del Negocio";
-    if (mod == "backup") return "Respaldos";
-    std::string s = mod;
-    if (!s.empty()) s[0] = static_cast<char>(std::toupper(s[0]));
-    return s;
-}
-
-void apply_checkbox_top_alignment(wxCheckBox* cb) {
-#ifdef __WXMSW__
-    if (!cb) return;
-    HWND hwnd = static_cast<HWND>(cb->GetHWND());
-    if (hwnd) {
-        LONG_PTR st = ::GetWindowLongPtr(hwnd, GWL_STYLE);
-        st &= ~BS_VCENTER;
-        st |= BS_TOP | BS_MULTILINE;
-        ::SetWindowLongPtr(hwnd, GWL_STYLE, st);
-        ::SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
-                       SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-    }
-#endif
-}
+const std::array<const char*, 4> kSectionOrder = {
+    "Punto de Venta",
+    "Inventario",
+    "Caja y Reportes",
+    "BackOffice"
+};
 
 std::string wrap_text_to_width(wxWindow* win, const std::string& text, int max_width_px) {
-    if (max_width_px <= 80) max_width_px = 260;
+    if (max_width_px < 60) {
+        max_width_px = 60;
+    }
     wxString wx_text = wxString::FromUTF8(text.c_str());
     int total_w = 0, total_h = 0;
     if (win) {
@@ -84,6 +63,39 @@ std::string wrap_text_to_width(wxWindow* win, const std::string& text, int max_w
         result += current_line;
     }
     return result;
+}
+
+wxPanel* create_separator_line(wxWindow* parent) {
+    auto* sep = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(-1, 1), wxBORDER_NONE);
+    sep->SetBackgroundColour(Theme::ColorBorderSubtle);
+    sep->SetBackgroundStyle(wxBG_STYLE_PAINT);
+    sep->SetMinSize(wxSize(-1, 1));
+    sep->SetMaxSize(wxSize(-1, 1));
+    sep->Bind(wxEVT_ERASE_BACKGROUND, [](wxEraseEvent&) {});
+    sep->Bind(wxEVT_PAINT, [](wxPaintEvent& event) {
+        auto* win = static_cast<wxWindow*>(event.GetEventObject());
+        wxAutoBufferedPaintDC dc(win);
+        dc.SetBackground(wxBrush(Theme::ColorBorderSubtle));
+        dc.Clear();
+    });
+    return sep;
+}
+
+void bind_row_click_target(wxWindow* target, ToggleSwitch* toggle) {
+    if (!target || !toggle) return;
+    target->Bind(wxEVT_LEFT_DOWN, [target](wxMouseEvent& event) {
+        target->SetClientData(reinterpret_cast<void*>(1));
+        event.Skip();
+    });
+    target->Bind(wxEVT_LEFT_UP, [target, toggle](wxMouseEvent& event) {
+        const bool pressed = (target->GetClientData() != nullptr);
+        target->SetClientData(nullptr);
+        if (pressed && toggle->IsEnabled() && wxRect(target->GetClientSize()).Contains(event.GetPosition())) {
+            toggle->SetFocus();
+            toggle->Toggle();
+        }
+        event.Skip();
+    });
 }
 
 } // namespace
@@ -215,7 +227,7 @@ void BackofficeRolesPanel::setup_ui() {
     left_card_->SetMinSize(wxSize(left_w, -1));
     main_sizer->Add(left_card_, 0, wxEXPAND | wxRIGHT, 10);
 
-    // --- Columna derecha: Detalle del Rol y Matriz de Permisos ---
+    // --- Columna derecha: Detalle del Rol y Lista de Permisos ---
     right_card_ = new CardPanel(this, wxID_ANY);
     right_card_->set_card_background(Theme::ColorSurface);
     auto* right_sizer = new wxBoxSizer(wxVERTICAL);
@@ -254,43 +266,54 @@ void BackofficeRolesPanel::setup_ui() {
 
     right_sizer->Add(form_grid, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
-    auto* lbl_p_header = new wxStaticText(right_card_, wxID_ANY, wxT("Matriz de Permisos por Módulo:"));
+    auto* lbl_p_header = new wxStaticText(right_card_, wxID_ANY, wxT("Permisos del rol:"));
     lbl_p_header->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_p_header->SetForegroundColour(Theme::ColorTextSecondary);
     right_sizer->Add(lbl_p_header, 0, wxLEFT | wxRIGHT | wxBOTTOM, 8);
 
     scroll_perms_ = new wxScrolledWindow(
         right_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize,
-        wxVSCROLL | wxBORDER_NONE
+        wxVSCROLL | wxTAB_TRAVERSAL | wxBORDER_NONE
     );
-    scroll_perms_->SetBackgroundColour(Theme::ColorSurfaceSubtle);
-    scroll_perms_->SetScrollRate(0, 10);
-    scroll_perms_->SetMinSize(wxSize(200, 120));
+    scroll_perms_->SetBackgroundColour(Theme::ColorSurface);
+    scroll_perms_->SetScrollRate(0, 12);
+    scroll_perms_->SetMinSize(wxSize(180, 90));
     perms_sizer_ = new wxBoxSizer(wxVERTICAL);
     scroll_perms_->SetSizer(perms_sizer_);
+    scroll_perms_->Bind(wxEVT_SIZE, [this](wxSizeEvent& e) {
+        e.Skip();
+        if (!in_matrix_layout_) {
+            update_permission_matrix_layout();
+        }
+    });
     right_sizer->Add(scroll_perms_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
-    // Barra de acciones inferior
-    auto* btm_sizer = new wxBoxSizer(wxHORIZONTAL);
+    // Barra de acciones inferior (siempre visible sin desplazarse)
+    auto* btm_sizer = new wxWrapSizer(wxHORIZONTAL, wxWRAPSIZER_DEFAULT_FLAGS);
 
     btn_save_ = new wxButton(right_card_, wxID_ANY, wxT("Guardar"));
     style_and_size_btn(btn_save_, btn_h, "check_circle", Theme::ColorSurface, true, false);
     btn_save_->Bind(wxEVT_BUTTON, &BackofficeRolesPanel::on_save_role, this);
-    btm_sizer->Add(btn_save_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+    btm_sizer->Add(btn_save_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxBOTTOM, 8);
+
+    lbl_perm_count_ = new wxStaticText(right_card_, wxID_ANY, wxEmptyString);
+    lbl_perm_count_->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
+    lbl_perm_count_->SetForegroundColour(Theme::ColorTextSecondary);
+    btm_sizer->Add(lbl_perm_count_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxBOTTOM, 12);
 
     btn_delete_ = new wxButton(right_card_, wxID_ANY, wxT("Eliminar"));
     style_and_size_btn(btn_delete_, btn_h, "delete", Theme::ColorError, false, true);
     btn_delete_->Bind(wxEVT_BUTTON, &BackofficeRolesPanel::on_delete_role, this);
-    btm_sizer->Add(btn_delete_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+    btm_sizer->Add(btn_delete_, 0, wxALIGN_CENTER_VERTICAL | wxBOTTOM, 8);
+
+    right_sizer->Add(btm_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
 
     lbl_form_feedback_ = new wxStaticText(right_card_, wxID_ANY, wxEmptyString);
     lbl_form_feedback_->SetFont(Theme::get_font_small());
-    btm_sizer->Add(lbl_form_feedback_, 1, wxALIGN_CENTER_VERTICAL);
-
-    right_sizer->Add(btm_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    right_sizer->Add(lbl_form_feedback_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
 
     right_card_->SetSizer(right_sizer);
-    right_card_->SetMinSize(wxSize(280, -1));
+    right_card_->SetMinSize(wxSize(240, -1));
     main_sizer->Add(right_card_, 1, wxEXPAND);
 
     root->Add(main_sizer, 1, wxEXPAND | wxALL, 12);
@@ -322,11 +345,22 @@ void BackofficeRolesPanel::load_permissions() {
         }
         all_permissions_.push_back(p);
     }
+
+    std::stable_sort(
+        all_permissions_.begin(),
+        all_permissions_.end(),
+        [](const contracts::PermissionDto& a, const contracts::PermissionDto& b) {
+            return a.sort_order < b.sort_order;
+        }
+    );
 }
 
 void BackofficeRolesPanel::build_permission_matrix() {
     perms_sizer_->Clear(true);
-    perm_checkboxes_.clear();
+    perm_rows_.clear();
+    perm_toggles_.clear();
+    perm_separators_.clear();
+    last_matrix_avail_w_ = -1;
 
     if (all_permissions_.empty()) {
         auto* empty_lbl = new wxStaticText(
@@ -335,94 +369,242 @@ void BackofficeRolesPanel::build_permission_matrix() {
         );
         empty_lbl->SetFont(Theme::get_font_body());
         perms_sizer_->Add(empty_lbl, 0, wxALL, 12);
+        update_permission_count();
         scroll_perms_->FitInside();
         return;
     }
 
-    // Agrupar por módulo conservando orden
-    std::vector<std::string> module_order;
+    // Agrupar por PermissionDto.section en el orden exacto de la barra lateral.
+    std::vector<std::string> section_order;
+    for (const char* sec : kSectionOrder) {
+        section_order.emplace_back(sec);
+    }
     std::map<std::string, std::vector<contracts::PermissionDto>> groups;
     for (const auto& p : all_permissions_) {
-        if (groups.find(p.module) == groups.end()) {
-            module_order.push_back(p.module);
+        const std::string sec_key = p.section;
+        if (std::find(section_order.begin(), section_order.end(), sec_key) == section_order.end()) {
+            section_order.push_back(sec_key);
         }
-        groups[p.module].push_back(p);
+        groups[sec_key].push_back(p);
     }
 
-    for (const auto& mod : module_order) {
+    const int pad_x = Theme::is_touch() ? 16 : 12;
+    const int pad_y = Theme::is_touch() ? 14 : 10;
+    const int title_desc_gap = Theme::is_touch() ? 6 : 4;
+    const int text_switch_gap = Theme::is_touch() ? 16 : 12;
+
+    bool first_group = true;
+    for (const auto& sec : section_order) {
+        auto it = groups.find(sec);
+        if (it == groups.end() || it->second.empty()) {
+            continue;
+        }
+
+        if (!first_group) {
+            perms_sizer_->AddSpacer(24);
+        }
+        first_group = false;
+
         auto* grp_box = new wxBoxSizer(wxVERTICAL);
 
-        auto* mod_title = new wxStaticText(
+        auto* sec_title = new wxStaticText(
             scroll_perms_, wxID_ANY,
-            wxString::FromUTF8(get_module_display_name(mod).c_str())
+            wxString::FromUTF8(sec.c_str())
         );
-        mod_title->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-        mod_title->SetForegroundColour(Theme::ColorBrandDeep);
-        grp_box->Add(mod_title, 0, wxLEFT | wxRIGHT | wxTOP, 8);
+        sec_title->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
+        sec_title->SetForegroundColour(Theme::ColorBrandDeep);
+        grp_box->Add(sec_title, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, pad_x);
 
-        for (const auto& p : groups[mod]) {
-            auto* cb = new wxCheckBox(
-                scroll_perms_, wxID_ANY,
-                wxString::FromUTF8(p.description.c_str()),
-                wxDefaultPosition, wxDefaultSize,
-                wxALIGN_TOP
+        const auto& items = it->second;
+        for (size_t i = 0; i < items.size(); ++i) {
+            if (i > 0) {
+                wxPanel* sep = create_separator_line(scroll_perms_);
+                perm_separators_.push_back(sep);
+                grp_box->Add(sep, 0, wxEXPAND);
+            }
+
+            const auto& p = items[i];
+            const std::string title_text = p.title.empty() ? p.description : p.title;
+            const std::string desc_text = p.description;
+
+            auto* row_panel = new wxPanel(
+                scroll_perms_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxTAB_TRAVERSAL | wxBORDER_NONE
             );
-            cb->SetFont(Theme::get_font_body(wxFONTWEIGHT_NORMAL));
-            cb->SetToolTip(wxString::FromUTF8(p.id.c_str()));
-            cb->Enable(false);
-            apply_checkbox_top_alignment(cb);
-            perm_checkboxes_[p.id] = cb;
-            grp_box->Add(cb, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 4);
+            row_panel->SetBackgroundColour(Theme::ColorSurface);
+
+            auto* lbl_title = new wxStaticText(
+                row_panel, wxID_ANY,
+                wxString::FromUTF8(title_text.c_str())
+            );
+            lbl_title->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+            lbl_title->SetForegroundColour(Theme::ColorText);
+
+            auto* lbl_desc = new wxStaticText(
+                row_panel, wxID_ANY,
+                wxString::FromUTF8(desc_text.c_str())
+            );
+            lbl_desc->SetFont(Theme::get_font_body(wxFONTWEIGHT_NORMAL));
+            lbl_desc->SetForegroundColour(Theme::ColorTextSecondary);
+
+            auto* toggle = new ToggleSwitch(
+                row_panel, wxID_ANY, false,
+                wxString::FromUTF8(title_text.c_str())
+            );
+            toggle->Enable(false);
+            toggle->Bind(wxEVT_CHECKBOX, [this](wxCommandEvent&) {
+                update_permission_count();
+            });
+
+            bind_row_click_target(row_panel, toggle);
+            bind_row_click_target(lbl_title, toggle);
+            bind_row_click_target(lbl_desc, toggle);
+
+            auto* row_sizer = new wxBoxSizer(wxHORIZONTAL);
+            row_sizer->AddSpacer(pad_x);
+
+            auto* text_col = new wxBoxSizer(wxVERTICAL);
+            text_col->AddSpacer(pad_y);
+            text_col->Add(lbl_title, 0, wxEXPAND);
+            text_col->AddSpacer(title_desc_gap);
+            text_col->Add(lbl_desc, 0, wxEXPAND);
+            text_col->AddSpacer(pad_y);
+
+            row_sizer->Add(text_col, 1, wxALIGN_CENTER_VERTICAL);
+            row_sizer->AddSpacer(text_switch_gap);
+            row_sizer->Add(toggle, 0, wxALIGN_CENTER_VERTICAL);
+            row_sizer->AddSpacer(pad_x);
+            row_panel->SetSizer(row_sizer);
+
+            PermissionRow row;
+            row.perm = p;
+            row.perm.title = title_text;
+            row.row_panel = row_panel;
+            row.lbl_title = lbl_title;
+            row.lbl_desc = lbl_desc;
+            row.toggle = toggle;
+
+            perm_rows_.push_back(row);
+            perm_toggles_[p.id] = toggle;
+
+            grp_box->Add(row_panel, 0, wxEXPAND);
         }
 
-        perms_sizer_->Add(grp_box, 0, wxEXPAND | wxBOTTOM, 8);
+        perms_sizer_->Add(grp_box, 0, wxEXPAND);
     }
 
+    update_permission_count();
     update_permission_matrix_layout();
 }
 
 void BackofficeRolesPanel::update_permission_matrix_layout() {
-    if (!scroll_perms_ || perm_checkboxes_.empty()) return;
+    if (!scroll_perms_ || perm_rows_.empty() || in_matrix_layout_) return;
+    in_matrix_layout_ = true;
 
-    int panel_w = GetClientSize().GetWidth();
-    int left_w = left_card_ ? left_card_->GetSize().GetWidth() : (Theme::is_touch() ? 390 : 360);
-    if (left_w <= 100) left_w = (Theme::is_touch() ? 390 : 360);
-
-    // Calcular espacio disponible dinámico para tarjeta derecha y scroll sin depender de dimensiones previas
-    int right_card_w = std::max(200, panel_w - left_w - 24);
-    int target_scroll_w = std::max(180, right_card_w - 20);
-
-    int target_cb_w = std::max(160, target_scroll_w - 24);
-    int avail_text_w = std::max(140, target_cb_w - 32);
-
-    int line_h = Theme::is_touch() ? 24 : 18;
-    int pad_h = Theme::is_touch() ? 16 : 8;
-
-    for (const auto& p : all_permissions_) {
-        auto it = perm_checkboxes_.find(p.id);
-        if (it == perm_checkboxes_.end() || !it->second) continue;
-        auto* cb = it->second;
-
-        std::string wrapped = wrap_text_to_width(cb, p.description, avail_text_w);
-        cb->SetLabel(wxString::FromUTF8(wrapped.c_str()));
-
-        int lines = 1;
-        for (char c : wrapped) {
-            if (c == '\n') ++lines;
-        }
-
-        int needed_h = lines * line_h + pad_h;
-        int min_h = Theme::is_touch() ? std::max(48, needed_h) : std::max(26, needed_h);
-        cb->SetMinSize(wxSize(-1, min_h));
-        cb->SetMaxSize(wxSize(target_cb_w, -1));
-        cb->SetSize(wxSize(target_cb_w, min_h));
-
-        apply_checkbox_top_alignment(cb);
+    int client_w = scroll_perms_->GetClientSize().GetWidth();
+    const int win_w = scroll_perms_->GetSize().GetWidth();
+    if (client_w <= 60) {
+        const int panel_w = GetClientSize().GetWidth();
+        int left_w = left_card_ ? left_card_->GetSize().GetWidth() : (Theme::is_touch() ? 390 : 360);
+        if (left_w <= 100) left_w = (Theme::is_touch() ? 390 : 360);
+        const int right_card_w = std::max(200, panel_w - left_w - 24);
+        client_w = std::max(160, right_card_w - 24);
+    }
+    if (win_w <= 0 || client_w >= win_w - 2) {
+        int sb_w = wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, scroll_perms_);
+        if (sb_w <= 0) sb_w = 18;
+        client_w = std::max(140, client_w - sb_w);
     }
 
-    scroll_perms_->SetVirtualSize(target_scroll_w, -1);
+    const int avail_w = std::max(140, client_w);
+    if (avail_w == last_matrix_avail_w_) {
+        in_matrix_layout_ = false;
+        return;
+    }
+    last_matrix_avail_w_ = avail_w;
+
+    const int pad_x = Theme::is_touch() ? 16 : 12;
+    const int pad_y = Theme::is_touch() ? 14 : 10;
+    const int title_desc_gap = Theme::is_touch() ? 6 : 4;
+    const int text_switch_gap = Theme::is_touch() ? 16 : 12;
+    const int min_row_h = Theme::is_touch() ? 68 : 52;
+
+    for (auto* sep : perm_separators_) {
+        if (sep) {
+            sep->SetMinSize(wxSize(avail_w, 1));
+            sep->SetMaxSize(wxSize(avail_w, 1));
+        }
+    }
+
+    for (auto& row : perm_rows_) {
+        if (!row.row_panel || !row.lbl_title || !row.lbl_desc || !row.toggle) continue;
+
+        const wxSize sw_sz = row.toggle->GetBestSize();
+        const int avail_text_w = std::max(
+            60,
+            avail_w - pad_x - text_switch_gap - sw_sz.GetWidth() - pad_x - 4
+        );
+
+        const std::string wrapped_title = wrap_text_to_width(row.lbl_title, row.perm.title, avail_text_w);
+        const std::string wrapped_desc = wrap_text_to_width(row.lbl_desc, row.perm.description, avail_text_w);
+
+        row.lbl_title->SetLabel(wxString::FromUTF8(wrapped_title.c_str()));
+        row.lbl_title->InvalidateBestSize();
+
+        row.lbl_desc->SetLabel(wxString::FromUTF8(wrapped_desc.c_str()));
+        row.lbl_desc->InvalidateBestSize();
+
+        const int title_h = row.lbl_title->GetBestSize().GetHeight();
+        const int desc_h = row.lbl_desc->GetBestSize().GetHeight();
+        const int text_block_h = pad_y + title_h + title_desc_gap + desc_h + pad_y;
+        const int row_h = std::max({min_row_h, text_block_h, sw_sz.GetHeight() + 2 * pad_y});
+
+        row.row_panel->SetMinSize(wxSize(avail_w, row_h));
+        row.row_panel->SetMaxSize(wxSize(avail_w, row_h));
+        row.row_panel->SetSize(wxSize(avail_w, row_h));
+        row.row_panel->Layout();
+    }
+
+    perms_sizer_->SetMinSize(wxSize(avail_w, -1));
     scroll_perms_->FitInside();
     scroll_perms_->Layout();
+
+    in_matrix_layout_ = false;
+}
+
+void BackofficeRolesPanel::update_permission_count() {
+    if (!lbl_perm_count_) return;
+    size_t enabled_count = 0;
+    for (const auto& row : perm_rows_) {
+        if (row.toggle && row.toggle->GetValue()) {
+            ++enabled_count;
+        }
+    }
+    lbl_perm_count_->SetLabel(wxString::Format(
+        wxT("%zu de %zu permisos"),
+        enabled_count,
+        perm_rows_.size()
+    ));
+    if (right_card_) {
+        right_card_->Layout();
+    }
+}
+
+void BackofficeRolesPanel::set_permissions_editable(bool editable) {
+    const wxCursor row_cursor = editable ? wxCursor(wxCURSOR_HAND) : wxNullCursor;
+    for (auto& row : perm_rows_) {
+        if (row.toggle) {
+            row.toggle->Enable(editable);
+        }
+        if (row.row_panel) {
+            row.row_panel->SetCursor(row_cursor);
+        }
+        if (row.lbl_title) {
+            row.lbl_title->SetCursor(row_cursor);
+        }
+        if (row.lbl_desc) {
+            row.lbl_desc->SetCursor(row_cursor);
+        }
+    }
 }
 
 void BackofficeRolesPanel::auto_size_columns() {
@@ -458,8 +640,8 @@ void BackofficeRolesPanel::on_size(wxSizeEvent& event) {
     in_size_event_ = true;
 
     auto_size_columns();
-    update_permission_matrix_layout();
     Layout();
+    update_permission_matrix_layout();
 
     in_size_event_ = false;
 }
@@ -557,11 +739,12 @@ void BackofficeRolesPanel::populate_role_details(long index) {
     btn_save_->Enable(can_save);
     btn_delete_->Enable(can_delete);
 
-    for (auto& [perm_id, cb] : perm_checkboxes_) {
+    for (auto& [perm_id, toggle] : perm_toggles_) {
         bool has = std::find(r.permissions.begin(), r.permissions.end(), perm_id) != r.permissions.end();
-        cb->SetValue(has);
-        cb->Enable(can_edit_perms);
+        toggle->SetValue(has);
     }
+    set_permissions_editable(can_edit_perms);
+    update_permission_count();
 
     Layout();
 }
@@ -579,10 +762,11 @@ void BackofficeRolesPanel::reset_form_to_empty() {
     btn_save_->Enable(false);
     btn_delete_->Enable(false);
 
-    for (auto& [perm_id, cb] : perm_checkboxes_) {
-        cb->SetValue(false);
-        cb->Enable(false);
+    for (auto& [perm_id, toggle] : perm_toggles_) {
+        toggle->SetValue(false);
     }
+    set_permissions_editable(false);
+    update_permission_count();
 
     Layout();
 }
@@ -614,10 +798,11 @@ void BackofficeRolesPanel::on_new_role(wxCommandEvent&) {
     ui::set_text_field_enabled(txt_name_, true);
     ui::set_text_field_enabled(txt_desc_, true);
 
-    for (auto& [perm_id, cb] : perm_checkboxes_) {
-        cb->SetValue(false);
-        cb->Enable(true);
+    for (auto& [perm_id, toggle] : perm_toggles_) {
+        toggle->SetValue(false);
     }
+    set_permissions_editable(true);
+    update_permission_count();
 
     btn_save_->Enable(true);
     btn_delete_->Enable(false); // No se puede eliminar antes de crearlo
@@ -639,8 +824,8 @@ void BackofficeRolesPanel::on_save_role(wxCommandEvent&) {
 
     std::vector<std::string> perms;
     for (const auto& p : all_permissions_) {
-        auto it = perm_checkboxes_.find(p.id);
-        if (it != perm_checkboxes_.end() && it->second->GetValue()) {
+        auto it = perm_toggles_.find(p.id);
+        if (it != perm_toggles_.end() && it->second && it->second->GetValue()) {
             perms.push_back(p.id);
         }
     }

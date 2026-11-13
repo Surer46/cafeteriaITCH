@@ -13,6 +13,7 @@
 namespace app::frontend {
 
 class CardPanel;
+class ToggleSwitch;
 
 class BackofficeRolesPanel : public wxPanel {
 public:
@@ -24,10 +25,20 @@ public:
     void refresh_roles(const std::string& select_role_id = "");
 
 private:
+    struct PermissionRow {
+        contracts::PermissionDto perm;
+        wxPanel* row_panel{nullptr};
+        wxStaticText* lbl_title{nullptr};
+        wxStaticText* lbl_desc{nullptr};
+        ToggleSwitch* toggle{nullptr};
+    };
+
     void setup_ui();
     void load_permissions();
     void build_permission_matrix();
     void update_permission_matrix_layout();
+    void update_permission_count();
+    void set_permissions_editable(bool editable);
     void auto_size_columns();
     void on_size(wxSizeEvent& event);
     void on_role_selected(wxListEvent& event);
@@ -60,10 +71,13 @@ private:
     wxTextCtrl* txt_desc_{nullptr};
     wxScrolledWindow* scroll_perms_{nullptr};
     wxBoxSizer* perms_sizer_{nullptr};
-    std::map<std::string, wxCheckBox*> perm_checkboxes_;
+    std::vector<PermissionRow> perm_rows_;
+    std::map<std::string, ToggleSwitch*> perm_toggles_;
+    std::vector<wxPanel*> perm_separators_;
 
     wxButton* btn_save_{nullptr};
     wxButton* btn_delete_{nullptr};
+    wxStaticText* lbl_perm_count_{nullptr};
     wxStaticText* lbl_form_feedback_{nullptr};
 
     // Datos en memoria
@@ -73,6 +87,8 @@ private:
     bool is_creating_new_{false};
     bool can_manage_{false};
     bool in_size_event_{false};
+    bool in_matrix_layout_{false};
+    int last_matrix_avail_w_{-1};
 };
 
 } // namespace app::frontend
