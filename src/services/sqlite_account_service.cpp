@@ -1,4 +1,6 @@
 #include "app/services/sqlite_account_service.hpp"
+#include "app/services/identifiers.hpp"
+#include "app/domain/clock.hpp"
 #include "app/crypto/password_hasher.hpp"
 #include <chrono>
 #include <iomanip>
@@ -9,14 +11,6 @@
 namespace app::services {
 
 namespace {
-
-std::string current_timestamp() {
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
-    return ss.str();
-}
 
 bool is_valid_email(const std::string& email) {
     if (email.empty() || email.length() > 254) return false;
@@ -131,14 +125,15 @@ contracts::OperationResult SqliteAccountService::create_initial_owner(
     // Generar hash seguro con PBKDF2-HMAC-SHA256 y sal individual
     std::string password_hash = crypto::PasswordHasher::hash_password(raw_password);
     std::string user_id = "user-" + username;
-    std::string now_str = current_timestamp();
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
 
     auto tx = db_.begin_transaction();
     if (!tx.is_success()) return tx;
 
     auto prep = db_.prepare(
-        "INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at, avatar_blob) "
-        "VALUES (?, ?, ?, ?, ?, 'role-owner', 1, ?, ?);"
+        "INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at, avatar_blob, updated_at, updated_at_utc) "
+        "VALUES (?, ?, ?, ?, ?, 'role-owner', 1, ?, ?, ?, ?);"
     );
     if (!prep.is_success()) {
         db_.rollback_transaction();
@@ -157,6 +152,8 @@ contracts::OperationResult SqliteAccountService::create_initial_owner(
     } else {
         stmt.bind_null(7);
     }
+    stmt.bind_text(8, now_str);
+    stmt.bind_text(9, ts.utc);
 
     auto step_res = stmt.step();
     if (!step_res.is_success()) {
@@ -166,14 +163,15 @@ contracts::OperationResult SqliteAccountService::create_initial_owner(
 
     // Registrar en auditoría
     auto prep_audit = db_.prepare(
-        "INSERT INTO audit_events (id, event_type, user_id, details, created_at) "
-        "VALUES (?, 'OWNER_CREATED', ?, 'Alta inicial de cuenta Dueño', ?);"
+        "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
+        "VALUES (?, 'OWNER_CREATED', ?, 'Alta inicial de cuenta Dueño', ?, ?);"
     );
     if (prep_audit.is_success()) {
         auto stmt_aud = std::move(prep_audit.value());
-        stmt_aud.bind_text(1, "audit-" + user_id);
+        stmt_aud.bind_text(1, generate_id("audit"));
         stmt_aud.bind_text(2, user_id);
         stmt_aud.bind_text(3, now_str);
+        stmt_aud.bind_text(4, ts.utc);
         stmt_aud.step();
     }
 
@@ -496,14 +494,15 @@ contracts::Result<contracts::UserDto> SqliteAccountService::create_user(const co
 
     std::string password_hash = crypto::PasswordHasher::hash_password(input.raw_password);
     std::string user_id = "user-" + input.username;
-    std::string now_str = current_timestamp();
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
 
     auto tx = db_.begin_transaction();
     if (!tx.is_success()) return contracts::Result<contracts::UserDto>::fail(tx.error_code(), tx.error_message());
 
     auto prep_ins = db_.prepare(
-        "INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at, avatar_blob) "
-        "VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?);"
+        "INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at, avatar_blob, updated_at, updated_at_utc) "
+        "VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?);"
     );
     if (!prep_ins.is_success()) {
         db_.rollback_transaction();
@@ -523,6 +522,8 @@ contracts::Result<contracts::UserDto> SqliteAccountService::create_user(const co
     } else {
         stmt_ins.bind_null(8);
     }
+    stmt_ins.bind_text(9, now_str);
+    stmt_ins.bind_text(10, ts.utc);
 
     auto step_ins = stmt_ins.step();
     if (!step_ins.is_success()) {
@@ -531,10 +532,10 @@ contracts::Result<contracts::UserDto> SqliteAccountService::create_user(const co
     }
 
     // Registrar en auditoría dentro de la transacción (SIN contraseñas)
-    std::string audit_id = "audit-ucreate-" + user_id;
+    std::string audit_id = generate_id("audit");
     auto prep_aud = db_.prepare(
-        "INSERT INTO audit_events (id, event_type, user_id, details, created_at) "
-        "VALUES (?, 'USER_CREATED', ?, ?, ?);"
+        "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
+        "VALUES (?, 'USER_CREATED', ?, ?, ?, ?);"
     );
     if (prep_aud.is_success()) {
         auto stmt_aud = std::move(prep_aud.value());
@@ -546,6 +547,7 @@ contracts::Result<contracts::UserDto> SqliteAccountService::create_user(const co
         }
         stmt_aud.bind_text(3, "Usuario creado: " + input.username + " (" + input.email + ") con rol: " + role_name);
         stmt_aud.bind_text(4, now_str);
+        stmt_aud.bind_text(5, ts.utc);
         stmt_aud.step();
     }
 
@@ -715,7 +717,7 @@ contracts::OperationResult SqliteAccountService::update_user(const contracts::Up
     }
 
     auto prep_upd = db_.prepare(
-        "UPDATE users SET display_name = ?, role_id = ?, is_active = ?, email = ? WHERE id = ?;"
+        "UPDATE users SET display_name = ?, role_id = ?, is_active = ?, email = ?, updated_at = ?, updated_at_utc = ? WHERE id = ?;"
     );
     if (!prep_upd.is_success()) {
         db_.rollback_transaction();
@@ -726,7 +728,10 @@ contracts::OperationResult SqliteAccountService::update_user(const contracts::Up
     stmt_upd.bind_text(2, new_role_id);
     stmt_upd.bind_int64(3, new_active ? 1 : 0);
     stmt_upd.bind_text(4, new_email);
-    stmt_upd.bind_text(5, input.user_id);
+    const auto user_upd_ts = domain::now();
+    stmt_upd.bind_text(5, user_upd_ts.local);
+    stmt_upd.bind_text(6, user_upd_ts.utc);
+    stmt_upd.bind_text(7, input.user_id);
     auto step_upd = stmt_upd.step();
     if (!step_upd.is_success()) {
         db_.rollback_transaction();
@@ -766,8 +771,9 @@ contracts::OperationResult SqliteAccountService::update_user(const contracts::Up
     }
 
     // Auditoría
-    std::string now_str = current_timestamp();
-    std::string audit_id = "audit-uupd-" + input.user_id + "-" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
+    std::string audit_id = generate_id("audit");
     std::stringstream det;
     det << "Usuario modificado: " << cur_username;
     if (new_display != cur_display) det << " [Nombre: " << cur_display << " -> " << new_display << "]";
@@ -778,8 +784,8 @@ contracts::OperationResult SqliteAccountService::update_user(const contracts::Up
     else if (input.remove_avatar.has_value() && *input.remove_avatar) det << " [Avatar eliminado]";
 
     auto prep_aud = db_.prepare(
-        "INSERT INTO audit_events (id, event_type, user_id, details, created_at) "
-        "VALUES (?, 'USER_UPDATED', ?, ?, ?);"
+        "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
+        "VALUES (?, 'USER_UPDATED', ?, ?, ?, ?);"
     );
     if (prep_aud.is_success()) {
         auto stmt_aud = std::move(prep_aud.value());
@@ -791,6 +797,7 @@ contracts::OperationResult SqliteAccountService::update_user(const contracts::Up
         }
         stmt_aud.bind_text(3, det.str());
         stmt_aud.bind_text(4, now_str);
+        stmt_aud.bind_text(5, ts.utc);
         stmt_aud.step();
     }
 
@@ -854,14 +861,17 @@ contracts::OperationResult SqliteAccountService::change_password(
     auto tx = db_.begin_transaction();
     if (!tx.is_success()) return tx;
 
-    auto prep_upd = db_.prepare("UPDATE users SET password_hash = ? WHERE id = ?;");
+    auto prep_upd = db_.prepare("UPDATE users SET password_hash = ?, updated_at = ?, updated_at_utc = ? WHERE id = ?;");
     if (!prep_upd.is_success()) {
         db_.rollback_transaction();
         return contracts::OperationResult::fail(prep_upd.error_code(), prep_upd.error_message());
     }
     auto stmt_upd = std::move(prep_upd.value());
+    const auto pwd_ts = domain::now();
     stmt_upd.bind_text(1, new_hash);
-    stmt_upd.bind_text(2, user_id);
+    stmt_upd.bind_text(2, pwd_ts.local);
+    stmt_upd.bind_text(3, pwd_ts.utc);
+    stmt_upd.bind_text(4, user_id);
     auto step_upd = stmt_upd.step();
     if (!step_upd.is_success()) {
         db_.rollback_transaction();
@@ -869,11 +879,12 @@ contracts::OperationResult SqliteAccountService::change_password(
     }
 
     // Registrar en auditoría (SIN contraseñas ni hashes)
-    std::string now_str = current_timestamp();
-    std::string audit_id = "audit-pwd-" + user_id + "-" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
+    std::string audit_id = generate_id("audit");
     auto prep_aud = db_.prepare(
-        "INSERT INTO audit_events (id, event_type, user_id, details, created_at) "
-        "VALUES (?, 'PASSWORD_CHANGED', ?, ?, ?);"
+        "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
+        "VALUES (?, 'PASSWORD_CHANGED', ?, ?, ?, ?);"
     );
     if (prep_aud.is_success()) {
         auto stmt_aud = std::move(prep_aud.value());
@@ -881,6 +892,7 @@ contracts::OperationResult SqliteAccountService::change_password(
         stmt_aud.bind_text(2, current_user_->id);
         stmt_aud.bind_text(3, "Cambio de contraseña para usuario: " + username);
         stmt_aud.bind_text(4, now_str);
+        stmt_aud.bind_text(5, ts.utc);
         stmt_aud.step();
     }
 
@@ -1037,7 +1049,7 @@ contracts::Result<contracts::RoleDto> SqliteAccountService::create_role(const co
     auto tx = db_.begin_transaction();
     if (!tx.is_success()) return contracts::Result<contracts::RoleDto>::fail(tx.error_code(), tx.error_message());
 
-    auto prep_ins = db_.prepare("INSERT INTO roles (id, name, description, is_system) VALUES (?, ?, ?, 0);");
+    auto prep_ins = db_.prepare("INSERT INTO roles (id, name, description, is_system, updated_at, updated_at_utc) VALUES (?, ?, ?, 0, ?, ?);");
     if (!prep_ins.is_success()) {
         db_.rollback_transaction();
         return contracts::Result<contracts::RoleDto>::fail(prep_ins.error_code(), prep_ins.error_message());
@@ -1046,6 +1058,9 @@ contracts::Result<contracts::RoleDto> SqliteAccountService::create_role(const co
     stmt_ins.bind_text(1, role_id);
     stmt_ins.bind_text(2, input.name);
     stmt_ins.bind_text(3, input.description);
+    const auto role_ts = domain::now();
+    stmt_ins.bind_text(4, role_ts.local);
+    stmt_ins.bind_text(5, role_ts.utc);
     auto step_ins = stmt_ins.step();
     if (!step_ins.is_success()) {
         db_.rollback_transaction();
@@ -1064,9 +1079,10 @@ contracts::Result<contracts::RoleDto> SqliteAccountService::create_role(const co
     }
 
     // Auditoría
-    std::string now_str = current_timestamp();
-    std::string audit_id = "audit-rcreate-" + role_id;
-    auto prep_aud = db_.prepare("INSERT INTO audit_events (id, event_type, user_id, details, created_at) VALUES (?, 'ROLE_CREATED', ?, ?, ?);");
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
+    std::string audit_id = generate_id("audit");
+    auto prep_aud = db_.prepare("INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) VALUES (?, 'ROLE_CREATED', ?, ?, ?, ?);");
     if (prep_aud.is_success()) {
         auto stmt_aud = std::move(prep_aud.value());
         stmt_aud.bind_text(1, audit_id);
@@ -1077,6 +1093,7 @@ contracts::Result<contracts::RoleDto> SqliteAccountService::create_role(const co
         }
         stmt_aud.bind_text(3, "Rol creado: " + input.name + " (" + std::to_string(input.permissions.size()) + " permisos)");
         stmt_aud.bind_text(4, now_str);
+        stmt_aud.bind_text(5, ts.utc);
         stmt_aud.step();
     }
 
@@ -1141,7 +1158,7 @@ contracts::OperationResult SqliteAccountService::update_role(const contracts::Up
     auto tx = db_.begin_transaction();
     if (!tx.is_success()) return tx;
 
-    auto prep_upd = db_.prepare("UPDATE roles SET name = ?, description = ? WHERE id = ?;");
+    auto prep_upd = db_.prepare("UPDATE roles SET name = ?, description = ?, updated_at = ?, updated_at_utc = ? WHERE id = ?;");
     if (!prep_upd.is_success()) {
         db_.rollback_transaction();
         return contracts::OperationResult::fail(prep_upd.error_code(), prep_upd.error_message());
@@ -1149,7 +1166,10 @@ contracts::OperationResult SqliteAccountService::update_role(const contracts::Up
     auto stmt_upd = std::move(prep_upd.value());
     stmt_upd.bind_text(1, input.name);
     stmt_upd.bind_text(2, input.description);
-    stmt_upd.bind_text(3, input.role_id);
+    const auto role_upd_ts = domain::now();
+    stmt_upd.bind_text(3, role_upd_ts.local);
+    stmt_upd.bind_text(4, role_upd_ts.utc);
+    stmt_upd.bind_text(5, input.role_id);
     stmt_upd.step();
 
     // Eliminar permisos anteriores y reasignar
@@ -1171,9 +1191,10 @@ contracts::OperationResult SqliteAccountService::update_role(const contracts::Up
     }
 
     // Auditoría
-    std::string now_str = current_timestamp();
-    std::string audit_id = "audit-rupd-" + input.role_id + "-" + std::to_string(std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::system_clock::now().time_since_epoch()).count());
-    auto prep_aud = db_.prepare("INSERT INTO audit_events (id, event_type, user_id, details, created_at) VALUES (?, 'ROLE_UPDATED', ?, ?, ?);");
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
+    std::string audit_id = generate_id("audit");
+    auto prep_aud = db_.prepare("INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) VALUES (?, 'ROLE_UPDATED', ?, ?, ?, ?);");
     if (prep_aud.is_success()) {
         auto stmt_aud = std::move(prep_aud.value());
         stmt_aud.bind_text(1, audit_id);
@@ -1184,6 +1205,7 @@ contracts::OperationResult SqliteAccountService::update_role(const contracts::Up
         }
         stmt_aud.bind_text(3, "Rol modificado: " + input.name + " (" + std::to_string(input.permissions.size()) + " permisos)");
         stmt_aud.bind_text(4, now_str);
+        stmt_aud.bind_text(5, ts.utc);
         stmt_aud.step();
     }
 
@@ -1260,9 +1282,10 @@ contracts::OperationResult SqliteAccountService::delete_role(const std::string& 
     stmt_del_r.step();
 
     // Auditoría
-    std::string now_str = current_timestamp();
-    std::string audit_id = "audit-rdel-" + role_id;
-    auto prep_aud = db_.prepare("INSERT INTO audit_events (id, event_type, user_id, details, created_at) VALUES (?, 'ROLE_DELETED', ?, ?, ?);");
+    const auto ts = domain::now();
+    const std::string& now_str = ts.local;
+    std::string audit_id = generate_id("audit");
+    auto prep_aud = db_.prepare("INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) VALUES (?, 'ROLE_DELETED', ?, ?, ?, ?);");
     if (prep_aud.is_success()) {
         auto stmt_aud = std::move(prep_aud.value());
         stmt_aud.bind_text(1, audit_id);
@@ -1273,6 +1296,7 @@ contracts::OperationResult SqliteAccountService::delete_role(const std::string& 
         }
         stmt_aud.bind_text(3, "Rol eliminado: " + role_name + " (" + role_id + ")");
         stmt_aud.bind_text(4, now_str);
+        stmt_aud.bind_text(5, ts.utc);
         stmt_aud.step();
     }
 
@@ -1437,20 +1461,14 @@ contracts::OperationResult SqliteAccountService::record_audit_event(
     const std::string& event_type,
     const std::string& details
 ) {
-    static std::atomic<std::uint64_t> seq{0};
-    auto seq_val = ++seq;
-    std::string now_str = current_timestamp();
-    std::stringstream id_ss;
-    id_ss << "audit-" << std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count()
-          << "-" << seq_val;
-    std::string audit_id = id_ss.str();
+    const auto ts = domain::now();
+    std::string audit_id = generate_id("audit");
 
     std::string actor_id = current_user_.has_value() ? current_user_->id : "";
 
     auto prep = db_.prepare(
-        "INSERT INTO audit_events (id, event_type, user_id, details, created_at) "
-        "VALUES (?, ?, ?, ?, ?);"
+        "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
+        "VALUES (?, ?, ?, ?, ?, ?);"
     );
     if (!prep.is_success()) {
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
@@ -1465,7 +1483,8 @@ contracts::OperationResult SqliteAccountService::record_audit_event(
         stmt.bind_text(3, actor_id);
     }
     stmt.bind_text(4, details);
-    stmt.bind_text(5, now_str);
+    stmt.bind_text(5, ts.local);
+    stmt.bind_text(6, ts.utc);
 
     auto step_res = stmt.step();
     if (!step_res.is_success()) {

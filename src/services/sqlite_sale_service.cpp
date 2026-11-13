@@ -1,31 +1,17 @@
 #include "app/services/sqlite_sale_service.hpp"
+#include "app/services/identifiers.hpp"
+#include "app/domain/clock.hpp"
 #include <chrono>
 #include <iomanip>
 #include <sstream>
 #include <atomic>
 #include <limits>
+#include <cstdio>
 #include <unordered_map>
 
 namespace app::services {
 
 namespace {
-
-std::string current_timestamp() {
-    auto now = std::chrono::system_clock::now();
-    auto in_time_t = std::chrono::system_clock::to_time_t(now);
-    std::stringstream ss;
-    ss << std::put_time(std::localtime(&in_time_t), "%Y-%m-%d %H:%M:%S");
-    return ss.str();
-}
-
-std::string generate_id(const std::string& prefix) {
-    static std::atomic<std::uint64_t> counter{0};
-    auto now_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::system_clock::now().time_since_epoch()).count();
-    std::stringstream ss;
-    ss << prefix << "-" << now_ms << "-" << ++counter;
-    return ss.str();
-}
 
 contracts::PaymentMethod parse_payment_method(const std::string& str) {
     if (str == "TARJETA") return contracts::PaymentMethod::Tarjeta;
@@ -83,33 +69,64 @@ contracts::OperationResult SqliteSaleService::check_permission_or_fail(std::stri
     return contracts::OperationResult::ok();
 }
 
-std::string SqliteSaleService::generate_next_folio() {
-    std::int64_t count = 0;
-    auto prep = db_.prepare("SELECT COUNT(*) FROM sales;");
+// Normaliza un texto a un código de caja: solo A-Z0-9 en mayúsculas, máximo 4 caracteres.
+static std::string sanitize_register_code(const std::string& raw) {
+    std::string out;
+    for (unsigned char ch : raw) {
+        if (ch >= 'a' && ch <= 'z') ch = static_cast<unsigned char>(ch - 'a' + 'A');
+        if ((ch >= 'A' && ch <= 'Z') || (ch >= '0' && ch <= '9')) {
+            out.push_back(static_cast<char>(ch));
+            if (out.size() == 4) break;
+        }
+    }
+    return out;
+}
+
+std::string SqliteSaleService::folio_register_code(const std::string& register_id) {
+    std::string code;
+    auto prep = db_.prepare("SELECT code FROM cash_registers WHERE id = ?;");
     if (prep.is_success()) {
         auto stmt = std::move(prep.value());
+        stmt.bind_text(1, register_id);
         auto step = stmt.step();
         if (step.is_success() && step.value()) {
-            count = stmt.get_int64(0);
+            code = sanitize_register_code(stmt.get_text(0));
         }
     }
+    // Respaldo para cajas sin código: se deriva del id con el mismo alfabeto y límite de 4.
+    if (code.empty()) code = sanitize_register_code(register_id);
+    if (code.empty()) code = "X";
+    return code;
+}
 
-    std::int64_t next_num = 10001 + count;
-    while (true) {
-        std::string candidate = "V-" + std::to_string(next_num);
-        auto prep_chk = db_.prepare("SELECT COUNT(*) FROM sales WHERE folio = ?;");
-        if (prep_chk.is_success()) {
-            auto stmt_chk = std::move(prep_chk.value());
-            stmt_chk.bind_text(1, candidate);
-            auto step = stmt_chk.step();
-            if (step.is_success() && step.value() && stmt_chk.get_int64(0) == 0) {
-                return candidate;
-            }
-        } else {
-            return candidate;
-        }
-        next_num++;
+// Debe llamarse dentro de la transacción de la venta (BEGIN IMMEDIATE ya tomado), de modo
+// que el número siguiente no pueda repetirse. Formato: V-<código>-<5 dígitos>, p. ej. V-C1-00001.
+contracts::Result<std::string> SqliteSaleService::generate_next_folio(const std::string& register_id) {
+    const std::string prefix = "V-" + folio_register_code(register_id) + "-";
+
+    auto prep = db_.prepare(
+        "SELECT COALESCE(MAX(CAST(substr(folio, ?) AS INTEGER)), 0) FROM sales WHERE substr(folio, 1, ?) = ?;"
+    );
+    if (!prep.is_success()) {
+        return contracts::Result<std::string>::fail(prep.error_code(), prep.error_message());
     }
+    auto stmt = std::move(prep.value());
+    stmt.bind_int64(1, static_cast<std::int64_t>(prefix.size()) + 1);
+    stmt.bind_int64(2, static_cast<std::int64_t>(prefix.size()));
+    stmt.bind_text(3, prefix);
+    auto step = stmt.step();
+    if (!step.is_success() || !step.value()) {
+        return contracts::Result<std::string>::fail(
+            contracts::ErrorCode::InvalidState, "No se pudo calcular el siguiente folio");
+    }
+    const std::int64_t last = stmt.get_int64(0);
+    if (last >= std::numeric_limits<std::int64_t>::max() - 1) {
+        return contracts::Result<std::string>::fail(
+            contracts::ErrorCode::InvalidState, "Secuencia de folios agotada para la caja");
+    }
+    char num[24];
+    std::snprintf(num, sizeof(num), "%05lld", static_cast<long long>(last + 1));
+    return contracts::Result<std::string>::ok(prefix + num);
 }
 
 contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::find_sale_by_idempotency_key(const std::string& key) {
@@ -264,8 +281,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
 
     // 5. Revalidar turno activo dentro de la transacción
     std::string shift_id;
+    std::string shift_register_id;
     {
-        auto prep_s = db_.prepare("SELECT id FROM shifts WHERE is_open = 1 ORDER BY opened_at DESC LIMIT 1;");
+        auto prep_s = db_.prepare("SELECT id, register_id FROM shifts WHERE is_open = 1 ORDER BY opened_at DESC LIMIT 1;");
         if (!prep_s.is_success()) {
             db_.execute("ROLLBACK;");
             return contracts::Result<contracts::SaleConfirmationDto>::fail(prep_s.error_code(), prep_s.error_message());
@@ -280,6 +298,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
             );
         }
         shift_id = stmt_s.get_text(0);
+        shift_register_id = stmt_s.get_text(1);
     }
 
     // 6. Consultar carrito y líneas activas del usuario y caja actual
@@ -526,14 +545,20 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
 
     // 10. Inserciones atómicas de venta, líneas, inventario, pago, movimiento de caja y auditoría
     std::string sale_id = generate_id("sale");
-    std::string folio = generate_next_folio();
-    std::string now = current_timestamp();
+    auto folio_res = generate_next_folio(shift_register_id);
+    if (!folio_res.is_success()) {
+        db_.execute("ROLLBACK;");
+        return contracts::Result<contracts::SaleConfirmationDto>::fail(folio_res.error_code(), folio_res.error_message());
+    }
+    const std::string folio = folio_res.value();
+    const auto ts = domain::now();
+    const std::string& now = ts.local;
 
     // 10.1 Inserción de venta
     {
         auto prep_sale = db_.prepare(
-            "INSERT INTO sales (id, folio, shift_id, user_id, total_cents, idempotency_key, created_at, cashier_name) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+            "INSERT INTO sales (id, folio, shift_id, user_id, total_cents, idempotency_key, created_at, cashier_name, created_at_utc) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
         );
         if (!prep_sale.is_success()) {
             db_.execute("ROLLBACK;");
@@ -552,6 +577,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         }
         stmt_s.bind_text(7, now);
         stmt_s.bind_text(8, cashier_name);
+        stmt_s.bind_text(9, ts.utc);
 
         auto step = stmt_s.step();
         if (!step.is_success()) {
@@ -592,8 +618,8 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     for (const auto& [ing_id, needed] : ingredient_needed) {
         std::string mov_id = generate_id("mov");
         auto prep_mov = db_.prepare(
-            "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at) "
-            "VALUES (?, ?, 'SALE', ?, ?, ?);"
+            "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at, created_at_utc) "
+            "VALUES (?, ?, 'SALE', ?, ?, ?, ?);"
         );
         if (!prep_mov.is_success()) {
             db_.execute("ROLLBACK;");
@@ -605,6 +631,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_m.bind_int64(3, -needed);
         stmt_m.bind_text(4, "Venta " + folio);
         stmt_m.bind_text(5, now);
+        stmt_m.bind_text(6, ts.utc);
 
         auto step_m = stmt_m.step();
         if (!step_m.is_success()) {
@@ -632,8 +659,8 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     {
         std::string pay_id = generate_id("pay");
         auto prep_pay = db_.prepare(
-            "INSERT INTO payment_records (id, sale_id, payment_method, amount_cents, cash_received_cents, change_cents, created_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?);"
+            "INSERT INTO payment_records (id, sale_id, payment_method, amount_cents, cash_received_cents, change_cents, created_at, created_at_utc) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
         );
         if (!prep_pay.is_success()) {
             db_.execute("ROLLBACK;");
@@ -647,6 +674,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_p.bind_int64(5, cash_received.cents());
         stmt_p.bind_int64(6, change.cents());
         stmt_p.bind_text(7, now);
+        stmt_p.bind_text(8, ts.utc);
 
         auto step = stmt_p.step();
         if (!step.is_success()) {
@@ -662,8 +690,8 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         std::string desc = "Venta " + folio + " [" + contracts::to_string(payment_method) + "]";
 
         auto prep_cmov = db_.prepare(
-            "INSERT INTO cash_movements (id, shift_id, movement_type, amount_cents, description, created_at) "
-            "VALUES (?, ?, 'SALE', ?, ?, ?);"
+            "INSERT INTO cash_movements (id, shift_id, movement_type, amount_cents, description, created_at, created_at_utc) "
+            "VALUES (?, ?, 'SALE', ?, ?, ?, ?);"
         );
         if (!prep_cmov.is_success()) {
             db_.execute("ROLLBACK;");
@@ -675,6 +703,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_cm.bind_int64(3, cash_impact);
         stmt_cm.bind_text(4, desc);
         stmt_cm.bind_text(5, now);
+        stmt_cm.bind_text(6, ts.utc);
 
         auto step = stmt_cm.step();
         if (!step.is_success()) {
@@ -704,8 +733,8 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         std::string audit_id = generate_id("audit");
         std::string details = "Venta confirmada folio " + folio + " por " + total.to_string() + " [" + contracts::to_string(payment_method) + "]";
         auto prep_aud = db_.prepare(
-            "INSERT INTO audit_events (id, event_type, user_id, details, created_at) "
-            "VALUES (?, 'SALE_CONFIRMED', ?, ?, ?);"
+            "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
+            "VALUES (?, 'SALE_CONFIRMED', ?, ?, ?, ?);"
         );
         if (!prep_aud.is_success()) {
             db_.execute("ROLLBACK;");
@@ -716,6 +745,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_a.bind_text(2, user_id);
         stmt_a.bind_text(3, details);
         stmt_a.bind_text(4, now);
+        stmt_a.bind_text(5, ts.utc);
 
         auto step = stmt_a.step();
         if (!step.is_success()) {

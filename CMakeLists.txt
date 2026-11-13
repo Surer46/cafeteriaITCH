@@ -35,7 +35,9 @@ endif()
 # 2. Biblioteca de Criptografía y Hash de contraseñas (PBKDF2-HMAC-SHA256)
 add_library(app_crypto STATIC
     src/crypto/password_hasher.cpp
+    src/crypto/random_bytes.cpp
     include/app/crypto/password_hasher.hpp
+    include/app/crypto/random_bytes.hpp
 )
 target_include_directories(app_crypto PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -64,7 +66,9 @@ target_include_directories(app_contracts PUBLIC
 # 4. Biblioteca de Dominio (include/app/domain/, src/domain/)
 add_library(app_domain STATIC
     src/domain/unit_converter.cpp
+    src/domain/clock.cpp
     include/app/domain/unit_converter.hpp
+    include/app/domain/clock.hpp
 )
 target_include_directories(app_domain PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/include
@@ -91,6 +95,7 @@ target_link_libraries(app_storage PUBLIC
 
 # 6. Biblioteca de Servicios (include/app/services/, src/services/)
 add_library(app_services STATIC
+    src/services/identifiers.cpp
     src/services/mock_services.cpp
     src/services/sqlite_account_service.cpp
     src/services/sqlite_backup_service.cpp
@@ -101,6 +106,7 @@ add_library(app_services STATIC
     src/services/sqlite_cart_service.cpp
     src/services/sqlite_sale_service.cpp
     src/services/sqlite_print_config_service.cpp
+    include/app/services/identifiers.hpp
     include/app/services/mock_services.hpp
     include/app/services/sqlite_account_service.hpp
     include/app/services/sqlite_backup_service.hpp

@@ -12,6 +12,7 @@
 #include "sqlite3.h"
 #include "app/storage/sqlite_database.hpp"
 #include "app/storage/migration_runner.hpp"
+#include "app/crypto/password_hasher.hpp"
 #include "app/services/sqlite_account_service.hpp"
 #include "app/services/sqlite_backup_service.hpp"
 
@@ -408,8 +409,12 @@ void test_older_version_migrates(const fs::path& base, const fs::path& mig) {
             auto r = runner.apply_migration(v, found.filename().string(), ss.str());
             TEST_CHECK(r.is_success(), "Aplicar migración " + std::to_string(v) + ": " + r.error_message());
         }
-        SqliteAccountService oacc(odb);
-        TEST_CHECK(oacc.create_initial_owner("dueno_viejo", "Dueño Viejo", kOwnerPwd, "viejo@cafeteria-itch.edu.mx").is_success(),
+        // Los servicios actuales ya escriben columnas de migraciones posteriores (updated_at, *_utc):
+        // el Dueño del esquema v7 se inserta por SQL con las columnas que ese esquema tenía.
+        const std::string old_hash = app::crypto::PasswordHasher::hash_password(kOwnerPwd);
+        TEST_CHECK(odb.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at) "
+                               "VALUES ('user-dueno_viejo', 'dueno_viejo', 'Dueño Viejo', 'viejo@cafeteria-itch.edu.mx', '" + old_hash +
+                               "', 'role-owner', 1, '2026-10-01 08:00:00');").is_success(),
                    "Debe crear Dueño en base v7");
         TEST_CHECK(odb.backup_to(old_file).is_success(), "Debe exportar respaldo v7");
     }
@@ -431,6 +436,60 @@ void test_older_version_migrates(const fs::path& base, const fs::path& mig) {
     env.login_owner("dueno_viejo");
     TEST_CHECK(env.account->has_permission("backup.restore"), "La migración 008 da backup.restore al Dueño restaurado");
     TEST_CHECK(env.backup->get_status().is_success(), "backup_state existe tras migrar");
+    env.cleanup();
+}
+
+void test_v9_backup_restores_and_migrates(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B4: un respaldo del esquema 9 se restaura y queda migrado a la versión nueva..." << std::endl;
+    Env env(base / "t9", mig);
+    env.login_owner();
+    const auto latest = scalar(env.db, "SELECT MAX(version) FROM schema_migrations;");
+    TEST_CHECK(latest >= 10, "El esquema actual debe ser al menos la versión 10");
+
+    // Base v9 con datos (insertados por SQL: los servicios actuales ya esperan el esquema nuevo)
+    fs::path old_file = env.root / fs::u8path(u8"antiguo v9 ñ.db");
+    {
+        SqliteDatabase odb;
+        TEST_CHECK(odb.open(env.root / "origen_v9.db").is_success(), "Debe abrir base v9");
+        MigrationRunner runner(odb);
+        for (int v = 1; v <= 9; ++v) {
+            char name[64];
+            std::snprintf(name, sizeof(name), "%03d_", v);
+            fs::path found;
+            for (auto& e : fs::directory_iterator(mig)) {
+                if (e.path().filename().string().rfind(name, 0) == 0) found = e.path();
+            }
+            TEST_CHECK(!found.empty(), "Debe existir la migración " + std::to_string(v));
+            std::ifstream in(found, std::ios::binary);
+            std::stringstream ss;
+            ss << in.rdbuf();
+            auto r = runner.apply_migration(v, found.filename().string(), ss.str());
+            TEST_CHECK(r.is_success(), "Aplicar migración " + std::to_string(v) + ": " + r.error_message());
+        }
+        const std::string hash = app::crypto::PasswordHasher::hash_password(kOwnerPwd);
+        TEST_CHECK(odb.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at) "
+                               "VALUES ('user-dueno_v9', 'dueno_v9', 'Dueño V9', 'v9@cafeteria-itch.edu.mx', '" + hash +
+                               "', 'role-owner', 1, '2026-10-01 08:00:00');").is_success(), "Alta de Dueño v9 por SQL");
+        TEST_CHECK(odb.execute("INSERT INTO audit_events (id, event_type, user_id, details, created_at) "
+                               "VALUES ('audit-v9', 'OWNER_CREATED', 'user-dueno_v9', 'Alta v9', '2026-10-01 08:00:00');").is_success(),
+                   "Evento de auditoría v9 por SQL");
+        TEST_CHECK(odb.backup_to(old_file).is_success(), "Debe exportar respaldo v9");
+    }
+    auto info = SqliteDatabase::inspect_file(old_file);
+    TEST_CHECK(info.is_success() && info.value().schema_version == 9, "El archivo antiguo es de versión 9");
+
+    auto res = env.backup->restore_from_backup(old_file.u8string());
+    TEST_CHECK(res.is_success(), "Restaurar v9: " + res.error_message());
+    TEST_CHECK(scalar(env.db, "SELECT MAX(version) FROM schema_migrations;") == latest, "La base restaurada queda en la versión actual");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM users WHERE username='dueno_v9';") == 1, "Los datos del respaldo v9 están presentes");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM users WHERE username='dueno_b1';") == 0, "Los datos anteriores ya no están");
+    TEST_CHECK(text_scalar(env.db, "SELECT updated_at FROM users WHERE id='user-dueno_v9';") == "2026-10-01 08:00:00",
+               "updated_at de filas antiguas iguala created_at");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM audit_events WHERE id='audit-v9' AND created_at_utc IS NULL;") == 1,
+               "Las filas antiguas conservan created_at_utc en NULL");
+    TEST_CHECK(text_scalar(env.db, "SELECT code FROM cash_registers WHERE id='reg-01';") == "C1", "reg-01 recibe el código C1");
+    env.login_owner("dueno_v9");
+    TEST_CHECK(env.account->has_permission("backup.restore"), "El Dueño restaurado conserva sus permisos");
     env.cleanup();
 }
 
@@ -469,6 +528,7 @@ int main() {
     test_page_size_and_no_owner(base, mig);
     test_status_persists_across_reopen(base, mig);
     test_older_version_migrates(base, mig);
+    test_v9_backup_restores_and_migrates(base, mig);
     test_failure_with_open_transaction(base, mig);
 
     std::error_code ec;

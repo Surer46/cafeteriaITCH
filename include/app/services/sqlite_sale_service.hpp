@@ -37,7 +37,8 @@ public:
 
 private:
     contracts::OperationResult check_permission_or_fail(std::string_view perm) const;
-    std::string generate_next_folio();
+    std::string folio_register_code(const std::string& register_id);
+    contracts::Result<std::string> generate_next_folio(const std::string& register_id);
     contracts::Result<contracts::SaleConfirmationDto> find_sale_by_idempotency_key(const std::string& key);
 
     storage::SqliteDatabase& db_;
