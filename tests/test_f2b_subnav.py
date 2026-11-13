@@ -205,7 +205,7 @@ def run_f2b_test_for_binary(exe_path, repo_root, config_name):
 
     test_data_dir = tempfile.mkdtemp(prefix=f"cafeteria_f2b_{config_name.lower()}_")
     env = os.environ.copy()
-    env["PATH"] = r"D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll;" + os.path.dirname(exe_path) + ";" + env.get("PATH", "")
+    env["PATH"] = os.path.dirname(exe_path) + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = test_data_dir
 
     p1 = None

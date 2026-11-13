@@ -220,7 +220,7 @@ def main():
     db_path = os.path.join(temp_dir, "cafeteria.db")
 
     env = os.environ.copy()
-    env["PATH"] = r"D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll;" + work_dir + ";" + env.get("PATH", "")
+    env["PATH"] = work_dir + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = temp_dir
 
     print("=== INICIANDO CAPTURA DE PANTALLAS PARA QA VISUAL ===")

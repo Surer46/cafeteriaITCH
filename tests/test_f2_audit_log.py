@@ -335,7 +335,7 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
     db_path = os.path.join(test_data_dir, "cafeteria.db")
 
     env = os.environ.copy()
-    env["PATH"] = r"D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll;" + os.path.dirname(exe_path) + ";" + env.get("PATH", "")
+    env["PATH"] = os.path.dirname(exe_path) + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = test_data_dir
 
     try:

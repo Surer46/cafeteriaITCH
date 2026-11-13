@@ -167,7 +167,7 @@ def main():
     print(f"Ejecutable: {exe_path}", flush=True)
     print(f"Directorio temporal SQLite: {temp_dir}", flush=True)
 
-    env_path = r"D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll;" + build_dir + ";" + os.environ.get("PATH", "")
+    env_path = build_dir + ";" + os.environ.get("PATH", "")
     os.environ["PATH"] = env_path
     os.environ["CAFETERIA_DATA_DIR"] = temp_dir
 

@@ -374,10 +374,7 @@ def run_integration_test_i2(exe_path, work_dir):
     test_email = f"{test_username}@itch.edu.mx"
 
     env = os.environ.copy()
-    env["PATH"] = (
-        r"D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll;"
-        + work_dir + ";" + env.get("PATH", "")
-    )
+    env["PATH"] = work_dir + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = temp_test_dir
 
     try:

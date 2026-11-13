@@ -216,10 +216,7 @@ def run_test_for_binary(exe_path, work_dir, label):
 
     try:
         env = os.environ.copy()
-        env["PATH"] = (
-            r"D:\Temp\winlibs_msvcrt\mingw64\bin;D:\Temp\wxwidgets\lib\gcc1610_x64_dll;"
-            + work_dir + ";" + env.get("PATH", "")
-        )
+        env["PATH"] = work_dir + ";" + env.get("PATH", "")
         env["CAFETERIA_DATA_DIR"] = test_data_dir
 
         # -------------------------------------------------------------
