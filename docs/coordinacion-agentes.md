@@ -19,6 +19,7 @@ Vigente desde el 2026-11-08. Complementa `AGENTS.md`; si hay conflicto, manda `A
 | Pruebas C++ | Claude Code Terminal | `tests/test_*.cpp` |
 | Interfaz | AntiGravity | `src/frontend/`, `assets/` |
 | Pruebas GUI y capturas | AntiGravity | `tests/*.py`, `qa_visual/` |
+| Empaquetado y entrega | Claude Code Terminal | `packaging/`, `tools/`, `cmake/`. Durante la ronda 6 (B7) también `src/frontend/main_app.cpp` (carpeta de datos y línea de comandos) y `src/frontend/app.rc` (recurso de versión) |
 | `CMakeLists.txt` | Claude Code Terminal | Única excepción: AntiGravity puede añadir sus propios archivos nuevos de `src/frontend/` a la lista de fuentes de `app_desktop`, y nada más |
 | Documentación de estado | Orquestador | `docs/specs.md`, `*/plan.md`, `*/task.md`, `auditoria-*.md`, `docs/coordinacion-agentes.md` |
 

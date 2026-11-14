@@ -18,7 +18,7 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 | **I4** Corte de turno y reportes | 35 % | Listos: resumen diario real, pantalla de Caja y turnos, Bitácora. Faltan la conciliación del corte y la pantalla de Reportes. |
 | **I5** Respaldos y restauración | 55 % | Respaldo consistente, restauración y limpieza de respaldos antiguos (bajo petición, con vista previa), con pruebas. Configuración del servidor persistida. Faltan su pantalla y el servidor externo opcional. |
 | **I6** Usuarios, roles y permisos | 95 % | Pantallas de Usuarios y de Roles. Los permisos se muestran con título, descripción e interruptores, agrupados por sección. Falta dar más alto a la lista de permisos y la revisión humana. |
-| **I7** Perfil táctil, instalador y entrega | 12 % | Existe el perfil táctil. Datos preparados para más de una caja o dispositivo (identificadores únicos, hora UTC, última modificación y folio por caja). No hay instalador; faltan los datos de la PC de caja. |
+| **I7** Perfil táctil, instalador y entrega | 12 % | Existe el perfil táctil. Datos preparados para más de una caja o dispositivo (identificadores únicos, hora UTC, última modificación y folio por caja). No hay instalador; faltan los datos de la PC de caja. En curso desde el 2026-11-13: paquete portable, política de la carpeta de datos, autocomprobación y ficha de la PC de caja (B7); perfil en Configuración, acceso en Táctil y medición de objetivos táctiles (T1). |
 
 ### Pantallas reales hoy
 
@@ -74,7 +74,7 @@ Ningún archivo versionado depende de rutas de una PC concreta. Los pasos comple
 2. Dejar el compilador y wxWidgets en la carpeta hermana `..\toolchain`.
 3. Crear la copia de trabajo del backend: `git worktree add ..\Cafeteria_ITCH_backend backend/<bloque>`.
 4. Configurar `build_release` y `build_debug` (frontend) y, en la copia del backend, `build_be_release` y `build_be_debug`; compilar y correr CTest para verificar la línea base.
-5. Leer [`docs/ORQUESTADOR.md`](docs/ORQUESTADOR.md): contiene el estado, las decisiones tomadas y los bloques en cola. Los prompts pendientes están en `Prompts/prompts-2026-11-12-ronda4.md`.
+5. Leer [`docs/ORQUESTADOR.md`](docs/ORQUESTADOR.md): contiene el estado, las decisiones tomadas y los bloques en cola. Los prompts en curso están en `Prompts/prompts-2026-11-13-ronda6-i7.md`.
 
 Las conversaciones de los agentes no viajan con el repositorio; todo lo necesario para continuar está en esos archivos.
 

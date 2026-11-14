@@ -2,7 +2,7 @@
 
 Solo para el orquestador. Los agentes trabajadores no necesitan este archivo: lo compartido está en `AGENTS.md` (Memoria operativa) y `docs/coordinacion-agentes.md`. Leerlo al inicio de cada sesión en lugar de reconstruir el contexto. Actualizarlo al cerrar cada ronda.
 
-Última actualización: 2026-11-12.
+Última actualización: 2026-11-13.
 
 ## Portabilidad (decisión del usuario, 2026-11-12)
 
@@ -36,6 +36,13 @@ En paralelo con F7 (2026-11-13): **B6** para Claude (rama backend/b6, con plan p
 **B6 auditado como aceptable (2026-11-13), sin commit ni integrar** (worktree `backend/b6`, migración 013). Integrarlo cuando F7 esté auditado, para no mover `main` mientras Gemini trabaja. La sesión de AntiGravity de F7 se cerró a mitad de la verificación (causa desconocida, la PC no se reinició); el trabajo quedó en disco y se reanudó con un prompt de continuación, así que la medición de cuota de XHigh es parcial.
 
 **F7 aceptado en `6415c8a` y B6 en `ae8c464`, integrado en `409e974` y subido a GitHub** (conjunto verificado a 100 %: build, CTest 5/5, I1 y prueba de Ingredientes). Nota de F7: pantalla Ingredientes con Hydrogen XHigh; prueba propia en verde en el escritorio real. Perfil XHigh: resultado sólido y honesto, pero necesitó 6 ejecuciones de su prueba y 5 compilaciones por configuración. Falta la cuota final para la comparación. Siguiente: F8 (Reabastecimiento) en Hydrogen high.
+
+**Ronda 6, I7 (2026-11-13, retomar aquí):** el usuario adelanta I7 (12 %) para dejarla a la par de las demás etapas (30 % como mínimo). Prompts en `Prompts/prompts-2026-11-13-ronda6-i7.md`, en paralelo: **B7** (Claude, rama `backend/b7` ya creada desde `6ebab28`, con plan previo: paquete en carpeta y ZIP, política de carpeta de datos, `--self-check`, versión, guion de instalador sin compilar y ficha de la PC de caja) y **T1** (Gemini 4 Hydrogen high, `main`: perfil en BackOffice > Configuración, diálogos de acceso en Táctil, prueba consciente de DPI e inventario de objetivos táctiles en `qa_visual/touch_audit.txt`). F8 (Reabastecimiento) espera a T1. En esta ronda `main_app.cpp` y `app.rc` son de B7; `packaging/`, `tools/` y `cmake/` pasan a ser del backend. Sin commit todavía de los documentos de esta ronda.
+
+- Medido antes de redactar: el ejecutable importa 5 DLL ajenas a Windows (la carpeta de compilación tiene 33); paquete mínimo de 32 MB que arranca con el `PATH` limpio; subsistema 5 (el formato no impide Windows 7, sin probar); sin `install()`, CPack, icono ni recurso de versión; los datos caen en silencio a la carpeta del usuario de Windows si `data/` junto al ejecutable no se puede crear.
+- Decisiones que traerá el plan de B7 y hay que confirmar con el usuario: dónde viven los datos de una copia instalada (por equipo o por usuario de Windows), herramienta del instalador (requiere aprobar su descarga) y nombre del ejecutable entregado.
+- Cola de I7: **T2** (corregir lo marcado en el inventario táctil y volverlo aserciones), **T3** (captura numérica en Táctil; falta decidir teclado propio o el de Windows), **B8** (compilar y probar el instalador). Fuera de los agentes: ejecutar la ficha en la PC de caja, icono, prueba en equipo limpio.
+- Al auditar: T1 toca los diálogos de acceso, así que repetir I1 a 100 %; la prueba nueva de T1 debe correr también al escalado real de esta PC (comprobarlo antes: el registro indicaba 120 DPI). B7 cambia la resolución de la carpeta de datos: correr la batería GUI completa al integrar. El avance de I7 en `README.md` no se sube hasta aceptar los bloques.
 
 ## Decisiones del usuario
 
