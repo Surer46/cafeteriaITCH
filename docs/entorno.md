@@ -61,6 +61,10 @@ No se modifica el `PATH` del sistema ni ninguna configuración global: cada term
 
    y lo mismo en Debug. Si falla en una PC nueva sin haber cambiado código, es un problema del entorno: repórtalo, no adaptes el código ni relajes pruebas.
 
+## Escalado de pantalla
+
+El programa y las pruebas GUI se verifican con Windows al **100 %** (96 DPI) y al **125 %** (120 DPI). Con otro escalado las pruebas se detienen con un mensaje. Cambiar el escalado lo hace la persona (Configuración > Pantalla > Escala); los programas que se abren después ya lo usan, sin cerrar sesión. Para verificar un bloque de interfaz, correr la batería GUI en los dos escalados.
+
 ## Datos de prueba manual
 
 Usar una carpeta fuera del repositorio o ignorada por git, por ejemplo `.\build_release\app_desktop.exe --data-dir="..\Cafeteria_QA_Manual"`.

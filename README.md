@@ -13,7 +13,7 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 | Etapa | Avance | Situación |
 |---|---|---|
 | **I1** Base nativa, SQLite y alta del Dueño | 100 % | Cerrada. |
-| **I2** Venta, cobro, caja e impresión | 85 % | Software terminado. Faltan la revisión visual humana (0 de 7 casos), la impresora térmica real (55 y 80 mm), el monitor táctil y el escalado de pantalla al 125, 150 y 200 %. |
+| **I2** Venta, cobro, caja e impresión | 85 % | Software terminado. Faltan la revisión visual humana (0 de 7 casos), la impresora térmica real (55 y 80 mm), el monitor táctil y el escalado de pantalla al 150 y 200 % (100 y 125 % verificados el 2026-11-14). |
 | **I3** Inventario, ingredientes y recetas | 40 % | En desarrollo desde el 2026-11-13, sin esperar la revisión humana de I2. Backend listo: ingredientes, compras, mermas y ajustes, movimientos, avisos de poco inventario, y costo y margen por receta con promedio móvil. Pantalla de Ingredientes lista; faltan Reabastecimiento, Productos y recetas, y Existencias. Sin decidir: combos, promociones y productos por peso. |
 | **I4** Corte de turno y reportes | 35 % | Listos: resumen diario real, pantalla de Caja y turnos, Bitácora. Faltan la conciliación del corte y la pantalla de Reportes. |
 | **I5** Respaldos y restauración | 55 % | Respaldo consistente, restauración y limpieza de respaldos antiguos (bajo petición, con vista previa), con pruebas. Configuración del servidor persistida. Faltan su pantalla y el servidor externo opcional. |
@@ -57,7 +57,7 @@ ctest --test-dir build_release --output-on-failure
 Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
 
 - **CTest (11):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`, `DataDirPolicyTest`, `PackageTest` (solo en Release; en Debug queda omitida), `StartupTest`, `LoginLockoutTest`, `AuthorizationTest` y `StartupTimingSmokeTest`.
-- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`, `test_t2_touch_targets.py`. Solo son válidas con el escalado de Windows al 100 %, salvo `test_t1_touch_profile.py` y `test_t2_touch_targets.py`, que se adaptan al escalado. `test_f1_roles_panel.py` falla desde el 2026-11-14 en la ventana de 960x600 (en investigación). `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
+- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`, `test_t2_touch_targets.py`. Válidas con Windows al 100 y al 125 % (módulo común `tests/gui_dpi.py`); con otro escalado se detienen. A 125 %, `test_f7_ingredients_panel.py` falla en Touch a 960x600 por 3 px de columnas (defecto del programa, pendiente). `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
 - **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
 
 Generar el paquete portable (solo desde Release):
