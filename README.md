@@ -6,7 +6,7 @@ La especificación completa está en [`docs/specs.md`](docs/specs.md); las regla
 
 ## Avance
 
-**Al 2026-11-13: cerca del 49 % hacia la versión 1.0 y del 63 % hacia un piloto en caja.**
+**Al 2026-11-13: cerca del 50 % hacia la versión 1.0 y del 64 % hacia un piloto en caja.**
 
 Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cierra con pruebas del ejecutable real y, donde aplica, revisión humana y hardware.
 
@@ -18,11 +18,11 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 | **I4** Corte de turno y reportes | 35 % | Listos: resumen diario real, pantalla de Caja y turnos, Bitácora. Faltan la conciliación del corte y la pantalla de Reportes. |
 | **I5** Respaldos y restauración | 55 % | Respaldo consistente, restauración y limpieza de respaldos antiguos (bajo petición, con vista previa), con pruebas. Configuración del servidor persistida. Faltan su pantalla y el servidor externo opcional. |
 | **I6** Usuarios, roles y permisos | 95 % | Pantallas de Usuarios y de Roles. Los permisos se muestran con título, descripción e interruptores, agrupados por sección. Falta dar más alto a la lista de permisos y la revisión humana. |
-| **I7** Perfil táctil, instalador y entrega | 12 % | Existe el perfil táctil. Datos preparados para más de una caja o dispositivo (identificadores únicos, hora UTC, última modificación y folio por caja). No hay instalador; faltan los datos de la PC de caja. En curso desde el 2026-11-13: paquete portable, política de la carpeta de datos, autocomprobación y ficha de la PC de caja (B7); perfil en Configuración, acceso en Táctil y medición de objetivos táctiles (T1). |
+| **I7** Perfil táctil, instalador y entrega | 20 % | Existe el perfil táctil; se elige en BackOffice > Configuración o en el encabezado, y el inicio de sesión y el alta del Dueño lo respetan. Hay una medición de los controles pequeños de cada pantalla (30 de 93 por corregir). Datos preparados para más de una caja o dispositivo (identificadores únicos, hora UTC, última modificación y folio por caja). No hay instalador; faltan los datos de la PC de caja. En curso: paquete portable, política de la carpeta de datos, autocomprobación y ficha de la PC de caja. Sin verificar con escalado de 125 % o más. |
 
 ### Pantallas reales hoy
 
-Venta, cobro y ticket; Caja y turnos; Bitácora; Usuarios y cuentas; Roles y permisos; Configuración de impresión; Ingredientes. Las demás subsecciones son marcadores de posición.
+Venta, cobro y ticket; Caja y turnos; Bitácora; Usuarios y cuentas; Roles y permisos; Configuración (pantalla del equipo e impresión); Ingredientes. Las demás subsecciones son marcadores de posición.
 
 ### Lo que frena la entrega
 
@@ -57,7 +57,7 @@ ctest --test-dir build_release --output-on-failure
 Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
 
 - **CTest (5):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`.
-- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`. Solo son válidas con el escalado de Windows al 100 %. `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
+- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`. Solo son válidas con el escalado de Windows al 100 %, salvo `test_t1_touch_profile.py`, que se adapta al escalado. `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
 - **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
 
 Ejecutar con una carpeta de datos aparte:

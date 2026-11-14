@@ -97,6 +97,34 @@ Entrega: archivos; comandos con codigo de salida; decisiones tomadas; lista de a
 
 ---
 
+## B7 — respuesta al plan de Claude Code Terminal (2026-11-13)
+
+Plan aprobado con ajustes. Decisiones del usuario: datos por equipo, ejecutable entregado `CafeteriaITCH.exe` e Inno Setup. La ficha se hace en PowerShell 2.0 con lanzador `.cmd`, no en VBScript (en retirada en Windows y no verificable en la PC de desarrollo).
+
+```text
+Plan de B7 aprobado con ajustes. Respuestas:
+1. D2 aprobado por el usuario: datos por equipo en %ProgramData%\CafeteriaITCH\data y portable.flag como marcador de copia portable. D1, D3 y el orden de decision: si.
+2. Ficha: NO VBScript. Microsoft lo esta retirando de Windows (en Windows 11 reciente es un componente opcional) y esta PC de desarrollo es Windows 11, asi que ni siquiera podriamos verificarlo aqui. Haz tools/ficha_pc.ps1 compatible con PowerShell 2.0 y un lanzador tools/ficha_pc.cmd para doble clic, que llame a powershell con -NoProfile -ExecutionPolicy Bypass -File solo para ese proceso, sin cambiar la politica del equipo. Debe aguantar rutas con espacios. Si no puede escribir junto al guion (USB protegida), escribe en el Escritorio y dice donde. Si PowerShell esta bloqueado por directiva, el .cmd lo dice en pantalla en vez de cerrarse en silencio.
+3. Si: Windows 7 queda como riesgo declarado. No compiles contra otra version ni otro toolchain.
+D4 aprobado por el usuario: CafeteriaITCH.exe solo al instalar. D5 aprobado por el usuario: Inno Setup.
+
+Ajustes:
+a. ZIP e instalador no son el mismo paquete. El ZIP es la copia portable y SI lleva portable.flag; el instalador NO lo instala. Si alguien descomprime el ZIP y lo ejecuta, sus datos quedan junto al exe y no en ProgramData. La prueba de paquete comprueba ambas listas.
+b. Ninguna prueba ni comando de verificacion crea o escribe %ProgramData%\CafeteriaITCH en esta PC. La rama instalada se prueba solo con la funcion pura y sus callbacks. La comprobacion de D3 no se aplica en modo desarrollo, que queda exactamente como hoy (incluido que solo build_release y build_debug cuentan como desarrollo; no anadas build_be_*).
+c. tiene_db significa que cafeteria.db existe y no esta vacio. El mensaje de D3 va en lenguaje llano, muestra las dos rutas y dice que hay que llamar a quien instalo el sistema; no menciona opciones de linea de comandos.
+d. Autocomprobacion sin NINGUNA ventana, tambien cuando falla: ni wxMessageBox, ni el dialogo que wxWidgets muestra al terminar si hubo wxLogError, ni el de opcion desconocida de su analizador de linea de comandos. Declara --self-check y --self-check-report en el analizador existente. Comprueba en la prueba el codigo de salida real del proceso, tanto 0 como distinto de 0: que OnInit devuelva false no garantiza por si solo el codigo que esperas.
+e. El informe de la autocomprobacion incluye: version, numero de migraciones aplicadas frente a archivos encontrados, y por cada fuente e icono esperado si existe y no esta vacio. La lista de fuentes e iconos esperados sale de lo que hay en assets/ al empaquetar, no de una lista escrita a mano que se desactualice.
+f. package_check: la lista de DLL de Windows permitidas es explicita, no "existe en System32" (esta PC tiene cosas que la caja no). La comprobacion es recursiva: tambien las importaciones de las DLL incluidas. Usa el objdump del toolchain por CMAKE_OBJDUMP, no por PATH. La prueba de paquete recibe la ruta de cmake por definicion de compilacion, no por PATH.
+g. Instalador: solo 64 bits; en un Windows de 32 bits se niega con un mensaje claro en vez de instalar algo que no arranca. Minimo Windows 7 SP1. No ejecuta la aplicacion al terminar. Crea la carpeta de datos con permiso de modificacion para Usuarios y no la toca si ya existe. Desinstalar no borra {commonappdata}\CafeteriaITCH.
+h. La ficha registra tambien si el sistema es de 32 o 64 bits ANTES de intentar la autocomprobacion: en 32 bits no la intenta y lo escribe como motivo. Si la intenta, anota el codigo de salida y el contenido del informe; si el exe ni siquiera arranca, anota el codigo y sigue.
+i. Licencias de wxWidgets, GCC y winpthreads: pendientes, como propones. No las descargues; el orquestador conseguira los textos oficiales.
+j. No llames SetAppName ni cambies nada que dependa del nombre de la aplicacion: solo el RENAME al instalar. Si al renombrar cambia algun comportamiento observable (titulo, rutas, clase de ventana), reportalo.
+
+Adelante con el codigo. Entrega: archivos; comandos con codigo de salida; lista de archivos del ZIP y de lo que instalaria el instalador, con tamanos; opciones nuevas de linea de comandos con una linea de uso; numero de TEST_CHECK nuevos; salida de la ficha en esta PC; que queda NO VERIFICADO y licencias pendientes. No hagas commits.
+```
+
+---
+
 ## T1 — AntiGravity, Gemini 4 Hydrogen (high) (`main`)
 
 Primer bloque del perfil Táctil fuera de Venta: elegir el perfil en BackOffice > Configuración, diálogos de acceso en Táctil y una prueba válida con cualquier escalado de Windows que además mide todas las pantallas reales.
