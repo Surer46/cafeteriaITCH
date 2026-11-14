@@ -110,6 +110,10 @@ add_library(app_services STATIC
     src/services/sqlite_cart_service.cpp
     src/services/sqlite_sale_service.cpp
     src/services/sqlite_print_config_service.cpp
+    src/services/data_dir_policy.cpp
+    src/services/package_self_check.cpp
+    include/app/services/data_dir_policy.hpp
+    include/app/services/package_self_check.hpp
     include/app/services/identifiers.hpp
     include/app/services/stock_ledger.hpp
     include/app/services/operating_context.hpp
@@ -215,6 +219,15 @@ if(wxWidgets_FOUND)
         app_crypto
         ${wxWidgets_LIBRARIES}
     )
+    # Version: fuente unica project(VERSION). Llega al recurso de version y a la autocomprobacion.
+    configure_file(${CMAKE_CURRENT_SOURCE_DIR}/cmake/version.rc.in
+                   ${CMAKE_BINARY_DIR}/generated/cafeteria_version.rc @ONLY)
+    target_include_directories(app_desktop PRIVATE ${CMAKE_BINARY_DIR}/generated)
+    target_compile_definitions(app_desktop PRIVATE CAFETERIA_VERSION="${PROJECT_VERSION}")
+    set_property(TARGET app_desktop APPEND PROPERTY LINK_DEPENDS ${CMAKE_BINARY_DIR}/generated/cafeteria_version.rc)
+    set_source_files_properties(src/frontend/app.rc PROPERTIES
+        OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/generated/cafeteria_version.rc)
+
     if(CAFETERIA_TEST_HOOKS)
         target_compile_definitions(app_desktop PRIVATE CAFETERIA_TEST_HOOKS)
         message(STATUS "CAFETERIA_TEST_HOOKS activado para app_desktop.")
@@ -256,6 +269,71 @@ if(WIN32)
             file(COPY ${WX_RUNTIME_DLLS} DESTINATION "${CMAKE_BINARY_DIR}")
         endif()
     endif()
+endif()
+
+# 9. Paquete (install + CPack). Solo Release; el ZIP es la copia portable (lleva portable.flag).
+#    El instalador de packaging/cafeteria.iss usa solo el componente "app" (sin portable.flag).
+if(TARGET app_desktop AND WIN32)
+    set(PKG_SYSTEM_DLLS_FILE ${CMAKE_CURRENT_SOURCE_DIR}/cmake/windows_system_dlls.txt)
+    get_filename_component(PKG_COMPILER_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    set(PKG_SEARCH_DIRS "${PKG_COMPILER_BIN}")
+    if(wxWidgets_LIB_DIR)
+        list(APPEND PKG_SEARCH_DIRS "${wxWidgets_LIB_DIR}")
+    endif()
+    set(PKG_TEST_HOOKS_VALUE OFF)
+    if(CAFETERIA_TEST_HOOKS)
+        set(PKG_TEST_HOOKS_VALUE ON)
+    endif()
+
+    # Variables comunes para cada paso (se evaluan al instalar).
+    set(PKG_COMMON_CODE "
+        set(PKG_CONFIG_NAME \"\${CMAKE_INSTALL_CONFIG_NAME}\")
+        set(PKG_TEST_HOOKS ${PKG_TEST_HOOKS_VALUE})
+        set(PKG_PREFIX \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")
+        set(PKG_OBJDUMP \"${CMAKE_OBJDUMP}\")
+        set(PKG_SEARCH_DIRS \"${PKG_SEARCH_DIRS}\")
+        set(PKG_SYSTEM_DLLS_FILE \"${PKG_SYSTEM_DLLS_FILE}\")
+        set(PKG_SOURCE_DIR \"${CMAKE_CURRENT_SOURCE_DIR}\")
+        set(PKG_VERSION \"${PROJECT_VERSION}\")
+        set(PKG_EXE \"\${PKG_PREFIX}/CafeteriaITCH.exe\")
+    ")
+
+    install(CODE "${PKG_COMMON_CODE}
+        set(PKG_STEP check)
+        include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_runtime.cmake\")
+    " COMPONENT app)
+    # Solo al instalar el ejecutable se renombra; en el arbol de compilacion sigue siendo app_desktop.exe.
+    install(PROGRAMS $<TARGET_FILE:app_desktop> DESTINATION . RENAME CafeteriaITCH.exe COMPONENT app)
+    install(CODE "${PKG_COMMON_CODE}
+        set(PKG_STEP dlls)
+        include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_runtime.cmake\")
+    " COMPONENT app)
+    install(DIRECTORY assets/ DESTINATION assets COMPONENT app)
+    install(DIRECTORY migrations/ DESTINATION migrations COMPONENT app FILES_MATCHING PATTERN "*.sql")
+    install(DIRECTORY packaging/licencias/ DESTINATION licencias COMPONENT app)
+    install(CODE "${PKG_COMMON_CODE}
+        set(PKG_STEP manifest)
+        include(\"${CMAKE_CURRENT_SOURCE_DIR}/cmake/package_runtime.cmake\")
+    " COMPONENT app)
+
+    # Marcador de copia portable: solo en el ZIP, nunca en el instalador.
+    file(WRITE ${CMAKE_BINARY_DIR}/generated/portable.flag
+        "Copia portable: los datos se guardan en la carpeta data junto al ejecutable. No borrar este archivo.
+")
+    install(FILES ${CMAKE_BINARY_DIR}/generated/portable.flag DESTINATION . COMPONENT portable_marker)
+
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(PKG_ARCH win64)
+    else()
+        set(PKG_ARCH win32)
+    endif()
+    set(CPACK_GENERATOR ZIP)
+    set(CPACK_PACKAGE_NAME CafeteriaITCH)
+    set(CPACK_PACKAGE_VERSION ${PROJECT_VERSION})
+    set(CPACK_PACKAGE_FILE_NAME "CafeteriaITCH-${PROJECT_VERSION}-portable-${PKG_ARCH}")
+    set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
+    set(CPACK_PACKAGE_DIRECTORY ${CMAKE_BINARY_DIR})
+    include(CPack)
 endif()
 
 # 8. Pruebas unitarias y de integración (CTest)
