@@ -83,7 +83,7 @@ Ningún archivo versionado depende de rutas de una PC concreta. Los pasos comple
 2. Dejar el compilador y wxWidgets en la carpeta hermana `..\toolchain`.
 3. Crear la copia de trabajo del backend: `git worktree add ..\Cafeteria_ITCH_backend backend/<bloque>`.
 4. Configurar `build_release` y `build_debug` (frontend) y, en la copia del backend, `build_be_release` y `build_be_debug`; compilar y correr CTest para verificar la línea base.
-5. Leer [`docs/ORQUESTADOR.md`](docs/ORQUESTADOR.md): contiene el estado, las decisiones tomadas y los bloques en cola. Los prompts en curso están en `Prompts/prompts-2026-11-13-ronda6-i7.md`.
+5. Leer [`docs/ORQUESTADOR.md`](docs/ORQUESTADOR.md): contiene el estado, las decisiones tomadas y los bloques en cola. Los prompts están en `Prompts/`, uno por bloque (`prompts-AAAA-MM-DD-<bloque>.md`).
 
 Las conversaciones de los agentes no viajan con el repositorio; todo lo necesario para continuar está en esos archivos.
 
@@ -95,5 +95,5 @@ Las conversaciones de los agentes no viajan con el repositorio; todo lo necesari
 | [`docs/entorno.md`](docs/entorno.md) | Preparar el entorno de desarrollo en cualquier PC. |
 | [`frontend/plan.md`](frontend/plan.md), [`backend/plan.md`](backend/plan.md) | Listas de trabajo por capa. |
 | [`docs/coordinacion-agentes.md`](docs/coordinacion-agentes.md) | Reparto de archivos y protocolo entre agentes. |
-| [`Auditorias/auditoria-2026-10-18.md`](Auditorias/auditoria-2026-10-18.md) | Auditorías de cada bloque entregado. |
+| [`Auditorias/`](Auditorias/) | Auditorías de cada bloque entregado: hasta la ronda 5 en `auditoria-2026-10-18.md`; desde la ronda 6, un archivo por bloque. |
 | [`Auditorias/auditoria-general-2026-11-12.md`](Auditorias/auditoria-general-2026-11-12.md) | Revisión de alcance y preparación para una versión móvil. |
