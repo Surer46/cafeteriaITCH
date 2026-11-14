@@ -2,3 +2,5 @@
 #define wxUSE_RC_MANIFEST 1
 #define wxUSE_DPI_AWARE_MANIFEST 2
 #include <wx/msw/wx.rc>
+// Recurso de version generado desde project(VERSION) de CMakeLists.txt (cmake/version.rc.in).
+#include "cafeteria_version.rc"

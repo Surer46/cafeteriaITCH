@@ -1,0 +1,25 @@
+Avisos de licencias de terceros - Cafeteria ITCH
+=================================================
+
+Este archivo solo indica donde esta el texto de cada licencia. No es un texto de licencia.
+
+SQLite
+  Dominio publico. Aviso: licencias\SQLite-aviso.txt (encabezado original del codigo fuente).
+
+Roboto (fuentes)
+  SIL Open Font License. Texto: assets\fonts\OFL.txt
+
+Iconos
+  Texto: assets\icons\LICENSE.txt
+
+wxWidgets
+  PENDIENTE: falta incluir el texto oficial de su licencia.
+
+Runtime de GCC (libgcc, libstdc++)
+  PENDIENTE: falta incluir el texto oficial de su licencia.
+
+winpthreads (libwinpthread)
+  PENDIENTE: falta incluir el texto oficial de su licencia.
+
+Los textos marcados PENDIENTE deben agregarse a esta carpeta (licencias\) antes de entregar el
+paquete a un tercero. Al agregarlos, actualizar este archivo.

@@ -1,0 +1,22 @@
+# DLL de Windows que el paquete NO incluye (lista explicita, una por linea, minusculas).
+# Cualquier otra DLL importada por el ejecutable o por una DLL incluida debe estar dentro del paquete.
+# Para agregar una: confirmar que existe en Windows 7 SP1 sin actualizaciones adicionales.
+advapi32.dll
+comctl32.dll
+comdlg32.dll
+gdi32.dll
+gdiplus.dll
+kernel32.dll
+msimg32.dll
+msvcrt.dll
+ole32.dll
+oleacc.dll
+oleaut32.dll
+rpcrt4.dll
+shell32.dll
+shlwapi.dll
+user32.dll
+uxtheme.dll
+version.dll
+winmm.dll
+winspool.drv
