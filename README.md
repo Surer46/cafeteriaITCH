@@ -6,7 +6,7 @@ La especificación completa está en [`docs/specs.md`](docs/specs.md); las regla
 
 ## Avance
 
-**Al 2026-11-13: cerca del 47 % hacia la versión 1.0 y del 61 % hacia un piloto en caja.**
+**Al 2026-11-13: cerca del 49 % hacia la versión 1.0 y del 63 % hacia un piloto en caja.**
 
 Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cierra con pruebas del ejecutable real y, donde aplica, revisión humana y hardware.
 
@@ -14,15 +14,15 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 |---|---|---|
 | **I1** Base nativa, SQLite y alta del Dueño | 100 % | Cerrada. |
 | **I2** Venta, cobro, caja e impresión | 85 % | Software terminado. Faltan la revisión visual humana (0 de 7 casos), la impresora térmica real (55 y 80 mm), el monitor táctil y el escalado de pantalla al 125, 150 y 200 %. |
-| **I3** Inventario, ingredientes y recetas | 30 % | En desarrollo desde el 2026-11-13, sin esperar la revisión humana de I2. Backend listo: ingredientes, compras, mermas y ajustes, movimientos, avisos de poco inventario, y costo y margen por receta con promedio móvil. Faltan las cuatro pantallas (Ingredientes, Reabastecimiento, Productos y recetas, Existencias), y están sin decidir combos, promociones y productos por peso. |
+| **I3** Inventario, ingredientes y recetas | 40 % | En desarrollo desde el 2026-11-13, sin esperar la revisión humana de I2. Backend listo: ingredientes, compras, mermas y ajustes, movimientos, avisos de poco inventario, y costo y margen por receta con promedio móvil. Pantalla de Ingredientes lista; faltan Reabastecimiento, Productos y recetas, y Existencias. Sin decidir: combos, promociones y productos por peso. |
 | **I4** Corte de turno y reportes | 35 % | Listos: resumen diario real, pantalla de Caja y turnos, Bitácora. Faltan la conciliación del corte y la pantalla de Reportes. |
-| **I5** Respaldos y restauración | 45 % | Respaldo consistente y restauración con pruebas. Faltan su pantalla, la limpieza de respaldos viejos y el servidor externo opcional. |
+| **I5** Respaldos y restauración | 55 % | Respaldo consistente, restauración y limpieza de respaldos antiguos (bajo petición, con vista previa), con pruebas. Configuración del servidor persistida. Faltan su pantalla y el servidor externo opcional. |
 | **I6** Usuarios, roles y permisos | 95 % | Pantallas de Usuarios y de Roles. Los permisos se muestran con título, descripción e interruptores, agrupados por sección. Falta dar más alto a la lista de permisos y la revisión humana. |
 | **I7** Perfil táctil, instalador y entrega | 12 % | Existe el perfil táctil. Datos preparados para más de una caja o dispositivo (identificadores únicos, hora UTC, última modificación y folio por caja). No hay instalador; faltan los datos de la PC de caja. |
 
 ### Pantallas reales hoy
 
-Venta, cobro y ticket; Caja y turnos; Bitácora; Usuarios y cuentas; Roles y permisos; Configuración de impresión. Las demás subsecciones son marcadores de posición.
+Venta, cobro y ticket; Caja y turnos; Bitácora; Usuarios y cuentas; Roles y permisos; Configuración de impresión; Ingredientes. Las demás subsecciones son marcadores de posición.
 
 ### Lo que frena la entrega
 
@@ -57,7 +57,7 @@ ctest --test-dir build_release --output-on-failure
 Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
 
 - **CTest (5):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`.
-- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`. Solo son válidas con el escalado de Windows al 100 %. `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
+- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`. Solo son válidas con el escalado de Windows al 100 %. `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
 - **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
 
 Ejecutar con una carpeta de datos aparte:

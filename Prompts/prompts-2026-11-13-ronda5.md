@@ -188,3 +188,146 @@ Anexo de la seccion 3 aprobado, incluidas las decisiones (a), (b), (c) y (d) tal
 
 5. Entrega final de B5 completa (secciones 1 a 4): archivos, comandos con codigo de salida, contratos nuevos con una linea de uso, numero de TEST_CHECK nuevos y limites. No hagas commits.
 ```
+
+---
+
+## F7 — AntiGravity, Gemini 4 Hydrogen (XHigh) (`main`)
+
+Primera pantalla de Inventario: Ingredientes. Sirve además de ensayo del esfuerzo XHigh de Gemini 4 Hydrogen (sin el modo Orchestrator): se mide tiempo, cuota consumida y calidad frente a F5 (Hydrogen high).
+
+```text
+Eres el agente de frontend de este proyecto. Si esta es una sesion nueva, lee primero AGENTS.md completo y docs/coordinacion-agentes.md. Bloque F7. Trabaja SOLO en <copia principal>, rama main. No hagas commits. No compiles ni corras pruebas antes de editar: main compila y CTest pasa 5/5 en build_release y build_debug.
+
+Anota la hora de inicio ahora: la entrega debe incluir hora de inicio, hora de fin y cuantas veces compilaste y ejecutaste cada prueba.
+
+Objetivo: pantalla real Inventario > Ingredientes, que hoy es un marcador de posicion. El usuario principal es una persona mayor con poca familiaridad con la tecnologia: texto grande, mucho aire, lenguaje llano, nada de jerga tecnica (nunca mostrar mg, MASS, unidad base ni identificadores).
+
+Contratos que ya existen (include/app/contracts/inventory_service.hpp y dto.hpp), no los cambies:
+- list_ingredients, get_ingredient, create_ingredient(CreateIngredientDto), update_ingredient(UpdateIngredientDto), update_low_stock_threshold, get_stock_alerts.
+- IngredientDto: id, name, unit_dimension (MASS, VOLUME, COUNT), base_unit (mg, ml, pz), current_stock_base, low_stock_threshold_base.
+- Permisos que comprueba el servicio: crear y renombrar exigen inventory.manage_products; cambiar el aviso de poco inventario exige inventory.manage_thresholds.
+La pantalla NO cambia existencias: las compras van en Reabastecimiento y las mermas en otra pantalla (bloques posteriores). No uses mocks en el ejecutable.
+
+Archivos que puedes editar, y ningun otro:
+- nuevos: src/frontend/inventory_ingredients_panel.hpp y .cpp
+- CMakeLists.txt (solo agregar esos dos archivos a las fuentes de app_desktop)
+- src/frontend/main_window.cpp (solo el include y la rama que crea el panel para Inventario > Ingredientes)
+- nuevo: tests/test_f7_ingredients_panel.py
+- tests/capture_visual_qa.py (solo para agregar las capturas 12_inventory_ingredients.png y 13_inventory_ingredients_touch.png, sin tocar las existentes)
+No toques contratos, servicios, migraciones, theme.*, ui_helpers.*, toggle_switch.*, otros paneles ni otras pruebas. Usa Theme y ui_helpers tal como estan (reparto de columnas y fabrica de campos de texto). Otro agente puede estar trabajando en el backend.
+
+Pantalla:
+1. Encabezado Ingredientes con los botones Nuevo ingrediente y Actualizar.
+2. Lista a la izquierda con columnas: Nombre, Existencia, Avisar con menos de, Estado. Estado muestra Poco inventario para los ingredientes que devuelve get_stock_alerts del servicio (no lo recalcules por tu cuenta) y Suficiente para los demas. El estado no puede depender solo del color.
+3. Detalle a la derecha del ingrediente seleccionado o del nuevo:
+   - Nombre;
+   - Como se mide: Peso, Volumen o Piezas (se elige solo al crear; despues es de solo lectura). Peso equivale a MASS con base mg; Volumen a VOLUME con base ml; Piezas a COUNT con base pz;
+   - Avisar cuando queden menos de: un numero entero y su unidad fija al lado (gramos para Peso, mililitros para Volumen, piezas para Piezas). 0 significa sin aviso;
+   - Existencia actual, solo lectura, con una linea que explique en lenguaje llano que se modifica registrando compras o mermas;
+   - Guardar, siempre visible sin desplazarse, y un texto de resultado o error. Los errores del servicio se muestran tal cual.
+4. Unidades amigables, con aritmetica entera exacta y sin float ni double:
+   - Peso: menos de 1000 mg se muestra en mg; menos de 1 000 000 mg en g; desde 1 000 000 mg en kg. Volumen: menos de 1000 ml en ml; desde 1000 ml en L. Piezas: pz.
+   - Hasta 3 decimales, sin ceros finales: 1 500 000 mg es 1.5 kg; 250 000 mg es 250 g; 2500 ml es 2.5 L.
+   - El aviso se captura en gramos, mililitros o piezas enteros. Para Peso la conversion a mg es multiplicar por 1000 con comprobacion de desbordamiento; si no cabe, error claro y no se guarda. Una sola funcion para formatear y una sola para convertir.
+5. Permisos: sin inventory.manage_products, Nuevo ingrediente y el campo Nombre quedan deshabilitados; sin inventory.manage_thresholds, el campo del aviso queda deshabilitado; sin ninguno, Guardar deshabilitado y un aviso de solo lectura. Si list_ingredients falla, muestra el mensaje del servicio y deja la pantalla en solo lectura. Ocultar o deshabilitar no sustituye la comprobacion del servicio.
+6. Estado vacio con una frase que invite a crear el primer ingrediente. Tras guardar, la lista se actualiza y conserva la seleccion.
+7. Perfil Touch: campos y botones de al menos 48 px de alto, filas de la lista de al menos 40 px, texto centrado verticalmente en los campos.
+
+Prueba GUI nueva tests/test_f7_ingredients_panel.py con el ejecutable real (Release y Debug), base en directorio temporal aislado, alta del Dueno como en las otras pruebas. Midiendo, no a ojo:
+- crear un ingrediente de cada tipo y comprobar en SQLite nombre, unit_dimension, base_unit y low_stock_threshold exactos (aviso de 500 gramos guarda 500000);
+- editar nombre y aviso; persiste en SQLite y tras cerrar y reabrir la aplicacion;
+- nombre vacio: rechazado, nada se guarda, se ve el error. Nombre repetido: reporta que hace el servicio y comprueba que la pantalla muestra su respuesta;
+- existencias sembradas por SQL en la base de la prueba: 1 500 000 mg se muestra 1.5 kg; 250 000 mg se muestra 250 g; 2500 ml se muestra 2.5 L; 7 pz se muestra 7 pz; un ingrediente por debajo de su aviso muestra Poco inventario y otro por encima muestra Suficiente;
+- usuario Cajero (sin esos permisos): controles deshabilitados como indica el punto 5 y un intento de guardar no cambia SQLite;
+- la pantalla no tiene ningun control para cambiar existencias;
+- geometria en Estandar y Touch, a 1200x720 y 960x600: columnas con encabezado completo medido con la fuente del encabezado, suma de columnas menor o igual al area cliente con holgura de 8 px o menos, sin WS_HSCROLL; ningun texto recortado ni solapado; campos centrados verticalmente (tolerancia 3 px); alturas Touch del punto 7; Guardar visible sin desplazarse;
+- ningun texto visible contiene mg sueltos de menos de 1000, MASS, VOLUME, COUNT ni identificadores internos, salvo el caso de existencia menor de 1000 mg del punto 4.
+Puedes copiar funciones de medicion de tests/test_f1_roles_panel.py y tests/test_f2_audit_log.py. Prohibido relajar o quitar una asercion para que pase: si una medida no se puede cumplir, detente y reporta el numero medido.
+
+Escalado de pantalla: las pruebas GUI solo son validas con Windows al 100 por ciento (96 DPI). Compruebalo antes de ejecutarlas; si no es 100 por ciento, detente y reportalo.
+
+Verificacion (antepon al PATH <toolchain>\mingw64\bin y <toolchain>\wxwidgets\lib\gcc1610_x64_dll):
+   cmake --build build_release --parallel 2
+   cmake --build build_debug --parallel 2
+   ctest --test-dir build_release --output-on-failure
+   ctest --test-dir build_debug --output-on-failure
+   python -u tests/test_f7_ingredients_panel.py
+   python -u tests/test_f2b_subnav.py
+   python -u tests/capture_visual_qa.py
+Antes de cada prueba GUI comprueba con tasklist que no haya ningun app_desktop.exe corriendo. Si un comando falla dos veces con el mismo error sin cambiar codigo, detente y reporta el error textual. No instales nada.
+
+Entrega corta y literal: archivos; comandos con codigo de salida; anchos de columnas y alturas medidas en Estandar y Touch; rutas de las capturas 12 y 13; que hace el servicio con un nombre repetido; fallos intermedios que tuviste y como los resolviste; hora de inicio y de fin, numero de compilaciones y de ejecuciones de cada prueba; limites de lo verificado. No escribas que algo funciona si no lo ejecutaste.
+```
+
+---
+
+## B6 — Claude Code Terminal (`backend/b6`, desde `main` con B5)
+
+Deuda de backend que no depende de decisiones abiertas de I4: caja real en carrito y reintento, limpieza de respaldos y configuración del servidor persistida. Corre en paralelo con F7 (Gemini, pantalla Ingredientes); no comparten archivos. Con plan previo.
+
+```text
+Bloque B6 de backend. Si esta es una sesion nueva, lee primero AGENTS.md completo y docs/coordinacion-agentes.md. Trabaja SOLO en <worktree del backend>, rama backend/b6 (ya creada desde main, incluye B5 y las migraciones 011 y 012). No hagas commits. No compiles ni corras pruebas antes de editar: la linea base esta verificada (CTest 5/5 en build_be_release y build_be_debug).
+
+El otro agente esta construyendo la pantalla Inventario > Ingredientes en main: edita src/frontend/, CMakeLists.txt (lista de fuentes de app_desktop) y tests/*.py. No toques nada de eso.
+
+Archivos permitidos: include/app/ (contratos solo con cambios aditivos), src/domain/, src/storage/, src/services/, migrations/ (solo archivos nuevos, a partir de 013), tests/test_*.cpp y CMakeLists.txt (solo bibliotecas y pruebas). No toques src/frontend/, tests/*.py, src/crypto/ ni migraciones 001 a 012.
+
+Presenta primero un plan para revision y espera aprobacion antes de escribir codigo. El plan debe resolver los puntos marcados como DECIDIR.
+
+1. Caja real en carrito y reintento. Hoy la caja esta escrita a mano en tres sitios: sqlite_cart_service.cpp (register_id = "reg-01") y sqlite_sale_service.cpp (la comparacion owner_register_id != "reg-01" del reintento idempotente y un bind_text con "reg-01"). El folio ya usa la caja del turno abierto; el carrito y el reintento no. Deben usar la caja del turno abierto del usuario, por una sola funcion compartida.
+   - Con una sola caja el comportamiento visible no cambia: las pruebas existentes de carrito, venta e idempotencia deben seguir pasando sin tocarlas.
+   - DECIDIR: que hace el carrito cuando el usuario no tiene turno abierto (hoy funciona contra reg-01). No puede romper el flujo actual de la interfaz, que abre turno con reg-01 desde cash_shift_panel; si un cambio de comportamiento es inevitable, detente y reportalo antes de implementarlo.
+   - No implementes alta ni administracion de cajas: solo quitar el valor fijo.
+
+2. Limpieza de respaldos locales. Hoy backups/ crece sin limite. Agrega una operacion que elimine respaldos antiguos segun una politica, y que nunca borre: el respaldo mas reciente verificado, un respaldo en curso, ni nada que no sea un respaldo creado por la aplicacion (no borrar por patron de nombre a ciegas en una carpeta elegida por el usuario).
+   - Requiere backup.manage, comprobado en el servicio, y deja evento de auditoria con cuantos se borraron.
+   - DECIDIR y recomendar: politica por defecto (por ejemplo conservar los ultimos N y todo lo de los ultimos D dias), donde se guarda y si la limpieza corre sola tras cada respaldo exitoso o solo cuando se pide. El orquestador confirmara los numeros con el usuario.
+   - Si un borrado falla a medias, el estado queda coherente y el error se reporta; nunca se pierde el ultimo respaldo valido.
+
+3. Configuracion del servidor de respaldos. get_developer_server_config y update_developer_server_config guardan en memoria (dev_config_) y el servicio real arranca con valores inventados en el codigo (una URL y 30 dias). Debe persistirse en SQLite y arrancar vacia hasta que la identidad Desarrollador la configure.
+   - Sigue exigiendo backup.dev_config en el servicio y evento de auditoria al cambiarla.
+   - No guardes credenciales ni secretos en claro. DECIDIR: que campos se persisten y como se trata un secreto si el DTO lo tuviera (si no hay forma segura en este bloque, no se persiste y se reporta).
+   - El mock puede conservar sus datos de ejemplo; el servicio real no.
+   - No implementes subida a red ni nada de red.
+
+Reglas: migraciones nuevas versionadas, aplicadas una sola vez y sin efecto al repetir el runner; permisos comprobados dentro de cada servicio; dinero y cantidades sin float ni double; no relajar pruebas existentes; contratos solo aditivos.
+
+Pruebas CTest nuevas, con TEST_CHECK:
+- carrito, venta y reintento idempotente con una segunda caja creada por SQL en la prueba: cada usuario opera contra la caja de su turno, los carritos no se mezclan, el folio lleva el codigo de su caja y el reintento devuelve la misma venta; con una sola caja todo sigue igual;
+- limpieza: conserva lo que marca la politica, nunca borra el ultimo valido ni archivos ajenos, sin permiso se rechaza, auditoria registrada, fallo a medias sin perdida;
+- configuracion: arranca vacia, se guarda, sobrevive a cerrar y reabrir la base, sin permiso se rechaza, auditoria registrada;
+- base con migraciones 001 a 012 y datos, migrada a la version nueva: datos intactos y segundo runner sin cambios.
+Las pruebas no dejan archivos en el directorio desde el que se ejecutan.
+
+Verificacion. Antepon al PATH <toolchain>\mingw64\bin y <toolchain>\wxwidgets\lib\gcc1610_x64_dll:
+   cmake --build build_be_debug --parallel 2
+   ctest --test-dir build_be_debug --output-on-failure
+   cmake --build build_be_release --parallel 2
+   ctest --test-dir build_be_release --output-on-failure
+No ejecutes pruebas GUI. No instales nada. Si un comando falla dos veces con el mismo error sin cambiar codigo, detente y reporta el error textual.
+
+Entrega: archivos; comandos con codigo de salida; decisiones tomadas; contratos nuevos con una linea de uso; numero de TEST_CHECK nuevos; limites de lo verificado.
+```
+
+---
+
+## B6 — respuesta al plan de Claude Code Terminal (2026-11-13)
+
+Plan aprobado con ajustes. El usuario eligió conservar los últimos 30 respaldos y todo lo de los últimos 90 días, con limpieza solo bajo petición (el plan proponía 10 y 30).
+
+```text
+Plan de B6 aprobado con ajustes. Respuestas:
+1. Si: el orden de resolucion de caja de la seccion 1, incluido el carrito sin turno.
+2. Limpieza solo bajo peticion y con vista previa: si. Valores por defecto elegidos por el usuario: conservar los ultimos 30 respaldos de cada tipo y todo lo de los ultimos 90 dias (no 10 y 30). Los respaldos anteriores a B6 no se tocan: si.
+3. Si: rechazar URL con credenciales o parametros y no persistir ningun secreto.
+
+Ajustes:
+a. Limpieza: antes de borrar CUALQUIER archivo registrado, comprueba que sigue siendo el mismo que se registro. Guarda al registrarlo tamano y hash (o equivalente) y comparalos; si el archivo en esa ruta cambio o ya no es un respaldo valido de la aplicacion, no lo borres, marcalo como cambiado y cuentalo aparte en el resultado. Agrega la prueba: un archivo ajeno puesto en una ruta registrada no se borra.
+b. La vista previa devuelve la lista de lo que se borraria (ruta, fecha y tamano), no solo cantidades, para que la pantalla de Respaldos pueda mostrarla.
+c. La tabla backup_jobs de la migracion 001 sigue sin uso: no la reutilices ni la borres; solo mencionalo en la entrega.
+d. Caja: el mensaje de error cuando hay varios turnos ajenos abiertos y ninguno propio debe decir en lenguaje llano que el usuario tiene que abrir su turno. Agrega la prueba de ese caso.
+e. Las pruebas existentes de carrito, venta, folio e idempotencia no se tocan. Si alguna deja de pasar, detente y reportalo antes de cambiarla.
+f. Contratos solo aditivos; el frontend esta compilando contra ellos en otro bloque.
+
+Adelante con el codigo. Entrega: archivos; comandos con codigo de salida; contratos nuevos con una linea de uso; numero de TEST_CHECK nuevos; limites de lo verificado. No hagas commits.
+```

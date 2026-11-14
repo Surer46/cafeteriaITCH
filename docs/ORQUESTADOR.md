@@ -27,6 +27,16 @@ Actualización 2026-11-12 (PC nueva): **F0 aceptado** (Gemini 4 Hydrogen) y **B4
 
 **Cierre de sesión 2026-11-13 (retomar aquí):** ronda 5 en curso. **B5** aceptado en `39ac304` e integrado en `a013186` (migraciones 011 y 012); conjunto verificado a 100 %: build sin advertencias, CTest 5/5 e I1 en Release y Debug. Subido a GitHub. **F6** correcto y **F6b** mejora la prueba de I2, pero I2 sigue fallando en el escritorio real: el diálogo moderno de impresión de Windows 11 se detecta y no se logra cancelar. Dato clave: AntiGravity ejecuta en un escritorio aislado donde aparece el diálogo clásico, así que sus resultados GUI no equivalen a los del escritorio real. Pasos siguientes: (1) decidir con el usuario cómo cerrar I2 (F6c para cancelar el diálogo moderno, o gancho de prueba); (2) correr la batería GUI completa a 100 % con B5 integrado (no se hizo); (3) pantallas de Inventario con Gemini, una por bloque: Ingredientes, Reabastecimiento, Productos y recetas, Existencias; quitar la subsección Barra. Avance en `README.md`: 47 % hacia 1.0 y 61 % hacia piloto.
 
+Ensayo en curso (2026-11-13): **F7, pantalla Ingredientes, con Gemini 4 Hydrogen en esfuerzo XHigh** (sin Orchestrator), para medir tiempo, cuota y calidad frente a F5 (Hydrogen high). Tomar la cuota de AntiGravity antes y después. Para comparar con justicia: hacer F8 (Reabastecimiento, tamaño parecido) en high.
+
+En paralelo con F7 (2026-11-13): **B6** para Claude (rama backend/b6, con plan previo): caja real en carrito y reintento, limpieza de respaldos y configuración del servidor persistida. Línea base de cuota de Gemini al empezar F7: 100 %. Comparación acordada: F7 en Hydrogen XHigh, F8 (Reabastecimiento) en Hydrogen high, F9 (Existencias) en Orchestrator (Argon); anotar cuota semanal y de 5 horas, hora, compilaciones y resultado de la auditoría.
+
+- 2026-11-13: limpieza de respaldos locales (B6) solo bajo petición y con vista previa; por defecto conserva los últimos 30 respaldos de cada tipo y todo lo de los últimos 90 días (decisión del usuario; resuelve parte de la sección 9.10). Plan de B6 aprobado con ajustes.
+
+**B6 auditado como aceptable (2026-11-13), sin commit ni integrar** (worktree `backend/b6`, migración 013). Integrarlo cuando F7 esté auditado, para no mover `main` mientras Gemini trabaja. La sesión de AntiGravity de F7 se cerró a mitad de la verificación (causa desconocida, la PC no se reinició); el trabajo quedó en disco y se reanudó con un prompt de continuación, así que la medición de cuota de XHigh es parcial.
+
+**F7 aceptado en `6415c8a` y B6 en `ae8c464`, integrado en `409e974` y subido a GitHub** (conjunto verificado a 100 %: build, CTest 5/5, I1 y prueba de Ingredientes). Nota de F7: pantalla Ingredientes con Hydrogen XHigh; prueba propia en verde en el escritorio real. Perfil XHigh: resultado sólido y honesto, pero necesitó 6 ejecuciones de su prueba y 5 compilaciones por configuración. Falta la cuota final para la comparación. Siguiente: F8 (Reabastecimiento) en Hydrogen high.
+
 ## Decisiones del usuario
 
 - 2026-11-08: el Dueño edita los permisos del Cajero; no puede renombrarlo ni eliminarlo. Dueño en solo lectura. Desarrollador nunca visible (registrado en `docs/specs.md` §9.5).

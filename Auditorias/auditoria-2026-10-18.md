@@ -368,3 +368,35 @@ Conclusión provisional: la mejora visible viene de la memoria operativa de `AGE
 - Siguiente (F6c): cancelar de forma fiable el diálogo moderno. Gemini no puede reproducirlo en su entorno, así que la validación la hace el orquestador o el usuario en el escritorio real. Alternativa a valorar con el usuario: un gancho de prueba que evite el diálogo del sistema.
 
 **Verificación integrada en `main` (`a013186`, B5 + F6/F6b):** build sin advertencias y CTest 5/5 en Release y Debug; `test_i1_integration` exit 0 en ambos, a 100 % de escalado. No se corrió el resto de la batería GUI con B5 integrado; `test_i2_integration` sigue fallando en el escritorio real por el diálogo de impresión.
+
+## Ronda 5 — B6 (Claude Code Terminal) — auditado el 2026-11-13
+
+**B6:** aceptado en `ae8c464`, integrado en `409e974`.
+
+- Alcance: migración 013 (registro `backup_files`, política en `backup_state`, tabla `backup_server_config`); `operating_context` (servicios), nuevo; contrato `backup_service.hpp`; servicios de carrito, ventas y respaldo; mock; `tests/test_storage.cpp` y `tests/test_backup.cpp`. Nada en frontend, `tests/*.py`, crypto ni migraciones 001 a 012.
+- Contratos: solo adiciones (el diff de `include/app/contracts/` no quita ninguna línea). Nuevos: `get_retention_policy`, `set_retention_policy`, `preview_backup_cleanup`, `cleanup_old_backups` y sus DTO.
+- Caja real: revisado `operating_context.cpp`. Orden aprobado: turno propio; si no, el único turno abierto; si hay varios ajenos, error en lenguaje llano; sin turnos, la venta da `ShiftClosed` y el carrito usa la única caja o pide abrir turno. Ya no queda `"reg-01"` en `src/` ni `include/` salvo el mock y `cash_shift_panel.cpp` (frontend).
+- Limpieza de respaldos: revisado el bucle de decisión. Protege el respaldo más reciente que coincide con su registro (tamaño y SHA-256) y pasa la verificación de integridad; si ninguno es válido no borra nada de ese tipo; conserva por cantidad (30) y por antigüedad (90 días), decisión del usuario; un archivo cambiado se marca `CHANGED` y no se borra; un borrado fallido se anota y no detiene a los demás. Exige `backup.manage` y deja `BACKUP_CLEANUP` en la bitácora. Solo bajo petición, con vista previa.
+- Configuración del servidor: persistida y vacía al migrar; el servicio real ya no arranca con una URL inventada.
+- Pruebas: 130 líneas `TEST_CHECK` nuevas; ninguna existente eliminada ni cambiada.
+- Verificación del orquestador en el worktree: build sin advertencias y CTest 5/5 en Release y Debug.
+- Pendientes que deja a la vista: `get_current_shift` y `close_shift` siguen tomando el turno abierto más reciente de cualquier usuario (con dos cajas, cerrar turno podría cerrar el de otra): bloque propio antes de permitir una segunda caja. El hash de un respaldo lee el archivo completo en memoria. Los respaldos anteriores a B6 no están registrados y no se limpian. La prueba de borrado fallido depende de un bloqueo de archivo de Windows. `backup_jobs` (migración 001) sigue sin uso.
+- No verificado: ejecutable real y pruebas GUI con B6; no está integrado porque F7 está en curso en `main`.
+
+## Ronda 5 — F7 (AntiGravity, Gemini 4 Hydrogen XHigh) — auditado el 2026-11-13
+
+**F7:** aceptado. Pantalla Inventario > Ingredientes, primera de I3. Ensayo del esfuerzo XHigh (sin Orchestrator). Commit `6415c8a`.
+
+- Alcance: `src/frontend/inventory_ingredients_panel.{hpp,cpp}` (nuevos, 998 líneas), `tests/test_f7_ingredients_panel.py` (nuevo, 1039 líneas, 51 aserciones), dos fuentes en `CMakeLists.txt`, include y rama en `main_window.cpp`, capturas 12 y 13 en `capture_visual_qa.py` (de lo existente solo quitó un comentario). Nada fuera de lo permitido.
+- Código: usa solo contratos (`list_ingredients`, `get_stock_alerts`, `create_ingredient`, `update_ingredient`, `update_low_stock_threshold`); sin SQL; sin `float` ni `double`; estado de poco inventario tomado de `get_stock_alerts`; columnas con `ui::distribute_list_columns`; conversión del aviso con comprobación de desbordamiento.
+- Prueba: alta de los tres tipos con valores exactos en SQLite (500 g guarda 500000), edición y persistencia tras reabrir, nombre vacío y repetido, unidades amigables (1.5 kg, 250 g, 2.5 L, 7 pz, 450 mg), estados, Cajero en solo lectura sin alterar SQLite, ausencia de jerga y geometría en Estándar y Touch a 1200x720 y 960x600.
+- Verificación del orquestador en el escritorio real a 100 %: build sin advertencias y CTest 5/5 en Release y Debug; `test_f7_ingredients_panel` exit 0 en ambos, con las mismas medidas que reportó Gemini; `test_f2b_subnav` exit 0. (Una primera ejecución de `test_f2b_subnav` falló por una opción de codificación que añadió el orquestador al lanzarla; sin ella pasa.)
+- Medidas: Estándar 1200x720 columnas 220/89/161/117 (cliente 589), filas 24, botones 36, campos 34. Touch 1200x720 columnas 187/92/167/122 (cliente 570), filas 43, botones y campos 48.
+- Capturas 12 y 13 revisadas: legibles, sin recortes ni solapes; lenguaje llano.
+- Observaciones (no bloquean): los anchos mínimos de las tarjetas (472/488 y 202) son píxeles fijos elegidos para que quepan las columnas a 960x600, sin `FromDIP`; una existencia de 0 se muestra «0 mg» (sigue la regla del encargo, pero convendría «Sin existencia» o «0 g»); el texto de la lista es verde en todas las filas «Suficiente»; las capturas no muestran ninguna fila con «Poco inventario»; sigue existiendo la subsección Barra.
+- Hallazgo útil para otras pruebas: Gemini detectó que la fuente obtenida con `WM_GETFONT` no es utilizable desde otro proceso (la medición caía en la fuente del sistema) y midió cargando las fuentes Roboto del proyecto. Las pruebas anteriores que miden texto con `WM_GETFONT` conviene revisarlas.
+- Informe: literal. Declaró cinco fallos intermedios de su prueba con causa y arreglo, sin relajar aserciones.
+
+**Medición del ensayo XHigh (parcial):** la sesión de AntiGravity se cerró a mitad de la verificación y se reanudó con un prompt de continuación. Total declarado por Gemini: 5 compilaciones por configuración, 6 ejecuciones de la prueba de la pantalla (5 fallidas y 1 buena), 2 de CTest por configuración, 1 de navegación y 1 de capturas. Cuota de Gemini: 100 % al empezar; el valor final lo anota el usuario. Comparación pendiente: F8 en Hydrogen high y F9 en Orchestrator (Argon).
+
+**Verificación integrada en `main` (`409e974`, F7 + B6):** build sin advertencias y CTest 5/5 en Release y Debug; `test_i1_integration` y `test_f7_ingredients_panel` exit 0, a 100 % de escalado en el escritorio real. No se corrió el resto de la batería GUI; `test_i2_integration` sigue pendiente por el diálogo de impresión moderno.
