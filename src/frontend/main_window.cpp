@@ -5,6 +5,7 @@
 #include "src/frontend/pos_panel.hpp"
 #include "src/frontend/cash_shift_panel.hpp"
 #include "src/frontend/audit_log_panel.hpp"
+#include "src/frontend/inventory_ingredients_panel.hpp"
 #include "src/frontend/theme.hpp"
 #include <wx/statline.h>
 
@@ -132,6 +133,9 @@ void MainWindow::update_content_view() {
 
     if (current_section_ == SectionId::PointOfSale && current_subsection_ == "Venta") {
         current_view_ = new PosPanel(content_container_, services_);
+    } else if (current_section_ == SectionId::Inventory && current_subsection_ == "Ingredientes") {
+        current_view_ = new InventoryIngredientsPanel(
+            content_container_, services_.inventory_service, services_.account_service);
     } else if (current_section_ == SectionId::CashAndReports && current_subsection_ == "Caja y turnos") {
         current_view_ = new CashShiftPanel(content_container_, services_, [this]() {
             update_header_status();

@@ -13,6 +13,8 @@ Genera capturas PNG de alta calidad de las vistas rediseñadas con el tema Cuper
 9. Panel de BackOffice > Roles y Permisos (BackofficeRolesPanel con lista y matriz)
 10. Panel de BackOffice > Roles y Permisos en perfil Touch (BackofficeRolesPanel ampliado)
 11. Panel de Caja y Reportes > Bitácora (AuditLogPanel con filtros, lista y detalle)
+12. Panel de Inventario > Ingredientes en perfil Estándar (InventoryIngredientsPanel)
+13. Panel de Inventario > Ingredientes en perfil Touch (InventoryIngredientsPanel ampliado)
 """
 
 import ctypes
@@ -530,9 +532,83 @@ def main():
         # CAPTURA 5: Diálogo de Impresión de Ticket
         capture_window(hwnd_t, os.path.join(out_dir, "04_ticket_dialog.png"))
 
-        # Terminar proceso limpiamente
+        # Terminar diálogo de ticket antes de capturas de Inventario > Ingredientes
         user32.PostMessageW(hwnd_t, WM_CLOSE, 0, 0)
         time.sleep(0.5)
+
+        def _f7_list_buttons(hwnd):
+            out = []
+            buf_cls = ctypes.create_unicode_buffer(128)
+            enum_proc_t = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+            def _cb(ch, _lp):
+                if user32.IsWindowVisible(ch):
+                    user32.GetClassNameW(ch, buf_cls, 128)
+                    if buf_cls.value.lower() == "button":
+                        ln = user32.GetWindowTextLengthW(ch)
+                        txt = ""
+                        if ln > 0:
+                            tbuf = ctypes.create_unicode_buffer(ln + 2)
+                            user32.GetWindowTextW(ch, tbuf, ln + 2)
+                            txt = tbuf.value
+                        out.append((ch, txt))
+                return True
+            cb_ref = enum_proc_t(_cb)
+            user32.EnumChildWindows(wintypes.HWND(hwnd), cb_ref, wintypes.LPARAM(0))
+            return out
+
+        def _f7_btn_height(hwnd_btn):
+            rc = wintypes.RECT()
+            user32.GetWindowRect(wintypes.HWND(hwnd_btn), ctypes.byref(rc))
+            return rc.bottom - rc.top
+
+        def _f7_click_btn(hwnd_btn):
+            user32.SendMessageTimeoutW(wintypes.HWND(hwnd_btn), 0x00F5, 0, 0, 0x0002, 2000, None)
+
+        btn_inv = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Inventario" in t), None)
+        assert btn_inv is not None, "Botón Inventario no encontrado"
+        _f7_click_btn(btn_inv)
+        time.sleep(0.4)
+        btn_ing = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Ingredientes"), None)
+        assert btn_ing is not None, "Subsección Ingredientes no encontrada"
+        _f7_click_btn(btn_ing)
+        time.sleep(0.6)
+
+        btn_nuevo = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Nuevo ingrediente"), None)
+        assert btn_nuevo is not None, "Botón Nuevo ingrediente no encontrado"
+        if _f7_btn_height(btn_nuevo) >= 48:
+            tbtn = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Touch" in t or "Estándar" in t), None)
+            if tbtn:
+                _f7_click_btn(tbtn)
+                time.sleep(0.5)
+                btn_inv = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Inventario" in t), None)
+                if btn_inv:
+                    _f7_click_btn(btn_inv)
+                    time.sleep(0.35)
+                btn_ing = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Ingredientes"), None)
+                if btn_ing:
+                    _f7_click_btn(btn_ing)
+                    time.sleep(0.5)
+
+        # CAPTURA 12: Inventario > Ingredientes (Estándar)
+        capture_window(hwnd_main, os.path.join(out_dir, "12_inventory_ingredients.png"))
+
+        # Cambiar a perfil Touch para CAPTURA 13
+        btn_toggle = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Touch" in t or "Estándar" in t), None)
+        assert btn_toggle is not None, "Botón cambio de perfil no encontrado"
+        _f7_click_btn(btn_toggle)
+        time.sleep(0.5)
+        btn_inv2 = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Inventario" in t), None)
+        if btn_inv2:
+            _f7_click_btn(btn_inv2)
+            time.sleep(0.35)
+        btn_ing2 = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Ingredientes"), None)
+        if btn_ing2:
+            _f7_click_btn(btn_ing2)
+            time.sleep(0.6)
+
+        # CAPTURA 13: Inventario > Ingredientes (Touch)
+        capture_window(hwnd_main, os.path.join(out_dir, "13_inventory_ingredients_touch.png"))
+
         user32.PostMessageW(hwnd_main, WM_CLOSE, 0, 0)
         proc.wait(timeout=5)
         print("=== TODAS LAS CAPTURAS DE QA VISUAL COMPLETADAS EXITOSAMENTE ===")
