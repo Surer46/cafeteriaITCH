@@ -2,6 +2,7 @@
 #define APP_SERVICES_SQLITE_BACKUP_SERVICE_HPP
 
 #include <filesystem>
+#include <atomic>
 #include <functional>
 #include <memory>
 #include <string>
@@ -35,7 +36,15 @@ public:
         const contracts::BackupServerConfigDto& config
     ) override;
 
+    contracts::Result<contracts::BackupRetentionPolicyDto> get_retention_policy() override;
+    contracts::OperationResult set_retention_policy(const contracts::BackupRetentionPolicyDto& policy) override;
+    contracts::Result<contracts::BackupCleanupResultDto> preview_backup_cleanup() override;
+    contracts::Result<contracts::BackupCleanupResultDto> cleanup_old_backups() override;
+
 private:
+    // Registra un respaldo recién creado y verificado (ruta exacta, tamaño y SHA-256).
+    contracts::OperationResult register_backup_file(const char* kind, const std::filesystem::path& path);
+    contracts::Result<contracts::BackupCleanupResultDto> run_cleanup(bool dry_run);
     bool has_permission(const char* key) const;
     contracts::OperationResult write_state(const char* status, const std::string& error, bool set_time);
     // Crea una instantánea en `dest` y la verifica; si falla borra el archivo.
@@ -50,7 +59,7 @@ private:
     std::string data_dir_;
     std::string migrations_dir_;
     std::function<void()> on_restored_;
-    contracts::BackupServerConfigDto dev_config_;
+    std::atomic<bool> operation_in_progress_{false};
 };
 
 } // namespace app::services

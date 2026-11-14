@@ -224,8 +224,13 @@ public:
     contracts::Result<contracts::RestoreResultDto> restore_from_backup(const std::string& path) override;
     contracts::Result<contracts::BackupServerConfigDto> get_developer_server_config() override;
     contracts::OperationResult update_developer_server_config(const contracts::BackupServerConfigDto& config) override;
+    contracts::Result<contracts::BackupRetentionPolicyDto> get_retention_policy() override;
+    contracts::OperationResult set_retention_policy(const contracts::BackupRetentionPolicyDto& policy) override;
+    contracts::Result<contracts::BackupCleanupResultDto> preview_backup_cleanup() override;
+    contracts::Result<contracts::BackupCleanupResultDto> cleanup_old_backups() override;
 
 private:
+    contracts::BackupRetentionPolicyDto policy_;
     contracts::BackupStatusDto status_;
     contracts::BackupServerConfigDto dev_config_;
 };

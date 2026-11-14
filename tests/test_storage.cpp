@@ -4183,6 +4183,186 @@ void test_b5_valuation_backfill_migration() {
     std::cout << "  -> Migración 012 y relleno aproximado verificados." << std::endl;
 }
 
+void test_b6_registers_cart_sale_and_migration() {
+    std::cout << "[TEST] B6: caja real en carrito, venta y reintento; migración 013..." << std::endl;
+
+    fs::path mig_dir = find_migrations_dir();
+    TEST_CHECK(!mig_dir.empty(), "Debe encontrar directorio de migraciones");
+    const fs::path base_dir = fs::temp_directory_path() / ("cafeteria_b6_" + generate_random_alphanumeric(8));
+    fs::remove_all(base_dir);
+    fs::create_directories(base_dir / "mig_v12");
+
+    // ---------------- Migración 013 sobre una base 001..012 con datos ----------------
+    {
+        int copied = 0;
+        for (const auto& entry : fs::directory_iterator(mig_dir)) {
+            const std::string name = entry.path().filename().u8string();
+            if (name.size() > 4 && name.substr(name.size() - 4) == ".sql" && name < "013") {
+                fs::copy_file(entry.path(), base_dir / "mig_v12" / entry.path().filename());
+                ++copied;
+            }
+        }
+        TEST_CHECK(copied == 12, "Deben copiarse exactamente las migraciones 001 a 012");
+
+        SqliteDatabase db;
+        TEST_CHECK(db.open((base_dir / "b6m.db").u8string()).is_success(), "Abrir SQLite B6 migración");
+        auto q = [&](const std::string& sql) -> std::string {
+            auto prep = db.prepare(sql);
+            TEST_CHECK(prep.is_success(), "Preparar consulta: " + sql);
+            auto stmt = std::move(prep.value());
+            auto step = stmt.step();
+            TEST_CHECK(step.is_success() && step.value(), "La consulta debe devolver fila: " + sql);
+            return stmt.get_text(0);
+        };
+        MigrationRunner old_runner(db);
+        TEST_CHECK(old_runner.run_pending_migrations_from_dir(base_dir / "mig_v12").is_success(), "Migrar hasta 012");
+        TEST_CHECK(q("SELECT MAX(version) FROM schema_migrations;") == "12", "Línea base en versión 12");
+        TEST_CHECK(db.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at, updated_at) "
+                              "VALUES ('user-m', 'm', 'M', 'm@x.mx', 'h', 'role-owner', 1, '2026-10-01 07:00:00', '2026-10-01 07:00:00');").is_success(), "Usuario previo");
+        TEST_CHECK(db.execute("INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, updated_at) VALUES ('ing-m', 'Previo', 'MASS', 'mg', 500, '2026-10-01');").is_success(), "Ingrediente previo");
+        TEST_CHECK(db.execute("UPDATE backup_state SET last_status = 'EXITOSA', is_enabled = 1 WHERE id = 1;").is_success(), "Estado de respaldo previo");
+        const std::string orig_sql =
+            "SELECT (SELECT group_concat(id||'|'||username, ';') FROM users) || '#' ||"
+            "(SELECT group_concat(id||'|'||current_stock, ';') FROM ingredients) || '#' ||"
+            "(SELECT group_concat(id||'|'||code, ';') FROM cash_registers) || '#' ||"
+            "(SELECT is_enabled||'|'||last_status FROM backup_state WHERE id = 1);";
+        const std::string orig_before = q(orig_sql);
+
+        MigrationRunner runner(db);
+        TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 013");
+        TEST_CHECK(std::stoll(q("SELECT MAX(version) FROM schema_migrations;")) >= 13, "Esquema al menos en versión 13");
+        TEST_CHECK(q(orig_sql) == orig_before, "Los datos originales quedan intactos tras migrar a 013");
+        TEST_CHECK(q("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('backup_files', 'backup_server_config');") == "2", "Tablas nuevas presentes");
+        TEST_CHECK(q("SELECT keep_last||'|'||keep_days FROM backup_state WHERE id = 1;") == "30|90", "Política por omisión: 30 respaldos y 90 días");
+        TEST_CHECK(q("SELECT server_url||'|'||retention_days||'|'||is_tls_enabled FROM backup_server_config WHERE id = 1;") == "||1", "Configuración del servidor vacía al migrar");
+        TEST_CHECK(q("SELECT COUNT(*) FROM backup_files;") == "0", "El registro de respaldos nace vacío (lo anterior no se toca)");
+        const std::string schema_sql = "SELECT group_concat(name||type, ';') FROM (SELECT name, type FROM sqlite_master ORDER BY name);";
+        const std::string schema_before = q(schema_sql);
+        const std::string versions_before = q("SELECT COUNT(*) FROM schema_migrations;");
+        MigrationRunner runner2(db);
+        TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
+        TEST_CHECK(q(schema_sql) == schema_before && q(orig_sql) == orig_before && q("SELECT COUNT(*) FROM schema_migrations;") == versions_before,
+                   "El segundo runner no cambia esquema, datos ni versiones");
+        db.close();
+    }
+
+    // ---------------- Cajas reales ----------------
+    {
+        SqliteDatabase db;
+        TEST_CHECK(db.open((base_dir / "b6.db").u8string()).is_success(), "Abrir SQLite B6");
+        MigrationRunner runner(db);
+        TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Migraciones completas");
+        auto q = [&](const std::string& sql) -> std::string {
+            auto prep = db.prepare(sql);
+            TEST_CHECK(prep.is_success(), "Preparar consulta: " + sql);
+            auto stmt = std::move(prep.value());
+            auto step = stmt.step();
+            TEST_CHECK(step.is_success() && step.value(), "La consulta debe devolver fila: " + sql);
+            return stmt.get_text(0);
+        };
+        auto account_svc = std::make_shared<SqliteAccountService>(db);
+        auto cat_svc = std::make_shared<SqliteCatalogService>(db, account_svc);
+        auto cart_svc = std::make_shared<SqliteCartService>(db, account_svc, cat_svc);
+        auto shift_svc = std::make_shared<SqliteShiftService>(db, account_svc);
+        auto sale_svc = std::make_shared<SqliteSaleService>(db, account_svc, cart_svc, shift_svc);
+        const std::string owner_pwd = generate_random_secret(18);
+        TEST_CHECK(account_svc->create_initial_owner("dueno_b6", "Dueño B6", owner_pwd, "dueno_b6@cafeteria-itch.edu.mx").is_success(), "Alta del Dueño");
+        const std::string pwd_a = generate_random_secret(18), pwd_b = generate_random_secret(18);
+        for (auto [name, pwd] : {std::pair<std::string, std::string>{"cajero_a", pwd_a}, {"cajero_b", pwd_b}}) {
+            CreateUserDto cu;
+            cu.username = name; cu.display_name = "Cajero " + name; cu.raw_password = pwd;
+            cu.role_id = "role-cashier"; cu.email = name + "@cafeteria-itch.edu.mx";
+            TEST_CHECK(account_svc->create_user(cu).is_success(), "Crear " + name);
+        }
+        CreateProductDto pd;
+        pd.sku = "SKU-B6"; pd.name = "Cafe B6"; pd.category = "Bebidas"; pd.price = Money::from_cents(2500); pd.is_prepared = false;
+        auto prod = cat_svc->create_product(pd);
+        TEST_CHECK(prod.is_success(), "Crear producto");
+        const std::string pid = prod.value().id;
+
+        // Una sola caja: comportamiento de siempre
+        TEST_CHECK(cart_svc->add_item(pid, 1, "").is_success(), "Carrito sin turno con una sola caja");
+        TEST_CHECK(q("SELECT register_id FROM carts WHERE user_id = 'user-dueno_b6';") == "reg-01", "Sin turno y con una sola caja el carrito va a reg-01");
+        TEST_CHECK(shift_svc->open_shift("reg-01", Money::from_cents(10000)).is_success(), "Dueño abre turno en reg-01");
+        TEST_CHECK(q("SELECT COUNT(*) FROM carts WHERE user_id = 'user-dueno_b6';") == "1", "El mismo carrito sigue siendo el del Dueño");
+        auto sale1 = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "k-b6-1");
+        TEST_CHECK(sale1.is_success() && sale1.value().folio == "V-C1-00001", "Venta con una caja: folio V-C1-00001");
+        auto retry1 = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "k-b6-1");
+        TEST_CHECK(retry1.is_success() && retry1.value().sale_id == sale1.value().sale_id && retry1.value().folio == "V-C1-00001", "El reintento devuelve la misma venta");
+        TEST_CHECK(q("SELECT COUNT(*) FROM sales;") == "1", "Sin venta duplicada");
+
+        // Segunda caja creada por SQL
+        TEST_CHECK(db.execute("INSERT INTO cash_registers (id, name, code) VALUES ('reg-02', 'Caja Dos', 'C2');").is_success(), "Segunda caja");
+        TEST_CHECK(cart_svc->add_item(pid, 1, "").is_success(), "El Dueño deja un artículo en su carrito (caja reg-01)");
+
+        TEST_CHECK(account_svc->login("cajero_a", pwd_a).is_success(), "Login cajero A");
+        TEST_CHECK(shift_svc->open_shift("reg-02", Money::from_cents(5000)).is_success(), "Cajero A abre turno en reg-02");
+        TEST_CHECK(cart_svc->add_item(pid, 1, "").is_success(), "Cajero A agrega al carrito");
+        TEST_CHECK(q("SELECT register_id FROM carts WHERE user_id = (SELECT id FROM users WHERE username = 'cajero_a');") == "reg-02", "El carrito del cajero A es de reg-02");
+        TEST_CHECK(q("SELECT COUNT(*) FROM carts WHERE register_id = 'reg-01';") == "1", "El carrito de reg-01 sigue siendo solo el del Dueño");
+        auto cart_a = cart_svc->get_cart();
+        TEST_CHECK(cart_a.is_success() && cart_a.value().items.size() == 1 && cart_a.value().items[0].quantity == 1, "El carrito del cajero A tiene solo lo suyo");
+
+        auto sale_a = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "k-b6-a");
+        TEST_CHECK(sale_a.is_success(), "Venta del cajero A: " + sale_a.error_message());
+        TEST_CHECK(sale_a.value().folio == "V-C2-00001" && sale_a.value().total.cents() == 2500, "Cajero A: folio con el código de su caja y total de su carrito");
+        TEST_CHECK(q("SELECT sh.register_id FROM sales s JOIN shifts sh ON sh.id = s.shift_id WHERE s.id = '" + sale_a.value().sale_id + "';") == "reg-02", "La venta quedó en el turno de reg-02");
+        auto retry_a = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "k-b6-a");
+        TEST_CHECK(retry_a.is_success() && retry_a.value().sale_id == sale_a.value().sale_id && retry_a.value().folio == "V-C2-00001", "El reintento del cajero A devuelve la misma venta");
+
+        // Cajero B: hay dos turnos abiertos y ninguno es suyo
+        TEST_CHECK(account_svc->login("cajero_b", pwd_b).is_success(), "Login cajero B");
+        auto add_b = cart_svc->add_item(pid, 1, "");
+        TEST_CHECK(!add_b.is_success() && add_b.error_code() == ErrorCode::InvalidState, "Cajero B sin turno propio y con dos turnos ajenos: el carrito se rechaza");
+        TEST_CHECK(add_b.error_message().find("Abra su propio turno") != std::string::npos, "El mensaje dice en lenguaje llano que debe abrir su turno: " + add_b.error_message());
+        auto sale_b = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "");
+        TEST_CHECK(!sale_b.is_success() && sale_b.error_code() == ErrorCode::InvalidState && sale_b.error_message().find("Abra su propio turno") != std::string::npos,
+                   "La venta también pide abrir su propio turno");
+        TEST_CHECK(q("SELECT COUNT(*) FROM sales;") == "2", "Ninguna venta se creó para el cajero B");
+
+        // Dueño: su turno es el de reg-01; su carrito conserva solo lo suyo
+        TEST_CHECK(account_svc->login("dueno_b6", owner_pwd).is_success(), "Volver al Dueño");
+        auto sale_o = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "k-b6-o");
+        TEST_CHECK(sale_o.is_success() && sale_o.value().folio == "V-C1-00002" && sale_o.value().total.cents() == 2500,
+                   "Dueño: folio V-C1-00002 y total de su propio carrito");
+        TEST_CHECK(q("SELECT COUNT(DISTINCT folio) FROM sales;") == "3", "Los folios de las dos cajas no chocan");
+        // Un usuario no puede apropiarse la clave de otro
+        TEST_CHECK(account_svc->login("cajero_a", pwd_a).is_success(), "Login cajero A de nuevo");
+        auto steal = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "k-b6-o");
+        TEST_CHECK(!steal.is_success() && steal.error_code() == ErrorCode::Forbidden, "Una clave ajena sigue rechazada");
+        db.close();
+    }
+
+    // ---------------- Varias cajas y ningún turno abierto ----------------
+    {
+        SqliteDatabase db;
+        TEST_CHECK(db.open((base_dir / "b6c.db").u8string()).is_success(), "Abrir SQLite B6 sin turnos");
+        MigrationRunner runner(db);
+        TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Migraciones completas");
+        auto account_svc = std::make_shared<SqliteAccountService>(db);
+        auto cat_svc = std::make_shared<SqliteCatalogService>(db, account_svc);
+        auto cart_svc = std::make_shared<SqliteCartService>(db, account_svc, cat_svc);
+        auto shift_svc = std::make_shared<SqliteShiftService>(db, account_svc);
+        auto sale_svc = std::make_shared<SqliteSaleService>(db, account_svc, cart_svc, shift_svc);
+        TEST_CHECK(account_svc->create_initial_owner("dueno_b6c", "Dueño", generate_random_secret(18), "d@cafeteria-itch.edu.mx").is_success(), "Alta del Dueño");
+        CreateProductDto pd;
+        pd.sku = "SKU-B6C"; pd.name = "Te"; pd.category = "Bebidas"; pd.price = Money::from_cents(1500); pd.is_prepared = false;
+        auto prod = cat_svc->create_product(pd);
+        TEST_CHECK(prod.is_success(), "Crear producto");
+        TEST_CHECK(db.execute("INSERT INTO cash_registers (id, name, code) VALUES ('reg-02', 'Caja Dos', 'C2');").is_success(), "Segunda caja");
+        auto add = cart_svc->add_item(prod.value().id, 1, "");
+        TEST_CHECK(!add.is_success() && add.error_code() == ErrorCode::InvalidState && add.error_message().find("Abra su turno") != std::string::npos,
+                   "Con varias cajas y sin turno el carrito pide abrir turno: " + add.error_message());
+        auto sale = sale_svc->confirm_sale(PaymentMethod::Efectivo, Money::from_cents(5000), "");
+        TEST_CHECK(!sale.is_success() && sale.error_code() == ErrorCode::ShiftClosed, "Sin turno la venta sigue dando ShiftClosed");
+        db.close();
+    }
+
+    std::error_code ec;
+    fs::remove_all(base_dir, ec);
+    std::cout << "  -> Cajas reales y migración 013 verificadas." << std::endl;
+}
+
 int main() {
     std::cout << "=== PRUEBAS DE ALMACENAMIENTO SQLITE, PERSISTENCIA Y SEGURIDAD (Debug y Release) ===" << std::endl;
     test_sqlite_lifecycle_and_persistence();
@@ -4204,6 +4384,7 @@ int main() {
     test_b5_valuation_domain_rules();
     test_b5_costing_and_valuation();
     test_b5_valuation_backfill_migration();
+    test_b6_registers_cart_sale_and_migration();
     std::cout << "\n>>> TODAS LAS PRUEBAS DE ALMACENAMIENTO PASARON CON EXITO! <<<\n" << std::endl;
     return 0;
 }
