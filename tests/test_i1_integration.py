@@ -24,45 +24,19 @@ import secrets
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-# -----------------------------------------------------------------------------
-# Declaración estricta de funciones y tipos Win32
-# -----------------------------------------------------------------------------
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+from gui_dpi import (
+    user32,
+    enable_per_monitor_dpi,
+    ensure_supported_system_dpi,
+    get_window_dpi,
+    format_dpi_info,
+    WM_SETTEXT,
+    WM_COMMAND,
+    WM_CLOSE,
+    BM_CLICK,
+)
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-
-user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-user32.EnumWindows.restype = wintypes.BOOL
-
-user32.EnumChildWindows.argtypes = [wintypes.HWND, WNDENUMPROC, wintypes.LPARAM]
-user32.EnumChildWindows.restype = wintypes.BOOL
-
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-
-user32.IsWindowVisible.argtypes = [wintypes.HWND]
-user32.IsWindowVisible.restype = wintypes.BOOL
-
-user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-user32.GetWindowTextLengthW.restype = ctypes.c_int
-
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
-
-user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetClassNameW.restype = ctypes.c_int
-
-user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.SendMessageW.restype = wintypes.LPARAM
-
-user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.PostMessageW.restype = wintypes.BOOL
-
-WM_SETTEXT = 0x000C
-WM_COMMAND = 0x0111
-WM_CLOSE = 0x0010
-BM_CLICK = 0x00F5
 
 def generate_random_secret(length=18):
     alphabet = string.ascii_letters + string.digits + "!@#$%^&*()_+-="
@@ -290,7 +264,8 @@ def run_integration_test(exe_path, work_dir):
             step_name="Paso 4: MainWindow tras Login",
             exclude_substrings=["Iniciar Sesión"]
         )
-        print(f"[OK] Sesión autenticada y MainWindow visible en PID {proc.pid}: '{main_title}' (HWND: {hex(hwnd_main)})")
+        main_dpi = get_window_dpi(hwnd_main)
+        print(f"[OK] Sesión autenticada y MainWindow visible en PID {proc.pid}: '{main_title}' ({format_dpi_info(main_dpi)}, HWND: {hex(hwnd_main)})")
 
         # Comprobar que 'Servidor de respaldos' no es visible para el Dueño
         main_children = get_child_controls(hwnd_main)
@@ -322,6 +297,9 @@ def run_integration_test(exe_path, work_dir):
         print(f"[OK] Limpieza de directorio temporal aislado: {temp_test_dir}")
 
 if __name__ == "__main__":
+    enable_per_monitor_dpi()
+    sys_dpi, _ = ensure_supported_system_dpi()
+    print(f"DPI sistema detectado: {format_dpi_info(sys_dpi)}")
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     release_exe = os.path.join(repo_root, "build_release", "app_desktop.exe")
     release_dir = os.path.join(repo_root, "build_release")

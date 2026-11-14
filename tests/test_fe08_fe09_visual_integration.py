@@ -26,65 +26,24 @@ import shutil
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
-
-class SIZE(ctypes.Structure):
-    _fields_ = [("cx", wintypes.LONG), ("cy", wintypes.LONG)]
+from gui_dpi import (
+    user32,
+    WM_SETTEXT,
+    WM_CLOSE,
+    WM_COMMAND,
+    BM_CLICK,
+    enable_per_monitor_dpi,
+    ensure_supported_system_dpi,
+    get_window_dpi,
+    get_window_scale,
+    format_dpi_info,
+    set_window_logical_size,
+    min_px,
+    max_px,
+    measure_text_extent,
+)
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-user32.EnumWindows.restype = wintypes.BOOL
-user32.EnumChildWindows.argtypes = [wintypes.HWND, WNDENUMPROC, wintypes.LPARAM]
-user32.EnumChildWindows.restype = wintypes.BOOL
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.IsWindowVisible.argtypes = [wintypes.HWND]
-user32.IsWindowVisible.restype = wintypes.BOOL
-user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-user32.GetWindowTextLengthW.restype = ctypes.c_int
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
-user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetClassNameW.restype = ctypes.c_int
-user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.SendMessageW.restype = wintypes.LPARAM
-user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.PostMessageW.restype = wintypes.BOOL
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetWindowRect.restype = wintypes.BOOL
-user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetClientRect.restype = wintypes.BOOL
-user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
-user32.SetWindowPos.restype = wintypes.BOOL
-user32.GetParent.argtypes = [wintypes.HWND]
-user32.GetParent.restype = wintypes.HWND
-user32.GetDC.argtypes = [wintypes.HWND]
-user32.GetDC.restype = wintypes.HDC
-user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
-user32.ReleaseDC.restype = ctypes.c_int
-
-gdi32.GetTextExtentPoint32W.argtypes = [wintypes.HDC, wintypes.LPCWSTR, ctypes.c_int, ctypes.POINTER(SIZE)]
-gdi32.GetTextExtentPoint32W.restype = wintypes.BOOL
-gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
-gdi32.SelectObject.restype = wintypes.HGDIOBJ
-
-try:
-    user32.GetDpiForWindow.argtypes = [wintypes.HWND]
-    user32.GetDpiForWindow.restype = wintypes.UINT
-    HAS_GET_DPI = True
-except AttributeError:
-    HAS_GET_DPI = False
-
-WM_SETTEXT = 0x000C
-WM_CLOSE = 0x0010
-WM_COMMAND = 0x0111
-WM_GETFONT = 0x0031
-BM_CLICK = 0x00F5
-SWP_NOZORDER = 0x0004
-SWP_NOMOVE = 0x0002
 
 def get_window_pid(hwnd):
     pid = wintypes.DWORD()
@@ -137,21 +96,6 @@ def get_rect(hwnd):
     user32.GetWindowRect(hwnd, ctypes.byref(r))
     return r.left, r.top, r.right, r.bottom, (r.right - r.left), (r.bottom - r.top)
 
-def measure_text_extent(hwnd, text):
-    hdc = user32.GetDC(hwnd)
-    if not hdc:
-        return 0, 0
-    hfont = user32.SendMessageW(hwnd, WM_GETFONT, 0, 0)
-    old_font = 0
-    if hfont:
-        old_font = gdi32.SelectObject(hdc, hfont)
-    sz = SIZE()
-    gdi32.GetTextExtentPoint32W(hdc, text, len(text), ctypes.byref(sz))
-    if old_font:
-        gdi32.SelectObject(hdc, old_font)
-    user32.ReleaseDC(hwnd, hdc)
-    return sz.cx, sz.cy
-
 def set_text(hwnd, text):
     text_buf = ctypes.create_unicode_buffer(text)
     user32.SendMessageW(hwnd, WM_SETTEXT, 0, ctypes.addressof(text_buf))
@@ -161,18 +105,6 @@ def send_click_button(hwnd):
 
 def post_click_button(hwnd):
     user32.PostMessageW(hwnd, BM_CLICK, 0, 0)
-
-def get_window_dpi(hwnd):
-    if HAS_GET_DPI:
-        dpi = user32.GetDpiForWindow(hwnd)
-        if dpi > 0:
-            return dpi
-    hdc = user32.GetDC(hwnd)
-    if hdc:
-        dpi = gdi32.GetDeviceCaps(hdc, 88) # LOGPIXELSX
-        user32.ReleaseDC(hwnd, hdc)
-        return dpi
-    return 96
 
 def seed_demo_catalog(db_path):
     con = sqlite3.connect(db_path)
@@ -273,14 +205,22 @@ def run_test_for_binary(exe_path, work_dir, label):
         time.sleep(1.0)
         print("[OK] MainWindow activa y autenticada.")
 
-        # Detección y reporte de DPI
+        # Detección y validación de DPI (96 DPI = 100% o 120 DPI = 125%)
         dpi = get_window_dpi(hwnd_main2)
-        scale_pct = int(round(dpi / 96.0 * 100))
-        print(f"[DPI] DPI detectado en ventana principal: {dpi} ({scale_pct}% de escala).")
-        print(f"  - Escala {scale_pct}%: Verificación activa en ejecución.")
-        for sc in [100, 125, 150, 200]:
-            if sc != scale_pct:
-                print(f"  - Escala {sc}%: [NO VERIFICADO] Entorno Win32 sin cambio dinámico de DPI físico en ejecución sin reinicio de sesión.")
+        scale = get_window_scale(hwnd_main2)
+        scale_pct = int(round(scale * 100))
+        print(f"[DPI] {format_dpi_info(dpi)} en ventana principal.")
+        margin12 = min_px(12, scale)
+        margin10 = min_px(10, scale)
+        min_btn_more_std = min_px(120, scale)
+        min_notes_w = min_px(350, scale)
+        min_notes_h = min_px(40, scale)
+        min_btn_more_touch = min_px(135, scale)
+        min_touch_target = min_px(48, scale)
+        max_row_top_delta = max_px(15, scale)
+        max_sel_h_diff = max_px(2, scale)
+        sku_pad_px = min_px(8, scale)
+        min_notes_w_960 = min_px(200, scale)
 
         # Abrir Turno en Caja
         main_ctrls = get_child_controls(hwnd_main2)
@@ -318,7 +258,7 @@ def run_test_for_binary(exe_path, work_dir, label):
         # CASO 1: 1200x720 en Perfil Estándar con Importe Grande y Textos Largos
         # -------------------------------------------------------------
         print("\n--- CASO 1: Perfil Estándar a 1200x720 (Geometría e Importe Grande) ---")
-        user32.SetWindowPos(hwnd_main2, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main2, 1200, 720)
         time.sleep(0.5)
 
         # Agregar 116 unidades de producto con nombre largo y notas largas
@@ -359,10 +299,10 @@ def run_test_for_binary(exe_path, work_dir, label):
         print(f"  Geometría TOTAL: L={tot_l}, R={tot_r}, W={tot_w}px (Margen der={card_r - tot_r}px)")
         print(f"  Geometría Subtotal: L={sub_l}, R={sub_r}, W={sub_w}px (Margen der={card_r - sub_r}px)")
 
-        # Comprobación geométrica: TOTAL y Subtotal deben estar dentro de la tarjeta con margen derecho >= 12px
-        assert tot_r <= card_r - 12, f"TOTAL recortado o pegado al borde derecho: tot_r={tot_r} > card_r-12={card_r-12}"
-        assert sub_r <= card_r - 12, f"Subtotal recortado o pegado al borde derecho: sub_r={sub_r} > card_r-12={card_r-12}"
-        assert tot_l >= card_l + 12, f"TOTAL desbordado a la izquierda: tot_l={tot_l} < card_l+12={card_l+12}"
+        # Comprobación geométrica: TOTAL y Subtotal deben estar dentro de la tarjeta con margen derecho >= 12 lógicos
+        assert tot_r <= card_r - margin12, f"TOTAL recortado o pegado al borde derecho: tot_r={tot_r} > card_r-{margin12}={card_r-margin12}"
+        assert sub_r <= card_r - margin12, f"Subtotal recortado o pegado al borde derecho: sub_r={sub_r} > card_r-{margin12}={card_r-margin12}"
+        assert tot_l >= card_l + margin12, f"TOTAL desbordado a la izquierda: tot_l={tot_l} < card_l+{margin12}={card_l+margin12}"
 
         # Comprobación de texto íntegro y extensión métrica GDI
         ext_w, ext_h = measure_text_extent(lbl_total_hwnd, "$2,900.00")
@@ -376,7 +316,7 @@ def run_test_for_binary(exe_path, work_dir, label):
         assert btn_more_std is not None, "Botón 'Más acciones' no encontrado en Estándar"
         ml, mt, mr, mb, mw, mh = get_rect(btn_more_std)
         assert mr <= card_l, f"Botón Más acciones ({mr}) invade o sobrepasa tarjeta de cuenta ({card_l})"
-        assert mw >= 120, f"Botón Más acciones demasiado estrecho ({mw}px < 120px)"
+        assert mw >= min_btn_more_std, f"Botón Más acciones demasiado estrecho ({mw}px < {min_btn_more_std}px)"
         print(f"[OK] Botón 'Más acciones' en Estándar: W={mw}px, totalmente visible sin colisión.")
 
         # -------------------------------------------------------------
@@ -416,18 +356,18 @@ def run_test_for_binary(exe_path, work_dir, label):
         target_notes = parent if parent else txt_notes_touch
         nl, nt, nr, nb, nw, nh = get_rect(target_notes)
         print(f"  Geometría txt_notes en Touch: W={nw}px, H={nh}px")
-        # El campo de notas debe ser amplio (fila completa, >= 350px útil a 1200x720) y táctil (H >= 40px)
-        assert nw >= 350, f"Campo de notas en Touch demasiado estrecho: {nw}px < 350px"
-        assert nh >= 40, f"Campo de notas en Touch demasiado bajo: {nh}px < 40px"
-        print(f"[OK] Campo de notas en Touch tiene ancho amplio ({nw}px >= 350px) y altura táctil ({nh}px).")
+        # El campo de notas debe ser amplio (fila completa, >= 350 lógicos útil a 1200x720) y táctil (H >= 40 lógicos)
+        assert nw >= min_notes_w, f"Campo de notas en Touch demasiado estrecho: {nw}px < {min_notes_w}px"
+        assert nh >= min_notes_h, f"Campo de notas en Touch demasiado bajo: {nh}px < {min_notes_h}px"
+        print(f"[OK] Campo de notas en Touch tiene ancho amplio ({nw}px >= {min_notes_w}px) y altura táctil ({nh}px).")
 
         # Verificar botón Más acciones en Touch
         btn_more_touch = next((h for (h, t) in t_btns if "Más acciones" in t), None)
         assert btn_more_touch is not None, "Botón 'Más acciones' no encontrado en Touch"
         tml, tmt, tmr, tmb, tmw, tmh = get_rect(btn_more_touch)
         print(f"  Geometría Más acciones en Touch: W={tmw}px, H={tmh}px, R={tmr}px")
-        assert tmw >= 135, f"Más acciones cortado en Touch: ancho {tmw}px < 135px"
-        assert tmh >= 48, f"Más acciones altura no táctil: {tmh}px < 48px"
+        assert tmw >= min_btn_more_touch, f"Más acciones cortado en Touch: ancho {tmw}px < {min_btn_more_touch}px"
+        assert tmh >= min_touch_target, f"Más acciones altura no táctil: {tmh}px < {min_touch_target}px"
 
         # Verificar tarjeta y total en Touch
         t_statics = [(h, txt) for (h, cls, txt) in touch_ctrls if cls.lower() == "static"]
@@ -438,12 +378,12 @@ def run_test_for_binary(exe_path, work_dir, label):
         tcard_l, tcard_t, tcard_r, tcard_b, tcard_w, tcard_h = get_rect(tcard_hwnd)
         ttot_l, ttot_t, ttot_r, ttot_b, ttot_w, ttot_h = get_rect(lbl_ttotal)
         print(f"  Geometría Card Touch: W={tcard_w}px, TOTAL R={ttot_r}px (Margen der={tcard_r - ttot_r}px)")
-        assert ttot_r <= tcard_r - 12, f"TOTAL en Touch recortado: ttot_r={ttot_r} > tcard_r-12={tcard_r-12}"
+        assert ttot_r <= tcard_r - margin12, f"TOTAL en Touch recortado: ttot_r={ttot_r} > tcard_r-{margin12}={tcard_r-margin12}"
         ext_tw, ext_th = measure_text_extent(lbl_ttotal, "$2,900.00")
         assert ttot_w >= ext_tw, f"TOTAL en Touch más estrecho que texto: {ttot_w}px < {ext_tw}px"
         print("[OK] TOTAL ($2,900.00) en Touch íntegro sin recortes métricos ni geométricos.")
 
-        # Verificar objetivos táctiles de botones en Touch (>= 48px de altura)
+        # Verificar objetivos táctiles de botones en Touch (>= 48 lógicos)
         touch_action_btns = [
             ("Editar cantidad", next((h for (h, t) in t_btns if "Editar cantidad" in t), None)),
             ("Editar nota", next((h for (h, t) in t_btns if "Editar nota" in t), None)),
@@ -456,40 +396,40 @@ def run_test_for_binary(exe_path, work_dir, label):
         for name, btn_h in touch_action_btns:
             assert btn_h is not None, f"Botón '{name}' no encontrado en perfil Touch"
             _, _, _, _, bw, bh = get_rect(btn_h)
-            print(f"  Objetivo táctil '{name}': {bw}x{bh}px (mínimo 48px)")
-            assert bh >= 48, f"Botón '{name}' no cumple altura táctil mínima: {bh}px < 48px"
-            assert bw >= 48, f"Botón '{name}' no cumple ancho táctil mínimo: {bw}px < 48px"
-        print("[OK] Todos los botones interactivos en Touch cumplen requisitos de accesibilidad táctil (>=48px).")
+            print(f"  Objetivo táctil '{name}': {bw}x{bh}px (mínimo {min_touch_target}px)")
+            assert bh >= min_touch_target, f"Botón '{name}' no cumple altura táctil mínima: {bh}px < {min_touch_target}px"
+            assert bw >= min_touch_target, f"Botón '{name}' no cumple ancho táctil mínimo: {bw}px < {min_touch_target}px"
+        print("[OK] Todos los botones interactivos en Touch cumplen requisitos de accesibilidad táctil (>=48 lógicos).")
 
-        # Verificar altura del selector de producto igual a la de búsqueda (tolerancia 2 px)
+        # Verificar altura del selector de producto igual a la de búsqueda
         txt_search_touch = t_edits[0]
         search_box_parent = user32.GetParent(txt_search_touch)
         _, search_top, _, _, search_w, search_h = get_rect(search_box_parent if search_box_parent else txt_search_touch)
         selector_ctrl = next((
             h for (h, cls, txt) in touch_ctrls
-            if ("combo" in cls.lower() or "combo" in txt.lower()) and abs(get_rect(h)[1] - search_top) <= 15
+            if ("combo" in cls.lower() or "combo" in txt.lower()) and abs(get_rect(h)[1] - search_top) <= max_row_top_delta
         ), None)
         assert selector_ctrl is not None, "Selector de productos no encontrado en fila de búsqueda Touch"
         _, _, _, _, sel_w, sel_h = get_rect(selector_ctrl)
         print(f"  Geometría Selector de Producto en Touch: W={sel_w}px, H={sel_h}px (Búsqueda H={search_h}px)")
-        assert abs(sel_h - search_h) <= 2, f"Altura del selector ({sel_h}px) no coincide con búsqueda ({search_h}px) con tolerancia de 2px"
-        print(f"[OK] Selector de producto tiene altura táctil {sel_h}px igual a búsqueda ({search_h}px, tol <= 2px).")
+        assert abs(sel_h - search_h) <= max_sel_h_diff, f"Altura del selector ({sel_h}px) no coincide con búsqueda ({search_h}px) con tolerancia de {max_sel_h_diff}px"
+        print(f"[OK] Selector de producto tiene altura táctil {sel_h}px igual a búsqueda ({search_h}px, tol <= {max_sel_h_diff}px).")
 
-        # Verificar ancho de columna 0 (SKU) en la tabla del carrito >= GetTextExtent("BAG-01") + 8 px
+        # Verificar ancho de columna 0 (SKU) en la tabla del carrito >= GetTextExtent("BAG-01") + 8 lógicos
         t_lists = [h for (h, cls, txt) in touch_ctrls if "listview" in cls.lower() or "list" in cls.lower()]
         assert len(t_lists) >= 1, "Tabla del carrito no encontrada en Touch"
         cart_list_hwnd = t_lists[0]
         col0_w = user32.SendMessageW(cart_list_hwnd, 0x101D, 0, 0)
         sku_tw, sku_th = measure_text_extent(cart_list_hwnd, "BAG-01")
-        print(f"  Columna SKU (0) en Touch: ancho={col0_w}px, text_extent('BAG-01')={sku_tw}px (mínimo={sku_tw + 8}px)")
-        assert col0_w >= sku_tw + 8, f"Columna SKU demasiado estrecha: {col0_w}px < {sku_tw + 8}px"
-        print(f"[OK] Columna SKU en Touch ({col0_w}px >= {sku_tw + 8}px) previene truncado de BAG-01.")
+        print(f"  Columna SKU (0) en Touch: ancho={col0_w}px, text_extent('BAG-01')={sku_tw}px (mínimo={sku_tw + sku_pad_px}px)")
+        assert col0_w >= sku_tw + sku_pad_px, f"Columna SKU demasiado estrecha: {col0_w}px < {sku_tw + sku_pad_px}px"
+        print(f"[OK] Columna SKU en Touch ({col0_w}px >= {sku_tw + sku_pad_px}px) previene truncado de BAG-01.")
 
         # -------------------------------------------------------------
         # CASO 3: Ventana Estrecha (960x600) en Perfil Touch
         # -------------------------------------------------------------
         print("\n--- CASO 3: Ventana Estrecha (960x600) en Perfil Touch ---")
-        user32.SetWindowPos(hwnd_main2, 0, 0, 0, 960, 600, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main2, 960, 600)
         time.sleep(0.5)
 
         main_l, main_t, main_r, main_b, main_w, main_h = get_rect(hwnd_main2)
@@ -498,7 +438,7 @@ def run_test_for_binary(exe_path, work_dir, label):
         n_notes = n_edits_touch[2]
         n_parent = user32.GetParent(n_notes)
         _, _, _, _, nnw, _ = get_rect(n_parent if n_parent else n_notes)
-        assert nnw >= 200, f"Campo de notas en 960x600 Touch demasiado estrecho: {nnw}px < 200px"
+        assert nnw >= min_notes_w_960, f"Campo de notas en 960x600 Touch demasiado estrecho: {nnw}px < {min_notes_w_960}px"
         
         n_totals = [h for (h, cls, txt) in n_ctrls_touch if cls.lower() == "static" and "$2,900.00" in txt]
         assert len(n_totals) >= 2, "Total $2,900.00 no encontrado en 960x600 Touch"
@@ -508,7 +448,7 @@ def run_test_for_binary(exe_path, work_dir, label):
         
         # Tarjeta debe caber dentro del marco de MainWindow
         assert nc_r <= main_r, f"Tarjeta de cuenta sobrepasa la ventana principal en 960x600: card_r={nc_r} > win_r={main_r}"
-        assert nt_r <= nc_r - 10, f"TOTAL recortado en 960x600 Touch: total_r={nt_r} > card_r-10={nc_r-10}"
+        assert nt_r <= nc_r - margin10, f"TOTAL recortado en 960x600 Touch: total_r={nt_r} > card_r-{margin10}={nc_r-margin10}"
         print(f"[OK] Ventana estrecha 960x600 en Touch: Tarjeta contenida (W={nc_w}px), notas útiles (W={nnw}px), TOTAL sin recorte.")
 
         # -------------------------------------------------------------
@@ -529,11 +469,11 @@ def run_test_for_binary(exe_path, work_dir, label):
         nst_l, nst_t, nst_r, nst_b, nst_w, nst_h = get_rect(n_std_totals[-1])
 
         assert nsc_r <= main_r, f"Tarjeta de cuenta sobrepasa ventana en 960x600 Estándar: {nsc_r} > {main_r}"
-        assert nst_r <= nsc_r - 10, f"TOTAL recortado en 960x600 Estándar: {nst_r} > {nsc_r-10}"
+        assert nst_r <= nsc_r - margin10, f"TOTAL recortado en 960x600 Estándar: {nst_r} > {nsc_r-margin10}"
         print(f"[OK] Ventana estrecha 960x600 en Estándar: Tarjeta contenida (W={nsc_w}px), TOTAL sin recorte.")
 
         # Restaurar tamaño a 1200x720 y volver a Touch para prueba de persistencia en arranque
-        user32.SetWindowPos(hwnd_main2, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main2, 1200, 720)
         time.sleep(0.3)
         n_btns_std = [(h, txt) for (h, cls, txt) in n_ctrls_std if cls.lower() == "button"]
         btn_toggle_to_touch = next((h for (h, t) in n_btns_std if "Touch" in t), None)
@@ -589,6 +529,9 @@ def run_test_for_binary(exe_path, work_dir, label):
             print(f"[OK] Directorio temporal aislado limpiado: {test_data_dir}")
 
 def main():
+    enable_per_monitor_dpi()
+    sys_dpi, _ = ensure_supported_system_dpi()
+    print(f"DPI sistema detectado: {format_dpi_info(sys_dpi)}")
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     release_exe = os.path.join(repo_root, "build_release", "app_desktop.exe")
     debug_exe = os.path.join(repo_root, "build_debug", "app_desktop.exe")

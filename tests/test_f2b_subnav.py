@@ -28,49 +28,23 @@ import shutil
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+from gui_dpi import (
+    user32,
+    gdi32,
+    WM_SETTEXT,
+    WM_CLOSE,
+    BM_CLICK,
+    enable_per_monitor_dpi,
+    ensure_supported_system_dpi,
+    get_window_scale,
+    to_px,
+    format_dpi_info,
+)
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-user32.EnumWindows.restype = wintypes.BOOL
-user32.EnumChildWindows.argtypes = [wintypes.HWND, WNDENUMPROC, wintypes.LPARAM]
-user32.EnumChildWindows.restype = wintypes.BOOL
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.IsWindowVisible.argtypes = [wintypes.HWND]
-user32.IsWindowVisible.restype = wintypes.BOOL
-user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-user32.GetWindowTextLengthW.restype = ctypes.c_int
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
-user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetClassNameW.restype = ctypes.c_int
-user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.SendMessageW.restype = wintypes.LPARAM
-user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.PostMessageW.restype = wintypes.BOOL
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetWindowRect.restype = wintypes.BOOL
-user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetClientRect.restype = wintypes.BOOL
-user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
-user32.ClientToScreen.restype = wintypes.BOOL
-user32.GetParent.argtypes = [wintypes.HWND]
-user32.GetParent.restype = wintypes.HWND
-user32.GetDC.argtypes = [wintypes.HWND]
-user32.GetDC.restype = wintypes.HDC
-user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
-user32.ReleaseDC.restype = ctypes.c_int
 
 gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
 gdi32.GetPixel.restype = wintypes.COLORREF
-
-WM_SETTEXT = 0x000C
-WM_CLOSE = 0x0010
-BM_CLICK = 0x00F5
 
 def ensure_no_app_running():
     for _ in range(3):
@@ -144,15 +118,20 @@ def measure_button_bg_rgb(h_btn):
     user32.GetClientRect(h_btn, ctypes.byref(r))
     cw = r.right - r.left
     ch = r.bottom - r.top
+    scale = get_window_scale(h_btn)
+    ox8 = to_px(8, scale)
+    oy6 = to_px(6, scale)
+    ox10 = to_px(10, scale)
+    oy8 = to_px(8, scale)
 
     # Puntos de muestra en la zona de fondo (esquinas superiores e inferiores, lejos del texto centrado)
     pts = [
-        (8, 6),
-        (cw - 8, 6),
-        (10, 8),
-        (cw - 10, 8),
-        (8, ch - 8),
-        (cw - 8, ch - 8)
+        (ox8, oy6),
+        (cw - ox8, oy6),
+        (ox10, oy8),
+        (cw - ox10, oy8),
+        (ox8, ch - oy8),
+        (cw - ox8, ch - oy8),
     ]
 
     # Intentar con DC de cliente
@@ -415,6 +394,9 @@ def run_f2b_test_for_binary(exe_path, repo_root, config_name):
                 pass
 
 if __name__ == "__main__":
+    enable_per_monitor_dpi()
+    sys_dpi, _ = ensure_supported_system_dpi()
+    print(f"DPI sistema detectado: {format_dpi_info(sys_dpi)}")
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     exe_release = os.path.join(repo_root, "build_release", "app_desktop.exe")
     exe_debug = os.path.join(repo_root, "build_debug", "app_desktop.exe")

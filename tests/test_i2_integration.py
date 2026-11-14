@@ -34,6 +34,13 @@ import re
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
+from gui_dpi import (
+    enable_per_monitor_dpi,
+    ensure_supported_system_dpi,
+    format_dpi_info,
+    select_list_row as _gui_select_list_row,
+)
+
 # -----------------------------------------------------------------------------
 # Declaración estricta de funciones y tipos Win32
 # -----------------------------------------------------------------------------
@@ -454,15 +461,8 @@ def cancel_system_print_dialog_by_pid(target_pid, timeout=6.0, owner_hwnd=None):
     return None, None
 
 def select_list_item(hwnd_list, row_index):
-    """Selecciona un elemento en SysListView32 enviando clic a las coordenadas de la fila."""
-    # Cabecera ~28px, filas ~24px
-    y = 28 + row_index * 24 + 12
-    x = 40
-    lparam = (y << 16) | (x & 0xFFFF)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONDOWN, 1, lparam)
-    time.sleep(0.05)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONUP, 0, lparam)
-    time.sleep(0.2)
+    """Selecciona un elemento en SysListView32 usando las coordenadas reales de LVM_GETITEMRECT."""
+    _gui_select_list_row(hwnd_list, row_index, settle=0.2)
 
 def seed_test_catalog(db_path):
     """Inserta insumos, recetas, productos y un rol de vendedor sin permiso pos.reprint."""
@@ -1303,6 +1303,9 @@ def run_integration_test_i2(exe_path, work_dir):
         print(f"[OK] Limpieza de directorio temporal aislado: {temp_test_dir}", flush=True)
 
 if __name__ == "__main__":
+    enable_per_monitor_dpi()
+    sys_dpi, _ = ensure_supported_system_dpi()
+    print(f"DPI sistema detectado: {format_dpi_info(sys_dpi)}")
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     release_exe = os.path.join(repo_root, "build_release", "app_desktop.exe")
     release_dir = os.path.join(repo_root, "build_release")

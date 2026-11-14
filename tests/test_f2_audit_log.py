@@ -24,63 +24,25 @@ import sys
 import tempfile
 import time
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
-
-class SIZE(ctypes.Structure):
-    _fields_ = [("cx", wintypes.LONG), ("cy", wintypes.LONG)]
+from gui_dpi import (
+    user32,
+    gdi32,
+    enable_per_monitor_dpi,
+    ensure_supported_system_dpi,
+    get_window_dpi,
+    get_window_scale,
+    format_dpi_info,
+    set_window_logical_size,
+    to_px,
+    min_px,
+    max_px,
+    measure_text_extent,
+    select_list_row,
+)
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-user32.EnumWindows.restype = wintypes.BOOL
-user32.EnumChildWindows.argtypes = [wintypes.HWND, WNDENUMPROC, wintypes.LPARAM]
-user32.EnumChildWindows.restype = wintypes.BOOL
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.IsWindowVisible.argtypes = [wintypes.HWND]
-user32.IsWindowVisible.restype = wintypes.BOOL
-user32.IsWindowEnabled.argtypes = [wintypes.HWND]
-user32.IsWindowEnabled.restype = wintypes.BOOL
-user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-user32.GetWindowTextLengthW.restype = ctypes.c_int
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
-user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetClassNameW.restype = ctypes.c_int
-user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.SendMessageW.restype = wintypes.LPARAM
-user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.PostMessageW.restype = wintypes.BOOL
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetWindowRect.restype = wintypes.BOOL
-user32.GetParent.argtypes = [wintypes.HWND]
-user32.GetParent.restype = wintypes.HWND
-user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
-user32.SetWindowPos.restype = wintypes.BOOL
-user32.GetDC.argtypes = [wintypes.HWND]
-user32.GetDC.restype = wintypes.HDC
-user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
-user32.ReleaseDC.restype = ctypes.c_int
-user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
-user32.GetWindowLongW.restype = wintypes.LONG
-
-gdi32.GetTextExtentPoint32W.argtypes = [wintypes.HDC, wintypes.LPCWSTR, ctypes.c_int, ctypes.POINTER(SIZE)]
-gdi32.GetTextExtentPoint32W.restype = wintypes.BOOL
-gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
-gdi32.SelectObject.restype = wintypes.HGDIOBJ
 gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
 gdi32.GetPixel.restype = wintypes.COLORREF
-user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetClientRect.restype = wintypes.BOOL
-
-try:
-    user32.GetDpiForWindow.argtypes = [wintypes.HWND]
-    user32.GetDpiForWindow.restype = wintypes.UINT
-    HAS_GET_DPI = True
-except AttributeError:
-    HAS_GET_DPI = False
 
 GWL_STYLE = -16
 WS_HSCROLL = 0x00100000
@@ -156,21 +118,6 @@ def get_rect(hwnd):
     user32.GetWindowRect(hwnd, ctypes.byref(rect))
     return rect.left, rect.top, rect.right, rect.bottom, rect.right - rect.left, rect.bottom - rect.top
 
-def measure_text_extent(hwnd, text):
-    hdc = user32.GetDC(hwnd)
-    if not hdc:
-        return 0, 0
-    hfont = user32.SendMessageW(hwnd, WM_GETFONT, 0, 0)
-    old_font = 0
-    if hfont:
-        old_font = gdi32.SelectObject(hdc, hfont)
-    sz = SIZE()
-    gdi32.GetTextExtentPoint32W(hdc, text, len(text), ctypes.byref(sz))
-    if old_font:
-        gdi32.SelectObject(hdc, old_font)
-    user32.ReleaseDC(hwnd, hdc)
-    return sz.cx, sz.cy
-
 def set_text(hwnd, text):
     text_buf = ctypes.create_unicode_buffer(text)
     user32.SendMessageW(hwnd, WM_SETTEXT, 0, ctypes.addressof(text_buf))
@@ -195,14 +142,8 @@ def post_click_button(hwnd):
     user32.PostMessageW(hwnd, BM_CLICK, 0, 0)
 
 def select_list_item(hwnd_list, row_index):
-    """Envía clic de ratón a la fila indicada del SysListView32."""
-    y = 35 + row_index * 20
-    x = 40
-    lparam = (y << 16) | (x & 0xFFFF)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONDOWN, 1, lparam)
-    time.sleep(0.05)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONUP, 0, lparam)
-    time.sleep(0.3)
+    """Envía clic de ratón a la fila indicada del SysListView32 usando LVM_GETITEMRECT."""
+    select_list_row(hwnd_list, row_index, settle=0.3)
 
 def make_password_hash(password):
     salt = os.urandom(16)
@@ -216,9 +157,12 @@ def get_client_size(hwnd):
 
 def verify_list_columns(hwnd_list, profile_name):
     """Columnas de la bitácora: encabezado medido con la fuente REAL del encabezado, contenido con la de la lista,
-    sin WS_HSCROLL, suma <= área cliente y holgura <= 8 px (la columna Detalle absorbe el espacio restante)."""
+    sin WS_HSCROLL, suma <= área cliente y holgura <= 8 lógicos (la columna Detalle absorbe el espacio restante)."""
+    scale = get_window_scale(hwnd_list)
+    pad8 = min_px(8, scale)
+    max_slack = max_px(8, scale)
     style = user32.GetWindowLongW(hwnd_list, GWL_STYLE)
-    assert (style & WS_HSCROLL) == 0, f"Lista de bitácora tiene barra horizontal WS_HSCROLL visible a 1216x759 en {profile_name}"
+    assert (style & WS_HSCROLL) == 0, f"Lista de bitácora tiene barra horizontal WS_HSCROLL visible a 1216x759 logicos en {profile_name}"
 
     hdr = user32.SendMessageW(hwnd_list, LVM_GETHEADER, 0, 0)
     assert hdr, f"LVM_GETHEADER no devolvió el encabezado de la lista en {profile_name}"
@@ -228,24 +172,24 @@ def verify_list_columns(hwnd_list, profile_name):
     for i, title in enumerate(titles):
         hdr_ext, _ = measure_text_extent(hdr, title)
         assert hdr_ext > 0, f"No se pudo medir el encabezado '{title}' con la fuente del encabezado en {profile_name}"
-        assert col_widths[i] >= hdr_ext + 8, (
-            f"Encabezado '{title}' recortado: columna {col_widths[i]}px < {hdr_ext + 8}px "
+        assert col_widths[i] >= hdr_ext + pad8, (
+            f"Encabezado '{title}' recortado: columna {col_widths[i]}px < {hdr_ext + pad8}px "
             f"(texto {hdr_ext}px con la fuente del encabezado) en {profile_name}")
 
     # Contenido (fuente de la lista)
     ext_date, _ = measure_text_extent(hwnd_list, "2026-11-08 12:00:00")
-    assert col_widths[0] >= ext_date + 8, f"Columna 0 ('Fecha y hora') {col_widths[0]}px < {ext_date + 8}px en {profile_name}"
+    assert col_widths[0] >= ext_date + pad8, f"Columna 0 ('Fecha y hora') {col_widths[0]}px < {ext_date + pad8}px en {profile_name}"
     ext_u, _ = measure_text_extent(hwnd_list, "admin_owner")
-    assert col_widths[1] >= ext_u + 8, f"Columna 1 ('Usuario') {col_widths[1]}px < {ext_u + 8}px en {profile_name}"
+    assert col_widths[1] >= ext_u + pad8, f"Columna 1 ('Usuario') {col_widths[1]}px < {ext_u + pad8}px en {profile_name}"
     ext_ev, _ = measure_text_extent(hwnd_list, "LOGIN_SUCCESS")
-    assert col_widths[2] >= ext_ev + 8, f"Columna 2 ('Evento') {col_widths[2]}px < {ext_ev + 8}px en {profile_name}"
+    assert col_widths[2] >= ext_ev + pad8, f"Columna 2 ('Evento') {col_widths[2]}px < {ext_ev + pad8}px en {profile_name}"
 
-    # Suma <= área cliente (sin barra vertical) y holgura <= 8 px
+    # Suma <= área cliente (sin barra vertical) y holgura <= 8 lógicos
     client_w, _ = get_client_size(hwnd_list)
     total = sum(col_widths)
     assert total <= client_w, f"Columnas ({total}px) exceden el área cliente ({client_w}px) en {profile_name}"
-    assert client_w - total <= 8, (
-        f"Espacio sobrante sin aprovechar: {client_w - total}px > 8px (columnas {total}px, cliente {client_w}px) en {profile_name}")
+    assert client_w - total <= max_slack, (
+        f"Espacio sobrante sin aprovechar: {client_w - total}px > {max_slack}px (columnas {total}px, cliente {client_w}px) en {profile_name}")
 
     print(f"  [{profile_name}] Columnas medidas: F={col_widths[0]}px, U={col_widths[1]}px, E={col_widths[2]}px, D={col_widths[3]}px "
           f"(cliente {client_w}px, holgura {client_w - total}px, sin WS_HSCROLL)")
@@ -253,22 +197,27 @@ def verify_list_columns(hwnd_list, profile_name):
 def ink_vertical_extent(h_edit, text):
     """Rango vertical (coordenadas de pantalla) de los píxeles de texto de un campo Edit.
     Fondo: píxel libre a la derecha del texto. FALLA si no hay texto, fondo o tinta."""
+    scale = get_window_scale(h_edit)
     l, t, r, b, w, h = get_rect(h_edit)
     tw, _ = measure_text_extent(h_edit, text)
-    assert 0 < tw < w - 16, f"Texto '{text}' ({tw}px) no cabe en el campo ({w}px) para medir centrado"
+    assert 0 < tw < w - to_px(16, scale), f"Texto '{text}' ({tw}px) no cabe en el campo ({w}px) para medir centrado"
     hdc = user32.GetDC(h_edit)
     assert hdc, "GetDC del campo falló"
     try:
+        rx = max(0, w - to_px(4, scale))
+        by_top = min(h - 1, to_px(2, scale))
+        by_bot = max(0, h - to_px(3, scale))
         bg = None
-        for (x, y) in ((w - 4, h // 2), (w - 4, 2), (w - 4, h - 3)):
+        for (x, y) in ((rx, h // 2), (rx, by_top), (rx, by_bot)):
             v = gdi32.GetPixel(hdc, x, y)
             if v != CLR_INVALID:
                 bg = v
                 break
         assert bg is not None, "Sin píxel de fondo medible en el campo"
+        scan_x_end = max(1, min(w - to_px(8, scale), tw + to_px(12, scale)))
         first = last = None
         for y in range(h):
-            for x in range(0, min(w - 8, tw + 12)):
+            for x in range(0, scan_x_end):
                 v = gdi32.GetPixel(hdc, x, y)
                 if v != CLR_INVALID and v != bg:
                     if first is None:
@@ -282,10 +231,13 @@ def ink_vertical_extent(h_edit, text):
 
 def find_filter_field(ctrls, label_text):
     """Localiza el campo de un filtro por su contenedor: Edit cuyo padre (contenedor) es hermano de la etiqueta,
-    queda a su derecha (a lo sumo 24 px) y se solapa verticalmente con ella. Debe haber EXACTAMENTE uno."""
+    queda a su derecha (a lo sumo 24 lógicos) y se solapa verticalmente con ella. Debe haber EXACTAMENTE uno."""
     labels = [h for (h, cls, txt) in ctrls if cls.lower() == "static" and txt == label_text]
     assert len(labels) == 1, f"Se esperaba una etiqueta '{label_text}' visible y hay {len(labels)}"
     lbl = labels[0]
+    scale = get_window_scale(lbl)
+    max_gap = max_px(24, scale)
+    neg_tol = max_px(1, scale)
     parent = user32.GetParent(lbl)
     _, lt, lr, lb, _, _ = get_rect(lbl)
     lcy = (lt + lb) / 2.0
@@ -297,13 +249,16 @@ def find_filter_field(ctrls, label_text):
         if not cont or cont == parent or user32.GetParent(cont) != parent:
             continue
         cl, ct, cr, cb, _, _ = get_rect(cont)
-        if -1 <= cl - lr <= 24 and ct <= lcy <= cb:
+        if -neg_tol <= cl - lr <= max_gap and ct <= lcy <= cb:
             matches.append((h, cont))
     assert len(matches) == 1, f"Campo de '{label_text}': se esperaba exactamente un contenedor y hay {len(matches)}"
     return matches[0]
 
-def verify_filter_fields(hwnd_main, profile_name, expected_h):
-    """Usuario, Fecha desde y Fecha hasta: contenedor >= expected_h px y texto centrado verticalmente (tol. 3 px)."""
+def verify_filter_fields(hwnd_main, profile_name, expected_h_log):
+    """Usuario, Fecha desde y Fecha hasta: contenedor >= expected_h_log lógicos y texto centrado verticalmente (tol. 3*scale px)."""
+    scale = get_window_scale(hwnd_main)
+    expected_h = min_px(expected_h_log, scale)
+    max_center_err = 3.0 * scale
     ctrls = get_child_controls(hwnd_main)
     samples = (("Usuario:", "admin_owner"), ("Fecha desde:", "2026-11-01"), ("Fecha hasta:", "2026-11-30"))
     fields = [(label, sample) + find_filter_field(ctrls, label) for (label, sample) in samples]
@@ -319,10 +274,10 @@ def verify_filter_fields(hwnd_main, profile_name, expected_h):
             set_text(h_edit, "")
         ink_center = (ink_top + ink_bottom) / 2.0
         box_center = (ct + cb) / 2.0
-        assert abs(ink_center - box_center) <= 3, (
+        assert abs(ink_center - box_center) <= max_center_err, (
             f"Texto de '{label}' no centrado verticalmente en {profile_name}: centro de tinta {ink_center:.1f} vs "
-            f"contenedor {box_center:.1f} (diferencia {abs(ink_center - box_center):.1f}px > 3px)")
-    print(f"  [{profile_name}] Usuario, Fecha desde y Fecha hasta: contenedor >= {expected_h}px y texto centrado (tolerancia 3 px).")
+            f"contenedor {box_center:.1f} (diferencia {abs(ink_center - box_center):.1f}px > {max_center_err:.1f}px)")
+    print(f"  [{profile_name}] Usuario, Fecha desde y Fecha hasta: contenedor >= {expected_h}px y texto centrado (tolerancia {max_center_err:.1f}px).")
 
 def run_f2_test_for_binary(exe_path, repo_root, config_name):
     print(f"\n=======================================================")
@@ -463,8 +418,9 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
         def _select_combo_index(hwnd_cb, idx):
             user32.SetForegroundWindow(hwnd_main2)
             time.sleep(0.1)
+            scale_cb = get_window_scale(hwnd_cb)
             _, _, _, _, cw, ch = get_rect(hwnd_cb)
-            lp = ((ch // 2) << 16) | (max(4, cw - 12) & 0xFFFF)
+            lp = ((ch // 2) << 16) | (max(to_px(4, scale_cb), cw - to_px(12, scale_cb)) & 0xFFFF)
             user32.PostMessageW(hwnd_cb, 0x0201, 1, lp) # WM_LBUTTONDOWN
             time.sleep(0.05)
             user32.PostMessageW(hwnd_cb, 0x0202, 0, lp) # WM_LBUTTONUP
@@ -495,19 +451,20 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
         send_click_button(btn_search)
         time.sleep(0.5)
 
-        # 2.5: Geometría Estándar 960x600 (sin desbordamientos horizontales)
-        user32.SetWindowPos(hwnd_main2, 0, 0, 0, 960, 600, SWP_NOMOVE | SWP_NOZORDER)
+        # 2.5: Geometría Estándar 960x600 lógicos (sin desbordamientos horizontales)
+        scale_main = set_window_logical_size(hwnd_main2, 960, 600)
         time.sleep(0.5)
         n_l, n_t, n_r, n_b, n_w, n_h = get_rect(hwnd_main2)
+        edge_tol = max_px(4, scale_main)
         ctrls_960 = get_child_controls(hwnd_main2)
         for h, cls, txt in ctrls_960:
             if cls.lower() in ["button", "edit", "static"]:
                 cl, ct, cr, cb, cw, ch = get_rect(h)
-                assert cr <= n_r + 4, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en 960x600: {cr} > {n_r}"
+                assert cr <= n_r + edge_tol, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en 960x600: {cr} > {n_r}"
         print("[OK] Geometría 960x600 en Estándar: Sin desbordamientos horizontales.")
 
         # 2.6: Alternar a Perfil Touch
-        user32.SetWindowPos(hwnd_main2, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main2, 1200, 720)
         time.sleep(0.5)
 
         btn_touch_toggle = None
@@ -543,22 +500,23 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
         verify_list_columns(t_lists[0], "Touch")
         verify_filter_fields(hwnd_main2, "Touch", 48)
 
+        min_touch_h = min_px(48, scale_main)
         touch_active_ctrls = get_child_controls(hwnd_main2)
         for h, cls, txt in touch_active_ctrls:
             if cls.lower() in ["button", "edit"] and txt in ["Buscar", "Anterior", "Siguiente"]:
                 _, _, _, _, bw, bh = get_rect(h)
-                assert bh >= 48, f"Botón interactivo '{txt}' en Touch altura insuficiente: {bh}px < 48px"
-        print("[OK] Accesibilidad Touch: Botones interactivos cumplen altura >= 48px.")
+                assert bh >= min_touch_h, f"Botón interactivo '{txt}' en Touch altura insuficiente: {bh}px < {min_touch_h}px"
+        print("[OK] Accesibilidad Touch: Botones interactivos cumplen altura >= 48 lógicos.")
 
-        # Geometría Touch 960x600
-        user32.SetWindowPos(hwnd_main2, 0, 0, 0, 960, 600, SWP_NOMOVE | SWP_NOZORDER)
+        # Geometría Touch 960x600 lógicos
+        set_window_logical_size(hwnd_main2, 960, 600)
         time.sleep(0.5)
         tn_l, tn_t, tn_r, tn_b, tn_w, tn_h = get_rect(hwnd_main2)
         t_ctrls_960 = get_child_controls(hwnd_main2)
         for h, cls, txt in t_ctrls_960:
             if cls.lower() in ["button", "edit", "static"]:
                 cl, ct, cr, cb, cw, ch = get_rect(h)
-                assert cr <= tn_r + 4, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en Touch 960x600: {cr} > {tn_r}"
+                assert cr <= tn_r + edge_tol, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en Touch 960x600: {cr} > {tn_r}"
         print("[OK] Geometría 960x600 en Touch: Sin desbordamientos horizontales.")
 
         # Cerrar sesión 2
@@ -694,12 +652,15 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
         print(f"[OK] Directorio temporal aislado limpiado: {test_data_dir}")
 
 def main():
+    enable_per_monitor_dpi()
+    sys_dpi, _ = ensure_supported_system_dpi()
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     release_exe = os.path.join(repo_root, "build_release", "app_desktop.exe")
     debug_exe = os.path.join(repo_root, "build_debug", "app_desktop.exe")
 
     print("=================================================================")
     print("SUITE DE PRUEBAS AUTOMATIZADA: TAREA F2 (BITÁCORA DE AUDITORÍA)")
+    print(f"DPI sistema detectado: {format_dpi_info(sys_dpi)}")
     print("=================================================================")
 
     # 1. Ejecución en Release

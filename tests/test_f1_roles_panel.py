@@ -47,91 +47,43 @@ import shutil
 
 sys.stdout.reconfigure(encoding='utf-8', errors='replace')
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+from gui_dpi import (
+    user32,
+    gdi32,
+    WNDENUMPROC,
+    ensure_supported_system_dpi,
+    get_window_dpi,
+    get_window_scale,
+    format_dpi_info,
+    min_px,
+    max_px,
+    to_px,
+    set_window_logical_size,
+    get_list_item_rect,
+    select_list_row,
+    measure_text_extent,
+    get_client_size,
+    get_client_screen_rect,
+)
 
-class SIZE(ctypes.Structure):
-    _fields_ = [("cx", wintypes.LONG), ("cy", wintypes.LONG)]
-
-WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-user32.EnumWindows.restype = wintypes.BOOL
-user32.EnumChildWindows.argtypes = [wintypes.HWND, WNDENUMPROC, wintypes.LPARAM]
-user32.EnumChildWindows.restype = wintypes.BOOL
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.IsWindowVisible.argtypes = [wintypes.HWND]
-user32.IsWindowVisible.restype = wintypes.BOOL
 user32.IsWindowEnabled.argtypes = [wintypes.HWND]
 user32.IsWindowEnabled.restype = wintypes.BOOL
-user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-user32.GetWindowTextLengthW.restype = ctypes.c_int
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
-user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetClassNameW.restype = ctypes.c_int
-user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.SendMessageW.restype = wintypes.LPARAM
-user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.PostMessageW.restype = wintypes.BOOL
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetWindowRect.restype = wintypes.BOOL
-user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetClientRect.restype = wintypes.BOOL
-user32.SetWindowPos.argtypes = [wintypes.HWND, wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.UINT]
-user32.SetWindowPos.restype = wintypes.BOOL
 user32.GetParent.argtypes = [wintypes.HWND]
 user32.GetParent.restype = wintypes.HWND
-user32.GetDC.argtypes = [wintypes.HWND]
-user32.GetDC.restype = wintypes.HDC
 user32.GetWindowDC.argtypes = [wintypes.HWND]
 user32.GetWindowDC.restype = wintypes.HDC
-user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
-user32.ReleaseDC.restype = ctypes.c_int
 user32.PrintWindow.argtypes = [wintypes.HWND, wintypes.HDC, wintypes.UINT]
 user32.PrintWindow.restype = wintypes.BOOL
 user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.GetWindowLongW.restype = wintypes.LONG
 
-gdi32.GetTextExtentPoint32W.argtypes = [wintypes.HDC, wintypes.LPCWSTR, ctypes.c_int, ctypes.POINTER(SIZE)]
-gdi32.GetTextExtentPoint32W.restype = wintypes.BOOL
-gdi32.SelectObject.argtypes = [wintypes.HDC, wintypes.HGDIOBJ]
-gdi32.SelectObject.restype = wintypes.HGDIOBJ
 gdi32.GetPixel.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
 gdi32.GetPixel.restype = wintypes.COLORREF
-gdi32.CreateCompatibleDC.argtypes = [wintypes.HDC]
-gdi32.CreateCompatibleDC.restype = wintypes.HDC
-gdi32.DeleteDC.argtypes = [wintypes.HDC]
-gdi32.DeleteDC.restype = wintypes.BOOL
 gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
 gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
-gdi32.DeleteObject.argtypes = [wintypes.HGDIOBJ]
-gdi32.DeleteObject.restype = wintypes.BOOL
 
 user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
 user32.ClientToScreen.restype = wintypes.BOOL
-kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-kernel32.OpenProcess.restype = wintypes.HANDLE
-kernel32.VirtualAllocEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t, wintypes.DWORD, wintypes.DWORD]
-kernel32.VirtualAllocEx.restype = wintypes.LPVOID
-kernel32.VirtualFreeEx.argtypes = [wintypes.HANDLE, wintypes.LPVOID, ctypes.c_size_t, wintypes.DWORD]
-kernel32.VirtualFreeEx.restype = wintypes.BOOL
-kernel32.WriteProcessMemory.argtypes = [wintypes.HANDLE, wintypes.LPVOID, wintypes.LPCVOID, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
-kernel32.WriteProcessMemory.restype = wintypes.BOOL
-kernel32.ReadProcessMemory.argtypes = [wintypes.HANDLE, wintypes.LPCVOID, wintypes.LPVOID, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
-kernel32.ReadProcessMemory.restype = wintypes.BOOL
-kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-kernel32.CloseHandle.restype = wintypes.BOOL
-
-try:
-    user32.GetDpiForWindow.argtypes = [wintypes.HWND]
-    user32.GetDpiForWindow.restype = wintypes.UINT
-    HAS_GET_DPI = True
-except AttributeError:
-    HAS_GET_DPI = False
 
 GWL_STYLE = -16
 WS_HSCROLL = 0x00100000
@@ -229,21 +181,6 @@ def get_rect(hwnd):
     user32.GetWindowRect(hwnd, ctypes.byref(r))
     return r.left, r.top, r.right, r.bottom, (r.right - r.left), (r.bottom - r.top)
 
-def measure_text_extent(hwnd, text):
-    hdc = user32.GetDC(hwnd)
-    if not hdc:
-        return 0, 0
-    hfont = user32.SendMessageW(hwnd, WM_GETFONT, 0, 0)
-    old_font = 0
-    if hfont:
-        old_font = gdi32.SelectObject(hdc, hfont)
-    sz = SIZE()
-    gdi32.GetTextExtentPoint32W(hdc, text, len(text), ctypes.byref(sz))
-    if old_font:
-        gdi32.SelectObject(hdc, old_font)
-    user32.ReleaseDC(hwnd, hdc)
-    return sz.cx, sz.cy
-
 def set_text(hwnd, text):
     text_buf = ctypes.create_unicode_buffer(text)
     user32.SendMessageW(hwnd, WM_SETTEXT, 0, ctypes.addressof(text_buf))
@@ -269,81 +206,23 @@ def post_click_button(hwnd):
 
 def click_control_at(hwnd, x=None, y=None):
     _, _, _, _, w, h = get_rect(hwnd)
-    cx = (w // 2) if x is None else max(1, min(w - 2, x))
-    cy = (h // 2) if y is None else max(1, min(h - 2, y))
+    scale = get_window_scale(hwnd)
+    cx = (w // 2) if x is None else max(1, min(w - 2, to_px(x, scale)))
+    cy = (h // 2) if y is None else max(1, min(h - 2, to_px(y, scale)))
     lparam = (cy << 16) | (cx & 0xFFFF)
     user32.PostMessageW(hwnd, WM_LBUTTONDOWN, 1, lparam)
     time.sleep(0.05)
     user32.PostMessageW(hwnd, WM_LBUTTONUP, 0, lparam)
     time.sleep(0.25)
 
-def remote_get_item_rect(hwnd_list, index, code=LVIR_BOUNDS):
-    """LVM_GETITEMRECT entre procesos: el RECT debe vivir en la memoria de la app, no en la de la prueba."""
-    pid = get_window_pid(hwnd_list)
-    access = PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE | PROCESS_QUERY_INFORMATION
-    hproc = kernel32.OpenProcess(access, False, pid)
-    if not hproc:
-        raise AssertionError(f"LVM_GETITEMRECT: OpenProcess({pid}) falló (error {ctypes.get_last_error()})")
-    remote = None
-    try:
-        size = ctypes.sizeof(wintypes.RECT)
-        remote = kernel32.VirtualAllocEx(hproc, None, size, MEM_COMMIT_RESERVE, PAGE_READWRITE)
-        if not remote:
-            raise AssertionError(f"LVM_GETITEMRECT: VirtualAllocEx falló (error {ctypes.get_last_error()})")
-        rect_in = wintypes.RECT(code, 0, 0, 0)
-        written = ctypes.c_size_t(0)
-        if not kernel32.WriteProcessMemory(hproc, remote, ctypes.byref(rect_in), size, ctypes.byref(written)) or written.value != size:
-            raise AssertionError(f"LVM_GETITEMRECT: WriteProcessMemory falló (error {ctypes.get_last_error()}, escritos {written.value}/{size})")
-        ok = user32.SendMessageW(hwnd_list, LVM_GETITEMRECT, index, remote)
-        if not ok:
-            raise AssertionError(f"LVM_GETITEMRECT devolvió FALSE para el ítem {index}")
-        rect_out = wintypes.RECT()
-        read = ctypes.c_size_t(0)
-        if not kernel32.ReadProcessMemory(hproc, remote, ctypes.byref(rect_out), size, ctypes.byref(read)) or read.value != size:
-            raise AssertionError(f"LVM_GETITEMRECT: ReadProcessMemory falló (error {ctypes.get_last_error()}, leídos {read.value}/{size})")
-        return rect_out.left, rect_out.top, rect_out.right, rect_out.bottom
-    finally:
-        if remote:
-            if not kernel32.VirtualFreeEx(hproc, remote, 0, MEM_RELEASE):
-                print(f"  [AVISO] VirtualFreeEx falló (error {ctypes.get_last_error()}); memoria remota de 16 bytes sin liberar")
-        kernel32.CloseHandle(hproc)
+def remote_get_item_rect(hwnd_list, index):
+    return get_list_item_rect(hwnd_list, index)
 
 def select_list_item(hwnd_list, row_index):
     """Envía clic de ratón al centro de la fila indicada del SysListView32 (posición real vía LVM_GETITEMRECT)."""
-    left, top, right, bottom = remote_get_item_rect(hwnd_list, row_index)
-    x = left + min(40, max(1, (right - left) // 2))
-    y = (top + bottom) // 2
-    lparam = (y << 16) | (x & 0xFFFF)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONDOWN, 1, lparam)
-    time.sleep(0.05)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONUP, 0, lparam)
-    time.sleep(0.3)
+    select_list_row(hwnd_list, row_index, settle=0.3)
     sel = user32.SendMessageW(hwnd_list, LVM_GETNEXTITEM, -1, 0x0002)
     assert sel == row_index, f"El clic no seleccionó la fila {row_index} (seleccionada: {sel})"
-
-def get_client_size(hwnd):
-    r = wintypes.RECT()
-    assert user32.GetClientRect(hwnd, ctypes.byref(r)), "GetClientRect falló"
-    return r.right - r.left, r.bottom - r.top
-
-def get_client_screen_rect(hwnd):
-    rc = wintypes.RECT()
-    assert user32.GetClientRect(hwnd, ctypes.byref(rc)), "GetClientRect falló"
-    pt = wintypes.POINT(0, 0)
-    assert user32.ClientToScreen(hwnd, ctypes.byref(pt)), "ClientToScreen falló"
-    return pt.x, pt.y, pt.x + rc.right, pt.y + rc.bottom
-
-def get_window_dpi(hwnd):
-    if HAS_GET_DPI:
-        dpi = user32.GetDpiForWindow(hwnd)
-        if dpi > 0:
-            return dpi
-    hdc = user32.GetDC(hwnd)
-    if hdc:
-        dpi = gdi32.GetDeviceCaps(hdc, 88)
-        user32.ReleaseDC(hwnd, hdc)
-        return dpi
-    return 96
 
 def load_visible_permissions_from_db(db_path):
     con = sqlite3.connect(db_path)
@@ -432,14 +311,15 @@ def ensure_row_visible(h_scroll, h_row, label=""):
 
 def ensure_pair_boundary_visible(h_scroll, h_row_a, h_row_b, label=""):
     ensure_row_visible(h_scroll, h_row_a, label)
+    m3 = to_px(3, get_window_scale(h_scroll))
     for _ in range(200):
         _, _, _, ab, _, _ = get_rect(h_row_a)
         _, bt, _, _, _, _ = get_rect(h_row_b)
         _, s_top, _, s_bottom = get_client_screen_rect(h_scroll)
-        if ab - 3 >= s_top and bt + 3 <= s_bottom:
+        if ab - m3 >= s_top and bt + m3 <= s_bottom:
             time.sleep(0.08)
             return
-        cmd = SB_LINEDOWN if bt + 3 > s_bottom else SB_LINEUP
+        cmd = SB_LINEDOWN if bt + m3 > s_bottom else SB_LINEUP
         user32.SendMessageW(h_scroll, WM_VSCROLL, cmd, 0)
         time.sleep(0.02)
     raise AssertionError(f"No se pudo traer el separador '{label}' a la vista con WM_VSCROLL")
@@ -447,20 +327,24 @@ def ensure_pair_boundary_visible(h_scroll, h_row_a, h_row_b, label=""):
 def verify_knob_pixels(h_sw, expected_checked, label):
     """Lee píxeles del interruptor para verificar en qué lado está la perilla blanca."""
     _, _, _, _, sw_w, sw_h = get_rect(h_sw)
+    scale = get_window_scale(h_sw)
+    m4 = to_px(4, scale)
+    m2 = to_px(2, scale)
+    min_knob_px = max(10, round(10 * scale * scale))
     hdc = user32.GetDC(h_sw)
     assert hdc, f"GetDC falló para interruptor '{label}'"
     try:
         mid_x = sw_w // 2
         left_knob = 0
         right_knob = 0
-        for y in range(4, max(5, sw_h - 4)):
-            for x in range(4, max(5, mid_x - 2)):
+        for y in range(m4, max(m4 + 1, sw_h - m4)):
+            for x in range(m4, max(m4 + 1, mid_x - m2)):
                 v = gdi32.GetPixel(hdc, x, y)
                 if v != CLR_INVALID:
                     r, g, b = colorref_to_rgb(v)
                     if min(r, g, b) >= 242:
                         left_knob += 1
-            for x in range(mid_x + 2, max(mid_x + 3, sw_w - 4)):
+            for x in range(mid_x + m2, max(mid_x + m2 + 1, sw_w - m4)):
                 v = gdi32.GetPixel(hdc, x, y)
                 if v != CLR_INVALID:
                     r, g, b = colorref_to_rgb(v)
@@ -469,16 +353,16 @@ def verify_knob_pixels(h_sw, expected_checked, label):
     finally:
         user32.ReleaseDC(h_sw, hdc)
 
-    assert left_knob >= 10 or right_knob >= 10, (
+    assert left_knob >= min_knob_px or right_knob >= min_knob_px, (
         f"Perilla no detectada en interruptor '{label}' (izq={left_knob}px, der={right_knob}px, {sw_w}x{sw_h})"
     )
     if expected_checked:
-        assert right_knob > left_knob and right_knob >= 10, (
+        assert right_knob > left_knob and right_knob >= min_knob_px, (
             f"Interruptor '{label}' activado (BM_GETCHECK=1) pero perilla no está a la derecha "
             f"(izq={left_knob}px, der={right_knob}px)"
         )
     else:
-        assert left_knob > right_knob and left_knob >= 10, (
+        assert left_knob > right_knob and left_knob >= min_knob_px, (
             f"Interruptor '{label}' desactivado (BM_GETCHECK=0) pero perilla no está a la izquierda "
             f"(izq={left_knob}px, der={right_knob}px)"
         )
@@ -493,6 +377,11 @@ def verify_separator_pixels(hwnd_main, h_scroll, row_a, row_b):
     _, bt, _, _, _, _ = get_rect(row_b["h_row"])
     assert bt >= ab, f"Fila '{row_b['perm']['id']}' solapa verticalmente a '{row_a['perm']['id']}': {bt} < {ab}"
 
+    scale = get_window_scale(hwnd_main)
+    inset = to_px(12, scale)
+    pad_top = to_px(1, scale)
+    pad_bot = to_px(2, scale)
+
     hwnd_dc = user32.GetWindowDC(hwnd_main)
     assert hwnd_dc, "GetWindowDC falló al inspeccionar separador"
     mem_dc = gdi32.CreateCompatibleDC(hwnd_dc)
@@ -501,11 +390,11 @@ def verify_separator_pixels(hwnd_main, h_scroll, row_a, row_b):
     try:
         ok = user32.PrintWindow(hwnd_main, mem_dc, 2)
         assert ok, "PrintWindow falló al inspeccionar separador"
-        xs = [rl + 12, (rl + rr) // 2, rr - 12]
+        xs = [rl + inset, (rl + rr) // 2, rr - inset]
         xs = [x for x in xs if rl < x < rr]
         found_sep = False
         seen_samples = []
-        for y in range(ab - 1, bt + 2):
+        for y in range(ab - pad_top, bt + pad_bot):
             hits = 0
             row_cols = []
             for x in xs:
@@ -539,30 +428,34 @@ def verify_list_columns(hwnd_list, profile_name):
     hdr = user32.SendMessageW(hwnd_list, LVM_GETHEADER, 0, 0)
     assert hdr, f"LVM_GETHEADER no devolvió el encabezado de la lista en {profile_name}"
 
+    scale = get_window_scale(hwnd_list)
+    pad8 = min_px(8, scale)
+    max_slack = max_px(8, scale)
+
     col_widths = [user32.SendMessageW(hwnd_list, LVM_GETCOLUMNWIDTH, i, 0) for i in range(4)]
     titles = ["Nombre", "Descripción", "Sistema", "Permisos"]
     for i, title in enumerate(titles):
         hdr_ext, _ = measure_text_extent(hdr, title)
         assert hdr_ext > 0, f"No se pudo medir el encabezado '{title}' en {profile_name}"
-        assert col_widths[i] >= hdr_ext + 8, (
-            f"Encabezado '{title}' recortado: columna {col_widths[i]}px < {hdr_ext + 8}px en {profile_name}")
+        assert col_widths[i] >= hdr_ext + pad8, (
+            f"Encabezado '{title}' recortado: columna {col_widths[i]}px < {hdr_ext + pad8}px en {profile_name}")
 
     ext_cajero, _ = measure_text_extent(hwnd_list, "Cajero")
     ext_dueno, _ = measure_text_extent(hwnd_list, "Dueño")
     max_col0 = max(ext_cajero, ext_dueno)
-    assert col_widths[0] >= max_col0 + 8, f"Columna 0 ('Nombre') {col_widths[0]}px < {max_col0 + 8}px en {profile_name}"
+    assert col_widths[0] >= max_col0 + pad8, f"Columna 0 ('Nombre') {col_widths[0]}px < {max_col0 + pad8}px en {profile_name}"
 
     ext_si, _ = measure_text_extent(hwnd_list, "Sí")
-    assert col_widths[2] >= ext_si + 8, f"Columna 2 ('Sistema') {col_widths[2]}px < {ext_si + 8}px en {profile_name}"
+    assert col_widths[2] >= ext_si + pad8, f"Columna 2 ('Sistema') {col_widths[2]}px < {ext_si + pad8}px en {profile_name}"
 
     ext_num, _ = measure_text_extent(hwnd_list, "20")
-    assert col_widths[3] >= ext_num + 8, f"Columna 3 ('Permisos') {col_widths[3]}px < {ext_num + 8}px en {profile_name}"
+    assert col_widths[3] >= ext_num + pad8, f"Columna 3 ('Permisos') {col_widths[3]}px < {ext_num + pad8}px en {profile_name}"
 
     client_w, _ = get_client_size(hwnd_list)
     total = sum(col_widths)
     assert total <= client_w, f"Columnas ({total}px) exceden el área cliente ({client_w}px) en {profile_name}"
-    assert client_w - total <= 8, (
-        f"Espacio sobrante sin aprovechar: {client_w - total}px > 8px (columnas {total}px, cliente {client_w}px) en {profile_name}")
+    assert client_w - total <= max_slack, (
+        f"Espacio sobrante sin aprovechar: {client_w - total}px > {max_slack}px (columnas {total}px, cliente {client_w}px) en {profile_name}")
 
     print(f"  [{profile_name}] Columnas medidas: N={col_widths[0]}px, D={col_widths[1]}px, S={col_widths[2]}px, P={col_widths[3]}px "
           f"(cliente {client_w}px, holgura {client_w - total}px, sin WS_HSCROLL)")
@@ -598,9 +491,13 @@ def verify_permission_matrix(hwnd_main, db_perms, profile_name, check_pixels=Tru
         f"Encabezados de grupo incorrectos en {profile_name}: {found_sections} != {SIDEBAR_SECTIONS}"
     )
 
-    min_sw_w = 60 if profile_name == "Touch" else 44
-    min_sw_h = 32 if profile_name == "Touch" else 24
-    min_row_h = 68 if profile_name == "Touch" else 52
+    scale = get_window_scale(hwnd_main)
+    min_sw_w = min_px(60 if profile_name == "Touch" else 44, scale)
+    min_sw_h = min_px(32 if profile_name == "Touch" else 24, scale)
+    min_row_h = min_px(68 if profile_name == "Touch" else 52, scale)
+    v_tol = max_px(2, scale)
+    center_tol = 3.0 * scale
+    align_tol = max_px(2, scale)
 
     s_left, _, s_right, _ = get_client_screen_rect(h_scroll)
     right_edges = []
@@ -641,7 +538,7 @@ def verify_permission_matrix(hwnd_main, db_perms, profile_name, check_pixels=Tru
             lw, lh = measure_text_extent(r["h_title"], ln)
             assert tw >= lw, f"Título '{ln}' recortado horizontalmente en '{p['id']}': {tw}px < {lw}px"
         _, one_th = measure_text_extent(r["h_title"], title_lines[0])
-        assert th >= len(title_lines) * one_th - 2, (
+        assert th >= len(title_lines) * one_th - v_tol, (
             f"Título '{p['id']}' recortado verticalmente: {th}px < {len(title_lines) * one_th}px"
         )
 
@@ -650,16 +547,16 @@ def verify_permission_matrix(hwnd_main, db_perms, profile_name, check_pixels=Tru
             lw, lh = measure_text_extent(r["h_desc"], ln)
             assert dw >= lw, f"Descripción '{ln[:25]}' recortada horizontalmente en '{p['id']}': {dw}px < {lw}px"
         _, one_dh = measure_text_extent(r["h_desc"], desc_lines[0])
-        assert dh >= len(desc_lines) * one_dh - 2, (
+        assert dh >= len(desc_lines) * one_dh - v_tol, (
             f"Descripción '{p['id']}' recortada verticalmente: {dh}px < {len(desc_lines) * one_dh}px"
         )
 
-        # Centro vertical del interruptor a <= 3 px del centro de su fila
+        # Centro vertical del interruptor a <= 3 px lógicos del centro de su fila
         row_cy = (rt + rb) / 2.0
         sw_cy = (st + sb) / 2.0
-        assert abs(sw_cy - row_cy) <= 3.0, (
+        assert abs(sw_cy - row_cy) <= center_tol, (
             f"Interruptor '{p['id']}' descentrado verticalmente en {profile_name}: "
-            f"centro interruptor {sw_cy:.1f} vs fila {row_cy:.1f} (dif {abs(sw_cy - row_cy):.1f}px > 3px)"
+            f"centro interruptor {sw_cy:.1f} vs fila {row_cy:.1f} (dif {abs(sw_cy - row_cy):.1f}px > {center_tol:.1f}px)"
         )
 
         # Borde derecho dentro del área visible
@@ -676,9 +573,9 @@ def verify_permission_matrix(hwnd_main, db_perms, profile_name, check_pixels=Tru
             chk = user32.SendMessageW(r["h_sw"], BM_GETCHECK, 0, 0)
             verify_knob_pixels(r["h_sw"], chk == 1, f"{p['id']} ({profile_name})")
 
-    assert max(right_edges) - min(right_edges) <= 2, (
+    assert max(right_edges) - min(right_edges) <= align_tol, (
         f"Bordes derechos de interruptores desalineados en {profile_name}: "
-        f"min={min(right_edges)}, max={max(right_edges)} (dif={max(right_edges)-min(right_edges)}px > 2px)"
+        f"min={min(right_edges)}, max={max(right_edges)} (dif={max(right_edges)-min(right_edges)}px > {align_tol}px)"
     )
 
     # Separador horizontal por píxeles entre cada par consecutivo de permisos del mismo grupo
@@ -705,12 +602,19 @@ def ink_vertical_extent(h_edit, text):
     """Rango vertical (coordenadas de pantalla) de los píxeles de texto de un campo Edit."""
     l, t, r, b, w, h = get_rect(h_edit)
     tw, _ = measure_text_extent(h_edit, text)
-    assert 0 < tw < w - 16, f"Texto '{text}' ({tw}px) no cabe en el campo ({w}px) para medir centrado"
+    scale = get_window_scale(h_edit)
+    m16 = to_px(16, scale)
+    m12 = to_px(12, scale)
+    m8 = to_px(8, scale)
+    m4 = to_px(4, scale)
+    m3 = to_px(3, scale)
+    m2 = to_px(2, scale)
+    assert 0 < tw < w - m16, f"Texto '{text}' ({tw}px) no cabe en el campo ({w}px) para medir centrado"
     hdc = user32.GetDC(h_edit)
     assert hdc, "GetDC del campo falló"
     try:
         bg = None
-        for (x, y) in ((w - 4, h // 2), (w - 4, 2), (w - 4, h - 3)):
+        for (x, y) in ((w - m4, h // 2), (w - m4, m2), (w - m4, h - m3)):
             v = gdi32.GetPixel(hdc, x, y)
             if v != CLR_INVALID:
                 bg = v
@@ -718,7 +622,7 @@ def ink_vertical_extent(h_edit, text):
         assert bg is not None, "Sin píxel de fondo medible en el campo"
         first = last = None
         for y in range(h):
-            for x in range(0, min(w - 8, tw + 12)):
+            for x in range(0, min(w - m8, tw + m12)):
                 v = gdi32.GetPixel(hdc, x, y)
                 if v != CLR_INVALID and v != bg:
                     if first is None:
@@ -732,10 +636,15 @@ def ink_vertical_extent(h_edit, text):
 
 def verify_touch_roles_list_and_fields(hwnd_main, hwnd_list, texts=("Supervisor Táctil", "Prueba de centrado")):
     """Touch: filas de la lista >= 40 px; Nombre y Descripción editables y centrados verticalmente (tol. 3 px)."""
+    scale = get_window_scale(hwnd_main)
+    min_row_h = min_px(40, scale)
+    min_cont_h = min_px(48, scale)
+    center_tol = 3.0 * scale
+
     for row in (0, 1):
         _, top, _, bottom = remote_get_item_rect(hwnd_list, row)
-        assert bottom - top >= 40, f"Fila {row} de la lista de roles en Touch mide {bottom - top}px < 40px"
-    print("  [Touch] Filas de la lista de roles >= 40 px (LVM_GETITEMRECT).")
+        assert bottom - top >= min_row_h, f"Fila {row} de la lista de roles en Touch mide {bottom - top}px < {min_row_h}px"
+    print(f"  [Touch] Filas de la lista de roles >= {min_row_h} px (LVM_GETITEMRECT).")
 
     ctrls = get_child_controls(hwnd_main)
     btn_new = next((h for (h, cls, txt) in ctrls if cls.lower() == "button" and txt == "Nuevo rol"), None)
@@ -754,14 +663,14 @@ def verify_touch_roles_list_and_fields(hwnd_main, hwnd_list, texts=("Supervisor 
         container = user32.GetParent(h_edit)
         assert container, f"Campo {label} sin contenedor"
         _, ct, _, cb, _, ch_cont = get_rect(container)
-        assert ch_cont >= 48, f"Contenedor de {label} en Touch mide {ch_cont}px < 48px"
+        assert ch_cont >= min_cont_h, f"Contenedor de {label} en Touch mide {ch_cont}px < {min_cont_h}px"
         ink_top, ink_bottom = ink_vertical_extent(h_edit, text)
         ink_center = (ink_top + ink_bottom) / 2.0
         box_center = (ct + cb) / 2.0
-        assert abs(ink_center - box_center) <= 3, (
+        assert abs(ink_center - box_center) <= center_tol, (
             f"Texto de {label} no centrado verticalmente: centro de tinta {ink_center:.1f} vs contenedor {box_center:.1f} "
-            f"(diferencia {abs(ink_center - box_center):.1f}px > 3px)")
-    print("  [Touch] Nombre y Descripción editables y centrados verticalmente (tolerancia 3 px).")
+            f"(diferencia {abs(ink_center - box_center):.1f}px > {center_tol:.1f}px)")
+    print(f"  [Touch] Nombre y Descripción editables y centrados verticalmente (tolerancia {center_tol:.1f} px).")
 
 def verify_guardar_visible_without_scroll(hwnd_main):
     _, mt, _, mb, _, _ = get_rect(hwnd_main)
@@ -819,7 +728,7 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         print("[OK] Alta inicial completada y MainWindow abierta.")
 
         dpi1 = get_window_dpi(hwnd_main1)
-        print(f"[DPI] DPI detectado: {dpi1} ({int(round(dpi1/96.0*100))}%).")
+        print(f"[DPI] DPI detectado: {format_dpi_info(dpi1)}.")
 
         db_perms = load_visible_permissions_from_db(db_path)
         assert len(db_perms) == 20, f"Se esperaban 20 permisos visibles en SQLite, encontrados {len(db_perms)}"
@@ -956,8 +865,14 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         # CASO 3: Geometría Estricta, Columnas e Interruptores en Estándar y Touch
         # -------------------------------------------------------------
         print("\n--- CASO 3: Verificación Geométrica, Columnas e Interruptores (Estándar y Touch) ---")
-        user32.SetWindowPos(hwnd_main1, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main1, 1200, 720)
         time.sleep(0.5)
+        scale1 = get_window_scale(hwnd_main1)
+        pad10 = min_px(10, scale1)
+        min_std_btn_h = min_px(34, scale1)
+        min_touch_btn_h = min_px(48, scale1)
+        edge_tol = max_px(4, scale1)
+
         verify_list_columns(hwnd_role_list, "Estándar")
         verify_permission_matrix(hwnd_main1, db_perms, "Estándar", check_pixels=True)
         verify_guardar_visible_without_scroll(hwnd_main1)
@@ -972,11 +887,11 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
             bl, bt, br, bb, bw, bh_h = get_rect(bh)
             assert br <= main_r, f"Botón '{btxt}' excede el margen derecho de la ventana: {br} > {main_r}"
             tw, th = measure_text_extent(bh, btxt)
-            assert bw >= tw + 10, f"Botón '{btxt}' recortado horizontalmente: ancho {bw}px < texto {tw}px + 10"
-            assert bh_h >= 34, f"Botón '{btxt}' en Estándar altura insuficiente: {bh_h}px < 34px"
+            assert bw >= tw + pad10, f"Botón '{btxt}' recortado horizontalmente: ancho {bw}px < texto {tw}px + {pad10}"
+            assert bh_h >= min_std_btn_h, f"Botón '{btxt}' en Estándar altura insuficiente: {bh_h}px < {min_std_btn_h}px"
 
         # 3.2: Ventana Estrecha 960x600 en Estándar
-        user32.SetWindowPos(hwnd_main1, 0, 0, 0, 960, 600, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main1, 960, 600)
         time.sleep(0.5)
         verify_guardar_visible_without_scroll(hwnd_main1)
         verify_permission_matrix(hwnd_main1, db_perms, "Estándar", check_pixels=False)
@@ -985,11 +900,11 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         for h, cls, txt in ctrls_960:
             if cls.lower() in ["button", "edit", "static"]:
                 cl, ct, cr, cb, cw, ch = get_rect(h)
-                assert cr <= n_r + 4, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en 960x600: {cr} > {n_r}"
+                assert cr <= n_r + edge_tol, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en 960x600: {cr} > {n_r} + {edge_tol}"
         print("[OK] Geometría 960x600 en Estándar: Sin desbordamientos horizontales y Guardar visible.")
 
         # 3.3: Alternar a Perfil Touch
-        user32.SetWindowPos(hwnd_main1, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main1, 1200, 720)
         time.sleep(0.5)
 
         btn_touch_toggle = None
@@ -1034,10 +949,10 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert len(touch_action_btns) >= 4, f"No se encontraron los 4 botones en Touch (encontrados: {len(touch_action_btns)})"
         for bh, btxt in touch_action_btns:
             _, _, _, _, bw, bh_h = get_rect(bh)
-            assert bh_h >= 48, f"ERROR: Botón '{btxt}' en Touch tiene altura {bh_h}px < 48px obligatorio"
+            assert bh_h >= min_touch_btn_h, f"ERROR: Botón '{btxt}' en Touch tiene altura {bh_h}px < {min_touch_btn_h}px obligatorio"
 
         # 3.4: Ventana estrecha 960x600 en Touch
-        user32.SetWindowPos(hwnd_main1, 0, 0, 0, 960, 600, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main1, 960, 600)
         time.sleep(0.5)
         verify_guardar_visible_without_scroll(hwnd_main1)
         verify_permission_matrix(hwnd_main1, db_perms, "Touch", check_pixels=False)
@@ -1046,11 +961,11 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         for h, cls, txt in t_ctrls_960:
             if cls.lower() in ["button", "edit", "static"]:
                 cl, ct, cr, cb, cw, ch = get_rect(h)
-                assert cr <= tn_r + 4, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en Touch 960x600: {cr} > {tn_r}"
+                assert cr <= tn_r + edge_tol, f"Control {cls} ('{txt[:20]}') desborda horizontalmente en Touch 960x600: {cr} > {tn_r} + {edge_tol}"
         print("[OK] Geometría 960x600 en Touch: Controles contenidos sin recortes y Guardar visible.")
 
         # Regresar a perfil Estándar y tamaño normal para creación de rol
-        user32.SetWindowPos(hwnd_main1, 0, 0, 0, 1200, 720, SWP_NOMOVE | SWP_NOZORDER)
+        set_window_logical_size(hwnd_main1, 1200, 720)
         time.sleep(0.3)
         btn_touch_toggle2 = None
         for _ in range(20):
@@ -1286,12 +1201,13 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         print(f"[OK] Directorio temporal aislado limpiado: {test_data_dir}")
 
 def main():
+    dpi, _ = ensure_supported_system_dpi()
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     release_exe = os.path.join(repo_root, "build_release", "app_desktop.exe")
     debug_exe = os.path.join(repo_root, "build_debug", "app_desktop.exe")
 
     print("=================================================================")
-    print("SUITE DE PRUEBAS AUTOMATIZADA: TAREA F1 / F1b / F5 (ROLES Y PERMISOS)")
+    print(f"SUITE DE PRUEBAS AUTOMATIZADA: TAREA F1 / F1b / F5 (ROLES Y PERMISOS) [{format_dpi_info(dpi)}]")
     print("=================================================================")
 
     run_f1_test_for_binary(release_exe, repo_root, "RELEASE")

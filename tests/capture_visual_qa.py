@@ -28,8 +28,17 @@ import tempfile
 import shutil
 from PIL import Image
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
+from gui_dpi import (
+    user32,
+    gdi32,
+    enable_per_monitor_dpi,
+    ensure_supported_system_dpi,
+    get_window_scale,
+    format_dpi_info,
+    min_px,
+    to_px,
+    select_list_row,
+)
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
@@ -38,24 +47,17 @@ user32.EnumChildWindows.argtypes = [wintypes.HWND, WNDENUMPROC, wintypes.LPARAM]
 user32.EnumChildWindows.restype = wintypes.BOOL
 user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
 user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.IsWindowVisible.argtypes = [wintypes.HWND]
-user32.IsWindowVisible.restype = wintypes.BOOL
-user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-user32.GetWindowTextLengthW.restype = ctypes.c_int
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
-user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetClassNameW.restype = ctypes.c_int
-user32.SendMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.SendMessageW.restype = wintypes.LPARAM
-user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.PostMessageW.restype = wintypes.BOOL
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
 user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
 user32.ShowWindow.restype = wintypes.BOOL
-user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetWindowRect.restype = wintypes.BOOL
+user32.GetWindowDC.argtypes = [wintypes.HWND]
+user32.GetWindowDC.restype = wintypes.HDC
+gdi32.CreateCompatibleBitmap.argtypes = [wintypes.HDC, ctypes.c_int, ctypes.c_int]
+gdi32.CreateCompatibleBitmap.restype = wintypes.HBITMAP
+gdi32.GetDIBits.argtypes = [
+    wintypes.HDC, wintypes.HBITMAP, wintypes.UINT, wintypes.UINT,
+    ctypes.c_void_p, ctypes.c_void_p, wintypes.UINT,
+]
+gdi32.GetDIBits.restype = ctypes.c_int
 
 WM_SETTEXT = 0x000C
 WM_CLOSE = 0x0010
@@ -129,14 +131,8 @@ def post_click_button(hwnd):
     user32.PostMessageW(hwnd, BM_CLICK, 0, 0)
 
 def select_list_item(hwnd_list, row_index):
-    """Envía clic de ratón a la fila indicada del SysListView32."""
-    y = 35 + row_index * 22
-    x = 40
-    lparam = (y << 16) | (x & 0xFFFF)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONDOWN, 1, lparam)
-    time.sleep(0.05)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONUP, 0, lparam)
-    time.sleep(0.3)
+    """Envía clic de ratón a la fila indicada del SysListView32 usando LVM_GETITEMRECT."""
+    select_list_row(hwnd_list, row_index, settle=0.3)
 
 def capture_window(hwnd, output_path):
     user32.SetForegroundWindow(hwnd)
@@ -213,6 +209,8 @@ def seed_demo_catalog(db_path):
     con.close()
 
 def main():
+    enable_per_monitor_dpi()
+    sys_dpi, _ = ensure_supported_system_dpi()
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
     exe_path = os.path.join(repo_root, "build_release", "app_desktop.exe")
     work_dir = os.path.join(repo_root, "build_release")
@@ -225,7 +223,7 @@ def main():
     env["PATH"] = work_dir + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = temp_dir
 
-    print("=== INICIANDO CAPTURA DE PANTALLAS PARA QA VISUAL ===")
+    print(f"=== INICIANDO CAPTURA DE PANTALLAS PARA QA VISUAL ({format_dpi_info(sys_dpi)}) ===")
     proc = subprocess.Popen([exe_path], cwd=work_dir, env=env)
     time.sleep(1.5)
 
@@ -439,13 +437,14 @@ def main():
                     user32.GetWindowRect(hwnd_x, ctypes.byref(rc))
                     return rc.left, rc.top, rc.right, rc.bottom, rc.right - rc.left, rc.bottom - rc.top
 
+                scale_main = get_window_scale(hwnd_main)
                 cfg_ctrls = get_child_controls(hwnd_main)
                 combos = [h for (h, cls, txt) in cfg_ctrls if "combobox" in cls.lower() or txt == "comboBox"]
                 cb_profile = None
                 lbl_perf = next((h for (h, cls, txt) in cfg_ctrls if cls.lower() == "static" and "Perfil de Papel Térmico" in txt), None)
                 if lbl_perf is not None:
                     lbl_bottom = _qa_rect(lbl_perf)[3]
-                    below = [cb for cb in combos if _qa_rect(cb)[1] >= lbl_bottom - 4]
+                    below = [cb for cb in combos if _qa_rect(cb)[1] >= lbl_bottom - to_px(4, scale_main)]
                     if below:
                         cb_profile = min(below, key=lambda h: _qa_rect(h)[1])
 
@@ -455,7 +454,7 @@ def main():
                 user32.SetForegroundWindow(hwnd_main)
                 time.sleep(0.15)
                 _, _, _, _, cbp_w, cbp_h = _qa_rect(cb_profile)
-                lp_cb = ((cbp_h // 2) << 16) | (max(4, cbp_w - 12) & 0xFFFF)
+                lp_cb = ((cbp_h // 2) << 16) | (max(to_px(4, scale_main), cbp_w - to_px(12, scale_main)) & 0xFFFF)
                 user32.PostMessageW(cb_profile, 0x0201, 1, lp_cb) # WM_LBUTTONDOWN
                 time.sleep(0.05)
                 user32.PostMessageW(cb_profile, 0x0202, 0, lp_cb) # WM_LBUTTONUP
@@ -573,7 +572,8 @@ def main():
 
         btn_nuevo = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Nuevo ingrediente"), None)
         assert btn_nuevo is not None, "Botón Nuevo ingrediente no encontrado"
-        if _f7_btn_height(btn_nuevo) >= 48:
+        scale_f7 = get_window_scale(hwnd_main)
+        if _f7_btn_height(btn_nuevo) >= min_px(48, scale_f7):
             tbtn = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Touch" in t or "Estándar" in t), None)
             if tbtn:
                 _f7_click_btn(tbtn)

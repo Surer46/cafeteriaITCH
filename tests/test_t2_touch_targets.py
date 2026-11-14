@@ -26,81 +26,53 @@ import time
 
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-RELEASE_EXE = os.path.join(REPO_ROOT, "build_release", "app_desktop.exe")
-DEBUG_EXE = os.path.join(REPO_ROOT, "build_debug", "app_desktop.exe")
+from gui_dpi import (
+    REPO_ROOT,
+    RELEASE_EXE,
+    DEBUG_EXE,
+    user32,
+    WM_CLOSE,
+    WM_KEYDOWN,
+    WM_KEYUP,
+    WM_LBUTTONDOWN,
+    WM_LBUTTONUP,
+    GWL_STYLE,
+    WS_TABSTOP,
+    WS_VSCROLL,
+    ES_READONLY,
+    LVM_GETITEMCOUNT,
+    VK_ESCAPE,
+    SCROLLINFO,
+    enable_per_monitor_dpi,
+    ensure_supported_system_dpi,
+    get_window_dpi,
+    get_window_scale,
+    ensure_no_app_running,
+    send_msg,
+    get_text,
+    get_class,
+    get_rect,
+    get_client_size,
+    get_client_screen_rect,
+    set_client_logical_size,
+    find_windows_by_pid,
+    wait_for_window,
+    enum_children,
+    set_edit_text,
+    click_button,
+    post_click_button,
+    select_list_row,
+    get_list_item_rect,
+    rects_overlap,
+    measure_text_extent,
+    to_px,
+    click_sidebar_section,
+    click_subnav,
+)
+
 AUDIT_PATH = os.path.join(REPO_ROOT, "qa_visual", "touch_audit.txt")
 
-user32 = ctypes.WinDLL("user32", use_last_error=True)
-gdi32 = ctypes.WinDLL("gdi32", use_last_error=True)
-kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
 winspool = ctypes.WinDLL("winspool.drv", use_last_error=True)
-
-WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
-ULONG_PTR = ctypes.c_size_t
-MONITOR_DEFAULTTONEAREST = 2
-
-user32.EnumWindows.argtypes = [WNDENUMPROC, wintypes.LPARAM]
-user32.EnumWindows.restype = wintypes.BOOL
-user32.EnumChildWindows.argtypes = [wintypes.HWND, WNDENUMPROC, wintypes.LPARAM]
-user32.EnumChildWindows.restype = wintypes.BOOL
-user32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.DWORD)]
-user32.GetWindowThreadProcessId.restype = wintypes.DWORD
-user32.IsWindowVisible.argtypes = [wintypes.HWND]
-user32.IsWindowVisible.restype = wintypes.BOOL
-user32.IsWindowEnabled.argtypes = [wintypes.HWND]
-user32.IsWindowEnabled.restype = wintypes.BOOL
-user32.GetParent.argtypes = [wintypes.HWND]
-user32.GetParent.restype = wintypes.HWND
-user32.GetWindowRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetWindowRect.restype = wintypes.BOOL
-user32.GetClientRect.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.RECT)]
-user32.GetClientRect.restype = wintypes.BOOL
-user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
-user32.ClientToScreen.restype = wintypes.BOOL
-user32.MoveWindow.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.c_int, ctypes.c_int, ctypes.c_int, wintypes.BOOL]
-user32.MoveWindow.restype = wintypes.BOOL
-user32.GetWindowTextLengthW.argtypes = [wintypes.HWND]
-user32.GetWindowTextLengthW.restype = ctypes.c_int
-user32.GetWindowTextW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetWindowTextW.restype = ctypes.c_int
-user32.GetClassNameW.argtypes = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
-user32.GetClassNameW.restype = ctypes.c_int
-user32.GetWindowLongW.argtypes = [wintypes.HWND, ctypes.c_int]
-user32.GetWindowLongW.restype = ctypes.c_long
-user32.SendMessageTimeoutW.argtypes = [
-    wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM,
-    wintypes.UINT, wintypes.UINT, ctypes.POINTER(ULONG_PTR)
-]
-user32.SendMessageTimeoutW.restype = wintypes.LPARAM
-user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
-user32.PostMessageW.restype = wintypes.BOOL
-user32.GetDC.argtypes = [wintypes.HWND]
-user32.GetDC.restype = wintypes.HDC
-user32.ReleaseDC.argtypes = [wintypes.HWND, wintypes.HDC]
-user32.ReleaseDC.restype = ctypes.c_int
-user32.SetForegroundWindow.argtypes = [wintypes.HWND]
-user32.SetForegroundWindow.restype = wintypes.BOOL
-user32.GetFocus.argtypes = []
-user32.GetFocus.restype = wintypes.HWND
-user32.keybd_event.argtypes = [wintypes.BYTE, wintypes.BYTE, wintypes.DWORD, ULONG_PTR]
-user32.keybd_event.restype = None
-
-gdi32.GetDeviceCaps.argtypes = [wintypes.HDC, ctypes.c_int]
-gdi32.GetDeviceCaps.restype = ctypes.c_int
-
-kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
-kernel32.OpenProcess.restype = wintypes.HANDLE
-kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
-kernel32.CloseHandle.restype = wintypes.BOOL
-kernel32.VirtualAllocEx.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD, wintypes.DWORD]
-kernel32.VirtualAllocEx.restype = ctypes.c_void_p
-kernel32.VirtualFreeEx.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD]
-kernel32.VirtualFreeEx.restype = wintypes.BOOL
-kernel32.WriteProcessMemory.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
-kernel32.WriteProcessMemory.restype = wintypes.BOOL
-kernel32.ReadProcessMemory.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
-kernel32.ReadProcessMemory.restype = wintypes.BOOL
 
 winspool.EnumPrintersW.argtypes = [
     wintypes.DWORD, wintypes.LPWSTR, wintypes.DWORD, ctypes.c_void_p,
@@ -108,35 +80,45 @@ winspool.EnumPrintersW.argtypes = [
 ]
 winspool.EnumPrintersW.restype = wintypes.BOOL
 
-WM_CLOSE = 0x0010
-WM_SETTEXT = 0x000C
-WM_KEYDOWN = 0x0100
-WM_KEYUP = 0x0101
-BM_CLICK = 0x00F5
-WM_LBUTTONDOWN = 0x0201
-WM_LBUTTONUP = 0x0202
-GWL_STYLE = -16
-WS_TABSTOP = 0x00010000
-WS_VSCROLL = 0x00200000
-ES_READONLY = 0x0800
-SMTO_ABORTIFHUNG = 0x0002
-LVM_GETITEMCOUNT = 0x1004
-LVM_GETITEMRECT = 0x100E
-LVM_SETITEMSTATE = 0x102B
-LVIF_STATE = 0x0008
-LVIS_SELECTED = 0x0002
-LVIS_FOCUSED = 0x0001
-PROCESS_VM_OPERATION = 0x0008
-PROCESS_VM_READ = 0x0010
-PROCESS_VM_WRITE = 0x0020
-MEM_COMMIT = 0x1000
-MEM_RESERVE = 0x2000
-MEM_RELEASE = 0x8000
-PAGE_READWRITE = 0x04
-
-VK_RETURN = 0x0D
-VK_ESCAPE = 0x1B
-VK_DOWN = 0x28
+# Anchos logicos de icono (en unidades 96 DPI, perfil Tactil) para cada boton con Theme::setup_button_icon.
+# Margen aplicado por Theme::setup_button_icon en Tactil: FromDIP(10).
+BUTTON_ICON_LOGICAL_WIDTHS_BY_STATE = {
+    ("Configuración", "Estándar"): 20,
+    ("Bitácora", "Buscar"): 18,
+    ("Dialogo Historial", "Buscar"): 16,
+    ("Roles y permisos", "Guardar"): 18,
+}
+BUTTON_ICON_LOGICAL_WIDTHS = {
+    "Touch": 18,
+    "Estándar": 18,
+    "Estándar (Activa)": 20,
+    "Táctil": 20,
+    "Táctil (Activa)": 20,
+    "Punto de Venta": 20,
+    "Inventario": 20,
+    "Caja y Reportes": 20,
+    "BackOffice": 20,
+    "Buscar": 20,
+    "Agregar al Carrito": 22,
+    "Editar cantidad": 20,
+    "Editar nota": 20,
+    "Quitar línea": 20,
+    "Más acciones ▾": 20,
+    "Cobrar": 26,
+    "Cancelar pedido": 18,
+    "Abrir Turno de Caja": 18,
+    "Cerrar Turno de Caja": 18,
+    "Nuevo Usuario": 18,
+    "Cambiar Contraseña": 16,
+    "Ver Avatar": 16,
+    "Nuevo rol": 18,
+    "Eliminar": 18,
+    "Guardar Configuración": 18,
+    "Confirmar Venta": 20,
+    "Imprimir": 18,
+    "Reimprimir": 18,
+}
+TOUCH_ICON_MARGIN_LOGICAL = 10
 
 # Lista de excepciones registradas para hallazgos en archivos NO permitidos en T2.
 # Formato: (pantalla_o_estado, tipo, etiqueta) -> {"archivo": ..., "motivo": ...}
@@ -231,203 +213,8 @@ for _perm_label in (
     }
 
 
-class LVITEMW(ctypes.Structure):
-    _fields_ = [
-        ("mask", wintypes.UINT),
-        ("iItem", ctypes.c_int),
-        ("iSubItem", ctypes.c_int),
-        ("state", wintypes.UINT),
-        ("stateMask", wintypes.UINT),
-        ("pszText", wintypes.LPWSTR),
-        ("cchTextMax", ctypes.c_int),
-        ("iImage", ctypes.c_int),
-        ("lParam", wintypes.LPARAM),
-    ]
-
-
-class SCROLLINFO(ctypes.Structure):
-    _fields_ = [
-        ("cbSize", wintypes.UINT),
-        ("fMask", wintypes.UINT),
-        ("nMin", ctypes.c_int),
-        ("nMax", ctypes.c_int),
-        ("nPage", wintypes.UINT),
-        ("nPos", ctypes.c_int),
-        ("nTrackPos", ctypes.c_int),
-    ]
-
-
 user32.GetScrollInfo.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.POINTER(SCROLLINFO)]
 user32.GetScrollInfo.restype = wintypes.BOOL
-
-
-def enable_per_monitor_dpi():
-    try:
-        user32.SetProcessDpiAwarenessContext.argtypes = [ctypes.c_void_p]
-        user32.SetProcessDpiAwarenessContext.restype = wintypes.BOOL
-        if not user32.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4)):
-            user32.SetProcessDPIAware()
-    except Exception:
-        user32.SetProcessDPIAware()
-
-
-def get_system_dpi():
-    hdc = user32.GetDC(None)
-    dpi = gdi32.GetDeviceCaps(hdc, 88)
-    user32.ReleaseDC(None, hdc)
-    return dpi if dpi > 0 else 96
-
-
-def get_window_dpi(hwnd):
-    if hasattr(user32, "GetDpiForWindow"):
-        user32.GetDpiForWindow.argtypes = [wintypes.HWND]
-        user32.GetDpiForWindow.restype = wintypes.UINT
-        dpi = user32.GetDpiForWindow(hwnd)
-        if dpi > 0:
-            return dpi
-    return get_system_dpi()
-
-
-def ensure_no_app_running():
-    out = subprocess.check_output(
-        ["tasklist", "/FI", "IMAGENAME eq app_desktop.exe"],
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    if "app_desktop.exe" in out.lower():
-        raise RuntimeError(f"Ya existe un proceso app_desktop.exe en ejecucion:\n{out}")
-
-
-def send_msg(hwnd, msg, wparam=0, lparam=0, timeout_ms=2500):
-    res = ULONG_PTR()
-    ok = user32.SendMessageTimeoutW(
-        hwnd, msg, wintypes.WPARAM(wparam), wintypes.LPARAM(lparam),
-        SMTO_ABORTIFHUNG, timeout_ms, ctypes.byref(res)
-    )
-    if not ok:
-        raise TimeoutError(f"SendMessageTimeoutW fallo en hwnd={hwnd:#x}, msg={msg:#x}")
-    return res.value
-
-
-def get_text(hwnd):
-    ln = user32.GetWindowTextLengthW(hwnd)
-    if ln <= 0:
-        return ""
-    buf = ctypes.create_unicode_buffer(ln + 2)
-    user32.GetWindowTextW(hwnd, buf, ln + 2)
-    return buf.value
-
-
-def get_class(hwnd):
-    buf = ctypes.create_unicode_buffer(256)
-    user32.GetClassNameW(hwnd, buf, 256)
-    return buf.value
-
-
-def get_rect(hwnd):
-    rc = wintypes.RECT()
-    user32.GetWindowRect(hwnd, ctypes.byref(rc))
-    return (rc.left, rc.top, rc.right, rc.bottom)
-
-
-def get_client_screen_rect(hwnd):
-    rc = wintypes.RECT()
-    user32.GetClientRect(hwnd, ctypes.byref(rc))
-    pt1 = wintypes.POINT(rc.left, rc.top)
-    pt2 = wintypes.POINT(rc.right, rc.bottom)
-    user32.ClientToScreen(hwnd, ctypes.byref(pt1))
-    user32.ClientToScreen(hwnd, ctypes.byref(pt2))
-    return (pt1.x, pt1.y, pt2.x, pt2.y)
-
-
-def find_windows_by_pid(pid, title_sub="", exclude=()):
-    found = []
-
-    @WNDENUMPROC
-    def cb(hwnd, _lp):
-        if not user32.IsWindowVisible(hwnd):
-            return True
-        wpid = wintypes.DWORD()
-        user32.GetWindowThreadProcessId(hwnd, ctypes.byref(wpid))
-        if wpid.value == pid:
-            title = get_text(hwnd)
-            if title_sub and title_sub not in title:
-                return True
-            if any(ex in title for ex in exclude):
-                return True
-            found.append((hwnd, title))
-        return True
-
-    user32.EnumWindows(cb, 0)
-    return found
-
-
-def wait_for_window(pid, title_sub="", timeout=12.0, exclude=()):
-    t0 = time.time()
-    while time.time() - t0 < timeout:
-        wins = find_windows_by_pid(pid, title_sub, exclude)
-        if wins:
-            return wins[0]
-        time.sleep(0.15)
-    all_wins = find_windows_by_pid(pid, "", ())
-    raise AssertionError(f"Timeout esperando ventana '{title_sub}' (PID={pid}); visibles={all_wins}")
-
-
-def enum_children(hwnd_parent):
-    out = []
-
-    @WNDENUMPROC
-    def cb(hwnd, _lp):
-        out.append((hwnd, get_class(hwnd), get_text(hwnd)))
-        return True
-
-    user32.EnumChildWindows(hwnd_parent, cb, 0)
-    return out
-
-
-def set_edit_text(hwnd_edit, text):
-    buf = ctypes.create_unicode_buffer(text)
-    send_msg(hwnd_edit, WM_SETTEXT, 0, ctypes.addressof(buf))
-
-
-def click_button(hwnd_btn):
-    send_msg(hwnd_btn, BM_CLICK, 0, 0)
-
-
-def post_click_button(hwnd_btn):
-    user32.PostMessageW(hwnd_btn, BM_CLICK, 0, 0)
-
-
-def select_list_row(hwnd_list, index):
-    left, top, right, bottom = get_list_item_rect(hwnd_list, index)
-    x = left + min(40, max(1, (right - left) // 2))
-    y = (top + bottom) // 2
-    lparam = (y << 16) | (x & 0xFFFF)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONDOWN, 1, lparam)
-    time.sleep(0.05)
-    user32.PostMessageW(hwnd_list, WM_LBUTTONUP, 0, lparam)
-    time.sleep(0.35)
-
-
-def get_list_item_rect(hwnd_list, index):
-    pid = wintypes.DWORD()
-    user32.GetWindowThreadProcessId(hwnd_list, ctypes.byref(pid))
-    hproc = kernel32.OpenProcess(PROCESS_VM_OPERATION | PROCESS_VM_READ | PROCESS_VM_WRITE, False, pid.value)
-    try:
-        rem_rc = kernel32.VirtualAllocEx(hproc, None, ctypes.sizeof(wintypes.RECT), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE)
-        try:
-            rc = wintypes.RECT(0, 0, 0, 0)
-            written = ctypes.c_size_t()
-            kernel32.WriteProcessMemory(hproc, rem_rc, ctypes.byref(rc), ctypes.sizeof(rc), ctypes.byref(written))
-            send_msg(hwnd_list, LVM_GETITEMRECT, index, rem_rc)
-            read = ctypes.c_size_t()
-            kernel32.ReadProcessMemory(hproc, rem_rc, ctypes.byref(rc), ctypes.sizeof(rc), ctypes.byref(read))
-            return (rc.left, rc.top, rc.right, rc.bottom)
-        finally:
-            kernel32.VirtualFreeEx(hproc, rem_rc, 0, MEM_RELEASE)
-    finally:
-        kernel32.CloseHandle(hproc)
 
 
 def count_installed_printers():
@@ -442,28 +229,29 @@ def count_installed_printers():
     return int(count.value)
 
 
-def rects_overlap(r1, r2):
-    ix1 = max(r1[0], r2[0])
-    iy1 = max(r1[1], r2[1])
-    ix2 = min(r1[2], r2[2])
-    iy2 = min(r1[3], r2[3])
-    return (ix2 - ix1) > 1 and (iy2 - iy1) > 1
+def _button_icon_extra_px(state_name, clean_label, scale):
+    icon_log = BUTTON_ICON_LOGICAL_WIDTHS_BY_STATE.get(
+        (state_name, clean_label),
+        BUTTON_ICON_LOGICAL_WIDTHS.get(clean_label, 0),
+    )
+    if icon_log <= 0:
+        return 0
+    return to_px(icon_log, scale) + to_px(TOUCH_ICON_MARGIN_LOGICAL, scale)
 
 
-def click_sidebar_section(hwnd_main, section_label):
-    btns = [(h, t) for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h)]
-    btn = next((h for (h, t) in btns if t == section_label), None)
-    assert btn is not None, f"Boton sidebar '{section_label}' no encontrado"
-    click_button(btn)
-    time.sleep(0.45)
-
-
-def click_subnav(hwnd_main, sub_label):
-    btns = [(h, t) for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h)]
-    btn = next((h for (h, t) in btns if t == sub_label), None)
-    assert btn is not None, f"Boton subnavegacion '{sub_label}' no encontrado"
-    click_button(btn)
-    time.sleep(0.45)
+def _measure_button_fit(hwnd_btn, raw_label, state_name, scale):
+    cw, _ch = get_client_size(hwnd_btn)
+    lines = [ln.strip() for ln in raw_label.splitlines() if ln.strip()]
+    text_w = max((measure_text_extent(hwnd_btn, ln)[0] for ln in lines), default=0)
+    icon_extra = _button_icon_extra_px(state_name, raw_label.strip(), scale)
+    required_w = text_w + icon_extra
+    return {
+        "fits": required_w <= cw,
+        "text_w": text_w,
+        "icon_extra": icon_extra,
+        "required_w": required_w,
+        "client_w": cw,
+    }
 
 
 def audit_window_touch_targets(hwnd_root, state_name, scale):
@@ -524,6 +312,7 @@ def audit_window_touch_targets(hwnd_root, state_name, scale):
         w_log = (rc[2] - rc[0]) / scale
         h_log = (rc[3] - rc[1]) / scale
         small = (w_log < 48.0 - 0.5) or (h_log < 48.0 - 0.5)
+        fit_info = _measure_button_fit(target_h, t, state_name, scale) if kind == "button" and t.strip() else None
         items.append({
             "hwnd": target_h,
             "parent": user32.GetParent(target_h),
@@ -534,6 +323,7 @@ def audit_window_touch_targets(hwnd_root, state_name, scale):
             "h_log": round(h_log, 1),
             "small": small,
             "overlap": False,
+            "fit": fit_info,
         })
 
     # Solapamientos entre pares hermanos dentro de los controles auditados
@@ -573,7 +363,7 @@ def audit_combo_dropdown(pid, hwnd_main, hwnd_combo, combo_label, expected_items
     rc = get_rect(hwnd_combo)
     cw = rc[2] - rc[0]
     ch = rc[3] - rc[1]
-    lp = ((ch // 2) << 16) | (max(4, cw - 12) & 0xFFFF)
+    lp = ((ch // 2) << 16) | (max(to_px(4, scale), cw - to_px(12, scale)) & 0xFFFF)
     user32.PostMessageW(hwnd_combo, WM_LBUTTONDOWN, 1, lp)
     time.sleep(0.05)
     user32.PostMessageW(hwnd_combo, WM_LBUTTONUP, 0, lp)
@@ -643,8 +433,16 @@ def run_suite(label, exe_path, write_audit=False):
     audit_lines = []
     summary = []
     violations = {}  # (state, kind, label) -> details dict
+    text_fit_failures = []
 
     def record_audit(state_name, items, overlaps, list_rows, popup_checks=None):
+        fit_bad = [it for it in items if it.get("fit") and not it["fit"]["fits"]]
+        for it in fit_bad:
+            f = it["fit"]
+            text_fit_failures.append(
+                f"{state_name} | button | '{it['label']}' | "
+                f"text_w={f['text_w']} + icon_margin={f['icon_extra']} = {f['required_w']} > client_w={f['client_w']}"
+            )
         flagged_cnt = (
             sum(1 for it in items if it["small"] or it["overlap"])
             + sum(1 for lr in list_rows if lr["small_row"])
@@ -750,12 +548,8 @@ def run_suite(label, exe_path, write_audit=False):
         time.sleep(0.45)
 
         dpi = get_window_dpi(hwnd_main)
-        scale = dpi / 96.0
-        w_rc = get_rect(hwnd_main)
-        c_rc = get_client_screen_rect(hwnd_main)
-        frame_w = (w_rc[2] - w_rc[0]) - (c_rc[2] - c_rc[0])
-        frame_h = (w_rc[3] - w_rc[1]) - (c_rc[3] - c_rc[1])
-        user32.MoveWindow(hwnd_main, 16, 16, round(1200 * scale) + frame_w, round(720 * scale) + frame_h, True)
+        scale = get_window_scale(hwnd_main)
+        set_client_logical_size(hwnd_main, 1200, 720, x_log=16, y_log=16)
         time.sleep(0.5)
 
         audit_lines.append(f"DPI={dpi} escala={scale:.2f} (1200x720 logicos, perfil Tactil)")
@@ -923,6 +717,10 @@ def run_suite(label, exe_path, write_audit=False):
                 measured = violations.get(k, "NO_REPRODUCIDA")
                 print(f"  - {k[0]} | {k[1]} | {k[2]} | medido={measured} | archivo={meta['archivo']} | {meta['motivo']}")
 
+        assert not text_fit_failures, (
+            f"[{label}] Botones cuyo texto + icono + margen no cabe en su area cliente:\n"
+            + "\n".join(f"  - {line}" for line in text_fit_failures)
+        )
         assert not unexpected, (
             f"[{label}] Se encontraron objetivos fuera de la lista de excepciones:\n"
             + "\n".join(f"  - {k}: {v}" for k, v in sorted(unexpected.items()))
@@ -950,8 +748,8 @@ def run_suite(label, exe_path, write_audit=False):
 
 def main():
     enable_per_monitor_dpi()
-    sys_dpi = get_system_dpi()
-    print(f"DPI sistema detectado: {sys_dpi} (escala={sys_dpi/96.0:.2f})")
+    sys_dpi, sys_scale = ensure_supported_system_dpi()
+    print(f"DPI sistema detectado: {sys_dpi} (escala={sys_scale:.2f})")
 
     run_suite("Release", RELEASE_EXE, write_audit=True)
     run_suite("Debug", DEBUG_EXE, write_audit=False)
