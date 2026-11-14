@@ -7,6 +7,14 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #endif
+#include <atomic>
+#include <cstdlib>
+#include <fstream>
+#include <iterator>
+#include <vector>
+#include "app/crypto/password_hasher.hpp"
+#include "app/domain/clock.hpp"
+#include "app/services/identifiers.hpp"
 #include "app/storage/migration_runner.hpp"
 
 namespace app::services {
@@ -83,6 +91,16 @@ void remove_with_sidecars(const fs::path& p) {
     fs::remove(fs::path(p.u8string() + "-shm"), ec);
 }
 
+struct OperationGuard {
+    std::atomic<bool>& flag;
+    bool acquired;
+    explicit OperationGuard(std::atomic<bool>& f) : flag(f), acquired(!f.exchange(true)) {}
+    ~OperationGuard() { if (acquired) flag.store(false); }
+    OperationGuard(const OperationGuard&) = delete;
+    OperationGuard& operator=(const OperationGuard&) = delete;
+};
+
+
 } // namespace
 
 SqliteBackupService::SqliteBackupService(
@@ -96,9 +114,6 @@ SqliteBackupService::SqliteBackupService(
     data_dir_(std::move(data_dir)),
     migrations_dir_(std::move(migrations_dir)),
     on_restored_(std::move(on_restored)) {
-    dev_config_.server_url = "https://backup.cafeteria-itch.edu.mx/api/v1";
-    dev_config_.retention_days = "30";
-    dev_config_.is_tls_enabled = true;
 }
 
 bool SqliteBackupService::has_permission(const char* key) const {
@@ -203,6 +218,12 @@ contracts::OperationResult SqliteBackupService::trigger_local_backup(const std::
     if (destination_path.empty()) {
         return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "Ruta de destino inválida");
     }
+    OperationGuard op_guard(operation_in_progress_);
+    if (!op_guard.acquired) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::Conflict,
+            "Hay un respaldo, una restauración o una limpieza en curso. Intente de nuevo en unos momentos.");
+    }
     fs::path dest = fs::u8path(destination_path);
     auto res = create_verified_snapshot(dest);
     if (!res.is_success()) {
@@ -212,6 +233,8 @@ contracts::OperationResult SqliteBackupService::trigger_local_backup(const std::
     }
     auto st = write_state("EXITOSA", "", true);
     if (!st.is_success()) return st;
+    // Registro de lo que la aplicación creó (si falla, el respaldo simplemente no será candidato a limpieza)
+    register_backup_file("LOCAL", dest);
     account_service_->record_audit_event("BACKUP_LOCAL", "Respaldo local creado y verificado: " + name_of(dest));
     return contracts::OperationResult::ok();
 }
@@ -373,6 +396,9 @@ contracts::Result<contracts::RestoreResultDto> SqliteBackupService::restore_impl
         }
     }
 
+    // La base restaurada trae su propio registro: se vuelve a registrar el respaldo previo en ella.
+    register_backup_file("PRE_RESTORE", pre_path);
+
     // Auditoría en la base restaurada, antes de cerrar la sesión.
     auto audit = account_service_->record_audit_event(
         "BACKUP_RESTORED",
@@ -399,6 +425,11 @@ contracts::Result<contracts::RestoreResultDto> SqliteBackupService::restore_from
     if (path.empty()) {
         return R::fail(contracts::ErrorCode::InvalidInput, "Ruta de respaldo inválida");
     }
+    OperationGuard op_guard(operation_in_progress_);
+    if (!op_guard.acquired) {
+        return R::fail(contracts::ErrorCode::Conflict,
+                       "Hay un respaldo, una restauración o una limpieza en curso. Intente de nuevo en unos momentos.");
+    }
     fs::path src = fs::u8path(path);
     auto res = restore_impl(src, name_of(src));
     if (!res.is_success()) {
@@ -407,16 +438,354 @@ contracts::Result<contracts::RestoreResultDto> SqliteBackupService::restore_from
     return res;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Registro y limpieza de respaldos locales
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+
+struct FileFingerprint {
+    std::int64_t size{0};
+    std::string sha256;
+};
+
+// Tamaño y SHA-256 de un archivo regular. false si no existe, no es regular o no se puede leer.
+bool fingerprint_file(const fs::path& p, FileFingerprint& out) {
+    std::error_code ec;
+    if (!fs::is_regular_file(p, ec)) return false;
+    std::ifstream in(p, std::ios::binary);
+    if (!in) return false;
+    std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+    out.size = static_cast<std::int64_t>(bytes.size());
+    out.sha256 = crypto::PasswordHasher::to_hex(crypto::PasswordHasher::sha256(bytes.data(), bytes.size()));
+    return true;
+}
+
+struct RegisteredBackup {
+    std::string id;
+    std::string kind;
+    std::string path;
+    std::int64_t size_bytes{0};
+    std::string sha256;
+    std::string created_at;
+    std::string created_at_utc;
+};
+
+// El archivo en la ruta registrada sigue siendo el mismo que se registró.
+bool matches_registration(const RegisteredBackup& r) {
+    FileFingerprint fp;
+    if (!fingerprint_file(fs::u8path(r.path), fp)) return false;
+    return fp.size == r.size_bytes && fp.sha256 == r.sha256;
+}
+
+contracts::BackupCleanupItemDto to_item(const RegisteredBackup& r) {
+    contracts::BackupCleanupItemDto item;
+    item.path = r.path;
+    item.kind = r.kind;
+    item.created_at = r.created_at;
+    item.size_bytes = r.size_bytes;
+    return item;
+}
+
+// Instante UTC (mismo formato que created_at_utc) de hace `days` días.
+std::string utc_cutoff(int days) {
+    auto tp = std::chrono::system_clock::now() - std::chrono::hours(24LL * days);
+    return domain::timestamp_from(tp).utc;
+}
+
+std::string trim_text(const std::string& s) {
+    const char* ws = " \t\r\n";
+    const auto first = s.find_first_not_of(ws);
+    if (first == std::string::npos) return "";
+    return s.substr(first, s.find_last_not_of(ws) - first + 1);
+}
+
+// Devuelve un mensaje de error en lenguaje llano o cadena vacía si la configuración es válida.
+std::string validate_server_config(const contracts::BackupServerConfigDto& c) {
+    const std::string url = trim_text(c.server_url);
+    const std::string days = trim_text(c.retention_days);
+    if (url.empty()) {
+        if (!days.empty() && days.find_first_not_of("0123456789") != std::string::npos) {
+            return "Los días de retención deben ser un número entero";
+        }
+        return "";
+    }
+    if (url.size() > 2048) return "La dirección del servidor es demasiado larga";
+    for (unsigned char ch : url) {
+        if (ch <= 0x20 || ch == 0x7F || ch == '\\') return "La dirección del servidor contiene caracteres no permitidos";
+    }
+    std::string rest;
+    if (url.compare(0, 8, "https://") == 0) {
+        rest = url.substr(8);
+    } else if (url.compare(0, 7, "http://") == 0) {
+        if (c.is_tls_enabled) return "Con TLS activado la dirección debe empezar con https://";
+        rest = url.substr(7);
+    } else {
+        return "La dirección debe empezar con https:// (o http:// si se desactiva TLS)";
+    }
+    if (url.find('?') != std::string::npos || url.find('#') != std::string::npos) {
+        return "La dirección no puede incluir parámetros (?) ni fragmentos (#)";
+    }
+    const auto slash = rest.find('/');
+    const std::string authority = rest.substr(0, slash);
+    if (authority.empty()) return "Falta el nombre del servidor en la dirección";
+    if (authority.find('@') != std::string::npos) {
+        return "La dirección no puede incluir usuario ni contraseña; las credenciales no se guardan aquí";
+    }
+    if (days.empty() || days.size() > 4 || days.find_first_not_of("0123456789") != std::string::npos) {
+        return "Los días de retención deben ser un número entero entre 1 y 3650";
+    }
+    const int d = std::atoi(days.c_str());
+    if (d < 1 || d > 3650) return "Los días de retención deben estar entre 1 y 3650";
+    return "";
+}
+
+} // namespace
+
+contracts::OperationResult SqliteBackupService::register_backup_file(const char* kind, const fs::path& path) {
+    std::error_code ec;
+    fs::path abs = fs::absolute(path, ec);
+    if (ec) abs = path;
+    abs = abs.lexically_normal();
+    FileFingerprint fp;
+    if (!fingerprint_file(abs, fp)) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::StorageFailure, "No se pudo leer el respaldo para registrarlo");
+    }
+    const std::string path_text = abs.u8string();
+    const auto ts = domain::now();
+
+    {
+        auto prep = db_.prepare("UPDATE backup_files SET status = 'SUPERSEDED', status_at = ? WHERE path = ? AND status = 'ACTIVE';");
+        if (!prep.is_success()) return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, ts.local);
+        stmt.bind_text(2, path_text);
+        auto step = stmt.step();
+        if (!step.is_success()) return contracts::OperationResult::fail(step.error_code(), step.error_message());
+    }
+    auto prep = db_.prepare(
+        "INSERT INTO backup_files (id, kind, path, size_bytes, sha256, created_at, created_at_utc) VALUES (?, ?, ?, ?, ?, ?, ?);");
+    if (!prep.is_success()) return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
+    auto stmt = std::move(prep.value());
+    stmt.bind_text(1, generate_id("bkf"));
+    stmt.bind_text(2, kind);
+    stmt.bind_text(3, path_text);
+    stmt.bind_int64(4, fp.size);
+    stmt.bind_text(5, fp.sha256);
+    stmt.bind_text(6, ts.local);
+    stmt.bind_text(7, ts.utc);
+    auto step = stmt.step();
+    if (!step.is_success()) return contracts::OperationResult::fail(step.error_code(), step.error_message());
+    return contracts::OperationResult::ok();
+}
+
+contracts::Result<contracts::BackupRetentionPolicyDto> SqliteBackupService::get_retention_policy() {
+    using R = contracts::Result<contracts::BackupRetentionPolicyDto>;
+    if (!has_permission("backup.manage")) {
+        return R::fail(contracts::ErrorCode::Forbidden, "Operación denegada: falta de permisos (backup.manage)");
+    }
+    auto prep = db_.prepare("SELECT keep_last, keep_days FROM backup_state WHERE id = 1;");
+    if (!prep.is_success()) return R::fail(prep.error_code(), prep.error_message());
+    auto stmt = std::move(prep.value());
+    auto step = stmt.step();
+    if (!step.is_success()) return R::fail(step.error_code(), step.error_message());
+    contracts::BackupRetentionPolicyDto dto;
+    if (step.value()) {
+        dto.keep_last = static_cast<int>(stmt.get_int64(0));
+        dto.keep_days = static_cast<int>(stmt.get_int64(1));
+    }
+    return R::ok(dto);
+}
+
+contracts::OperationResult SqliteBackupService::set_retention_policy(const contracts::BackupRetentionPolicyDto& policy) {
+    if (!has_permission("backup.manage")) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::Forbidden, "Operación denegada: falta de permisos (backup.manage)");
+    }
+    if (policy.keep_last < 1 || policy.keep_last > 1000) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "La cantidad de respaldos a conservar debe estar entre 1 y 1000");
+    }
+    if (policy.keep_days < 0 || policy.keep_days > 3650) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "Los días a conservar deben estar entre 0 y 3650");
+    }
+    auto prep = db_.prepare("UPDATE backup_state SET keep_last = ?, keep_days = ? WHERE id = 1;");
+    if (!prep.is_success()) return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
+    auto stmt = std::move(prep.value());
+    stmt.bind_int64(1, policy.keep_last);
+    stmt.bind_int64(2, policy.keep_days);
+    auto step = stmt.step();
+    if (!step.is_success()) return contracts::OperationResult::fail(step.error_code(), step.error_message());
+    account_service_->record_audit_event(
+        "BACKUP_RETENTION_POLICY",
+        "Política de limpieza de respaldos: conservar los últimos " + std::to_string(policy.keep_last) +
+            " de cada tipo y todo lo de los últimos " + std::to_string(policy.keep_days) + " días");
+    return contracts::OperationResult::ok();
+}
+
+contracts::Result<contracts::BackupCleanupResultDto> SqliteBackupService::run_cleanup(bool dry_run) {
+    using R = contracts::Result<contracts::BackupCleanupResultDto>;
+    if (!has_permission("backup.manage")) {
+        return R::fail(contracts::ErrorCode::Forbidden, "Operación denegada: falta de permisos (backup.manage)");
+    }
+    OperationGuard guard(operation_in_progress_);
+    if (!guard.acquired) {
+        return R::fail(contracts::ErrorCode::Conflict,
+                       "Hay un respaldo, una restauración o una limpieza en curso. Intente de nuevo en unos momentos.");
+    }
+
+    auto policy = get_retention_policy();
+    if (!policy.is_success()) return R::fail(policy.error_code(), policy.error_message());
+    const int keep_last = policy.value().keep_last;
+    const int keep_days = policy.value().keep_days;
+    const std::string cutoff = keep_days > 0 ? utc_cutoff(keep_days) : std::string();
+
+    contracts::BackupCleanupResultDto result;
+    result.dry_run = dry_run;
+    const auto stamp = domain::now();
+
+    auto mark = [&](const std::string& id, const char* status, const std::string& error) {
+        auto prep = db_.prepare("UPDATE backup_files SET status = ?, status_at = ?, last_error = ? WHERE id = ?;");
+        if (!prep.is_success()) return false;
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, status);
+        stmt.bind_text(2, stamp.local);
+        stmt.bind_text(3, error);
+        stmt.bind_text(4, id);
+        return stmt.step().is_success();
+    };
+    auto note_error = [&](const std::string& id, const std::string& error) {
+        auto prep = db_.prepare("UPDATE backup_files SET last_error = ? WHERE id = ?;");
+        if (!prep.is_success()) return;
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, error);
+        stmt.bind_text(2, id);
+        stmt.step();
+    };
+
+    for (const char* kind : {"LOCAL", "PRE_RESTORE"}) {
+        std::vector<RegisteredBackup> rows;
+        {
+            auto prep = db_.prepare(
+                "SELECT id, kind, path, size_bytes, sha256, created_at, created_at_utc FROM backup_files "
+                "WHERE kind = ? AND status = 'ACTIVE' ORDER BY created_at_utc DESC, rowid DESC;");
+            if (!prep.is_success()) return R::fail(prep.error_code(), prep.error_message());
+            auto stmt = std::move(prep.value());
+            stmt.bind_text(1, kind);
+            while (true) {
+                auto step = stmt.step();
+                if (!step.is_success()) return R::fail(step.error_code(), step.error_message());
+                if (!step.value()) break;
+                RegisteredBackup r;
+                r.id = stmt.get_text(0);
+                r.kind = stmt.get_text(1);
+                r.path = stmt.get_text(2);
+                r.size_bytes = stmt.get_int64(3);
+                r.sha256 = stmt.get_text(4);
+                r.created_at = stmt.get_text(5);
+                r.created_at_utc = stmt.get_text(6);
+                rows.push_back(std::move(r));
+            }
+        }
+        if (rows.empty()) continue;
+
+        // El respaldo más reciente que sigue siendo el registrado y pasa la verificación de integridad
+        // nunca se borra. Si ninguno es válido, no se borra nada de este tipo.
+        std::size_t protected_idx = rows.size();
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            if (!matches_registration(rows[i])) continue;
+            auto info = storage::SqliteDatabase::inspect_file(fs::u8path(rows[i].path));
+            if (info.is_success() && info.value().integrity_ok) {
+                protected_idx = i;
+                break;
+            }
+        }
+        if (protected_idx == rows.size()) {
+            result.kept_count += static_cast<int>(rows.size());
+            continue;
+        }
+
+        for (std::size_t i = 0; i < rows.size(); ++i) {
+            const RegisteredBackup& r = rows[i];
+            const bool kept_by_count = i < static_cast<std::size_t>(keep_last);
+            const bool kept_by_age = keep_days > 0 && r.created_at_utc >= cutoff;
+            if (i == protected_idx || kept_by_count || kept_by_age) {
+                ++result.kept_count;
+                continue;
+            }
+
+            std::error_code ec;
+            const fs::path file = fs::u8path(r.path);
+            if (!fs::exists(file, ec)) {
+                ++result.missing_count;
+                if (!dry_run) mark(r.id, "DELETED", "El archivo ya no existía");
+                continue;
+            }
+            if (!matches_registration(r)) {
+                result.changed.push_back(to_item(r));
+                if (!dry_run) mark(r.id, "CHANGED", "El archivo cambió desde que se registró: no se borró");
+                continue;
+            }
+            if (dry_run) {
+                result.to_delete.push_back(to_item(r));
+                result.bytes_freed += r.size_bytes;
+                continue;
+            }
+            std::error_code rm_ec;
+            const bool removed = fs::remove(file, rm_ec);
+            if (rm_ec || !removed) {
+                result.failed.push_back(to_item(r));
+                note_error(r.id, "No se pudo borrar: " + (rm_ec ? rm_ec.message() : std::string("el archivo no se eliminó")));
+                continue;
+            }
+            // Si no se pudiera marcar la fila, el archivo ya no existe y la próxima limpieza la cerrará como faltante.
+            mark(r.id, "DELETED", "");
+            result.to_delete.push_back(to_item(r));
+            result.bytes_freed += r.size_bytes;
+        }
+    }
+
+    if (!dry_run) {
+        account_service_->record_audit_event(
+            "BACKUP_CLEANUP",
+            "Limpieza de respaldos: borrados " + std::to_string(result.to_delete.size()) +
+                ", cambiados (no borrados) " + std::to_string(result.changed.size()) +
+                ", con error " + std::to_string(result.failed.size()) +
+                ", conservados " + std::to_string(result.kept_count) +
+                ", liberados " + std::to_string(result.bytes_freed) + " bytes");
+    }
+    return R::ok(std::move(result));
+}
+
+contracts::Result<contracts::BackupCleanupResultDto> SqliteBackupService::preview_backup_cleanup() {
+    return run_cleanup(true);
+}
+
+contracts::Result<contracts::BackupCleanupResultDto> SqliteBackupService::cleanup_old_backups() {
+    return run_cleanup(false);
+}
+
 contracts::Result<contracts::BackupServerConfigDto> SqliteBackupService::get_developer_server_config() {
     // Comprobación de seguridad en la capa de servicios:
     // "Ocultar un botón no sustituye una autorización."
+    using R = contracts::Result<contracts::BackupServerConfigDto>;
     if (!account_service_ || !account_service_->has_permission("backup.dev_config")) {
-        return contracts::Result<contracts::BackupServerConfigDto>::fail(
+        return R::fail(
             contracts::ErrorCode::Forbidden,
             "Acceso denegado: la configuración del servidor de respaldos es exclusiva de la identidad Desarrollador"
         );
     }
-    return contracts::Result<contracts::BackupServerConfigDto>::ok(dev_config_);
+    auto prep = db_.prepare("SELECT server_url, retention_days, is_tls_enabled FROM backup_server_config WHERE id = 1;");
+    if (!prep.is_success()) return R::fail(prep.error_code(), prep.error_message());
+    auto stmt = std::move(prep.value());
+    auto step = stmt.step();
+    if (!step.is_success()) return R::fail(step.error_code(), step.error_message());
+    contracts::BackupServerConfigDto dto;  // vacío hasta que el Desarrollador la configure
+    if (step.value()) {
+        dto.server_url = stmt.get_text(0);
+        dto.retention_days = stmt.get_text(1);
+        dto.is_tls_enabled = stmt.get_int64(2) != 0;
+    }
+    return R::ok(dto);
 }
 
 contracts::OperationResult SqliteBackupService::update_developer_server_config(
@@ -428,7 +797,33 @@ contracts::OperationResult SqliteBackupService::update_developer_server_config(
             "Acceso denegado: la configuración del servidor de respaldos es exclusiva de la identidad Desarrollador"
         );
     }
-    dev_config_ = config;
+    const std::string problem = validate_server_config(config);
+    if (!problem.empty()) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, problem);
+    }
+    const std::string url = trim_text(config.server_url);
+    const std::string days = trim_text(config.retention_days);
+
+    std::string actor;
+    auto cur = account_service_->current_user();
+    if (cur.is_success()) actor = cur.value().id;
+
+    auto prep = db_.prepare(
+        "UPDATE backup_server_config SET server_url = ?, retention_days = ?, is_tls_enabled = ?, updated_at = ?, updated_by = ? WHERE id = 1;");
+    if (!prep.is_success()) return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
+    auto stmt = std::move(prep.value());
+    stmt.bind_text(1, url);
+    stmt.bind_text(2, days);
+    stmt.bind_int64(3, config.is_tls_enabled ? 1 : 0);
+    stmt.bind_text(4, domain::now().local);
+    stmt.bind_text(5, actor);
+    auto step = stmt.step();
+    if (!step.is_success()) return contracts::OperationResult::fail(step.error_code(), step.error_message());
+
+    account_service_->record_audit_event(
+        "BACKUP_SERVER_CONFIG_CHANGED",
+        "Configuración del servidor de respaldos actualizada: " + (url.empty() ? std::string("sin configurar") : url) +
+            ", retención " + (days.empty() ? std::string("-") : days) + " días, TLS " + (config.is_tls_enabled ? "sí" : "no"));
     return contracts::OperationResult::ok();
 }
 

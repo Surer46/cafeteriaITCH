@@ -1,5 +1,6 @@
 #include "app/services/sqlite_cart_service.hpp"
 #include "app/services/identifiers.hpp"
+#include "app/services/operating_context.hpp"
 #include "app/domain/clock.hpp"
 #include <chrono>
 #include <iomanip>
@@ -152,7 +153,12 @@ contracts::Result<std::string> SqliteCartService::get_or_create_cart_id() {
         );
     }
     const std::string user_id = u.value().id;
-    const std::string register_id = "reg-01";
+    // Caja del turno abierto del usuario (o la única caja registrada si aún no hay turno)
+    auto ctx = resolve_operating_context(db_, user_id, /*allow_no_shift=*/true);
+    if (!ctx.is_success()) {
+        return contracts::Result<std::string>::fail(ctx.error_code(), ctx.error_message());
+    }
+    const std::string register_id = ctx.value().register_id;
 
     // 1. Buscar carrito existente para el usuario y caja actual
     {

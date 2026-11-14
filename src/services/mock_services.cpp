@@ -1051,6 +1051,39 @@ contracts::OperationResult MockBackupService::update_developer_server_config(con
     return contracts::OperationResult::ok();
 }
 
+contracts::Result<contracts::BackupRetentionPolicyDto> MockBackupService::get_retention_policy() {
+    return contracts::Result<contracts::BackupRetentionPolicyDto>::ok(policy_);
+}
+
+contracts::OperationResult MockBackupService::set_retention_policy(const contracts::BackupRetentionPolicyDto& policy) {
+    if (policy.keep_last < 1 || policy.keep_last > 1000 || policy.keep_days < 0 || policy.keep_days > 3650) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::InvalidInput, "Política fuera de rango");
+    }
+    policy_ = policy;
+    return contracts::OperationResult::ok();
+}
+
+contracts::Result<contracts::BackupCleanupResultDto> MockBackupService::preview_backup_cleanup() {
+    // Datos simulados: no hay archivos reales.
+    contracts::BackupCleanupResultDto dto;
+    dto.dry_run = true;
+    contracts::BackupCleanupItemDto item;
+    item.path = "backups/ejemplo_respaldo_antiguo.db";
+    item.kind = "LOCAL";
+    item.created_at = "2026-06-01 22:00:00";
+    item.size_bytes = 1048576;
+    dto.to_delete.push_back(item);
+    dto.kept_count = 30;
+    dto.bytes_freed = item.size_bytes;
+    return contracts::Result<contracts::BackupCleanupResultDto>::ok(dto);
+}
+
+contracts::Result<contracts::BackupCleanupResultDto> MockBackupService::cleanup_old_backups() {
+    contracts::BackupCleanupResultDto dto;
+    dto.kept_count = 30;
+    return contracts::Result<contracts::BackupCleanupResultDto>::ok(dto);
+}
+
 ServiceRegistry ServiceRegistry::create_mock_registry() {
     ServiceRegistry reg;
     reg.account_service = std::make_shared<MockAccountService>();

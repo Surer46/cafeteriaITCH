@@ -9,6 +9,12 @@
 #include <random>
 #include <sstream>
 #include <string>
+#include <vector>
+#include <iterator>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 #include "sqlite3.h"
 #include "app/storage/sqlite_database.hpp"
 #include "app/storage/migration_runner.hpp"
@@ -525,6 +531,235 @@ void test_successful_backup_leaves_no_tmp_files(const fs::path& base, const fs::
     env.cleanup();
 }
 
+void write_text_file(const fs::path& p, const std::string& text) {
+    std::ofstream out(p, std::ios::binary | std::ios::trunc);
+    out << text;
+}
+
+std::string file_name_of(const std::string& path_text) {
+    return fs::u8path(path_text).filename().u8string();
+}
+
+bool contains_name(const std::vector<BackupCleanupItemDto>& items, const std::string& name) {
+    for (const auto& it : items) {
+        if (file_name_of(it.path) == name) return true;
+    }
+    return false;
+}
+
+void test_cleanup_policy_preview_and_safety(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B6: limpieza de respaldos (política, vista previa, archivos ajenos, permisos, auditoría)..." << std::endl;
+    Env env(base / "t11", mig);
+    env.login_owner();
+
+    auto pol = env.backup->get_retention_policy();
+    TEST_CHECK(pol.is_success() && pol.value().keep_last == 30 && pol.value().keep_days == 90, "Política por omisión: 30 respaldos y 90 días");
+    TEST_CHECK(!env.backup->set_retention_policy({0, 10}).is_success(), "keep_last 0 rechazado");
+    TEST_CHECK(!env.backup->set_retention_policy({1001, 10}).is_success(), "keep_last 1001 rechazado");
+    TEST_CHECK(!env.backup->set_retention_policy({5, -1}).is_success(), "keep_days negativo rechazado");
+    TEST_CHECK(!env.backup->set_retention_policy({5, 3651}).is_success(), "keep_days 3651 rechazado");
+    TEST_CHECK(env.backup->get_retention_policy().value().keep_last == 30, "Una política rechazada no cambia nada");
+    TEST_CHECK(env.backup->set_retention_policy({2, 0}).is_success(), "Política de 2 respaldos sin protección por días");
+    TEST_CHECK(count_audit(env.db, "BACKUP_RETENTION_POLICY") == 1, "Auditoría del cambio de política");
+
+    std::vector<fs::path> p;
+    for (int i = 1; i <= 5; ++i) p.push_back(env.snapshot("b" + std::to_string(i) + ".db"));
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM backup_files WHERE kind='LOCAL' AND status='ACTIVE';") == 5, "Los 5 respaldos quedan registrados");
+
+    // Archivos que NO son respaldos registrados: nunca se borran
+    const fs::path foreign = p[0].parent_path() / "ajeno.db";
+    write_text_file(foreign, "no soy un respaldo de la aplicación");
+    const fs::path backups_dir = env.data_dir / "backups";
+    fs::create_directories(backups_dir);
+    const fs::path legacy = backups_dir / "pre_restore_20250101_000000.db";
+    fs::copy_file(p[4], legacy);
+
+    auto preview = env.backup->preview_backup_cleanup();
+    TEST_CHECK(preview.is_success(), "Vista previa: " + preview.error_message());
+    TEST_CHECK(preview.value().dry_run && preview.value().to_delete.size() == 3 && preview.value().kept_count == 2, "La vista previa lista 3 y conserva 2");
+    TEST_CHECK(contains_name(preview.value().to_delete, "b1.db") && contains_name(preview.value().to_delete, "b2.db") &&
+               contains_name(preview.value().to_delete, "b3.db"), "La vista previa señala los 3 más antiguos");
+    std::int64_t sum = 0;
+    for (const auto& it : preview.value().to_delete) {
+        TEST_CHECK(!it.path.empty() && !it.created_at.empty() && it.size_bytes > 0 && it.kind == "LOCAL", "Cada elemento trae ruta, fecha, tamaño y tipo");
+        sum += it.size_bytes;
+    }
+    TEST_CHECK(preview.value().bytes_freed == sum, "La vista previa suma los bytes");
+    for (const auto& f : p) TEST_CHECK(fs::exists(f), "La vista previa no borra nada");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM backup_files WHERE status='ACTIVE';") == 5 && count_audit(env.db, "BACKUP_CLEANUP") == 0,
+               "La vista previa no modifica el registro ni audita");
+
+    auto clean = env.backup->cleanup_old_backups();
+    TEST_CHECK(clean.is_success() && !clean.value().dry_run, "Limpieza: " + clean.error_message());
+    TEST_CHECK(clean.value().to_delete.size() == 3 && clean.value().bytes_freed == sum && clean.value().failed.empty() && clean.value().changed.empty(), "Se borraron los 3 antiguos");
+    TEST_CHECK(!fs::exists(p[0]) && !fs::exists(p[1]) && !fs::exists(p[2]), "Los 3 antiguos ya no existen");
+    TEST_CHECK(fs::exists(p[3]) && fs::exists(p[4]), "Se conservan los 2 más recientes");
+    TEST_CHECK(fs::exists(foreign) && fs::exists(legacy), "El archivo ajeno y el respaldo anterior no registrado siguen ahí");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM backup_files WHERE status='DELETED';") == 3, "Registro: 3 borrados");
+    TEST_CHECK(count_audit(env.db, "BACKUP_CLEANUP") == 1 &&
+               text_scalar(env.db, "SELECT details FROM audit_events WHERE event_type='BACKUP_CLEANUP';").find("borrados 3") != std::string::npos,
+               "Auditoría con la cantidad de borrados");
+    auto again = env.backup->cleanup_old_backups();
+    TEST_CHECK(again.is_success() && again.value().to_delete.empty() && fs::exists(p[3]) && fs::exists(p[4]), "Una segunda limpieza no borra nada más");
+
+    // Sin permiso se rechaza
+    env.add_cashier("cajero_pol");
+    TEST_CHECK(env.account->login("cajero_pol", "Clave-Cajero-1").is_success(), "Login del cajero");
+    TEST_CHECK(env.backup->preview_backup_cleanup().error_code() == ErrorCode::Forbidden, "Cajero: vista previa rechazada");
+    TEST_CHECK(env.backup->cleanup_old_backups().error_code() == ErrorCode::Forbidden, "Cajero: limpieza rechazada");
+    TEST_CHECK(env.backup->get_retention_policy().error_code() == ErrorCode::Forbidden, "Cajero: leer la política rechazado");
+    TEST_CHECK(env.backup->set_retention_policy({5, 5}).error_code() == ErrorCode::Forbidden, "Cajero: cambiar la política rechazado");
+    TEST_CHECK(fs::exists(p[3]) && fs::exists(p[4]), "Sin permiso no se tocó ningún archivo");
+    env.cleanup();
+}
+
+void test_cleanup_never_deletes_last_valid_or_changed_files(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B6: la limpieza no borra el último válido ni archivos que cambiaron..." << std::endl;
+    {
+        Env env(base / "t12", mig);
+        env.login_owner();
+        TEST_CHECK(env.backup->set_retention_policy({1, 0}).is_success(), "Política de 1 respaldo");
+        fs::path a = env.snapshot("a.db");
+        fs::path b = env.snapshot("b.db");
+        fs::path c = env.snapshot("c.db");
+        // El más reciente deja de ser el registrado: el último VÁLIDO es b
+        { std::ofstream out(c, std::ios::binary | std::ios::app); out << "basura"; }
+        auto res = env.backup->cleanup_old_backups();
+        TEST_CHECK(res.is_success(), "Limpieza con el más reciente alterado");
+        TEST_CHECK(!fs::exists(a) && fs::exists(b) && fs::exists(c), "Se borra a; b (último válido) y c (alterado) se conservan");
+        TEST_CHECK(contains_name(res.value().to_delete, "a.db") && res.value().to_delete.size() == 1, "Solo a.db borrado");
+        // Si ninguno es válido, no se borra nada
+        { std::ofstream out(b, std::ios::binary | std::ios::app); out << "basura"; }
+        auto none = env.backup->cleanup_old_backups();
+        TEST_CHECK(none.is_success() && none.value().to_delete.empty() && fs::exists(b) && fs::exists(c), "Sin respaldo válido no se borra nada");
+        env.cleanup();
+    }
+    {
+        Env env(base / "t13", mig);
+        env.login_owner();
+        TEST_CHECK(env.backup->set_retention_policy({1, 0}).is_success(), "Política de 1 respaldo");
+        fs::path d = env.snapshot("d.db");
+        fs::path e = env.snapshot("e.db");
+        // Un archivo ajeno ocupa la ruta de un respaldo registrado
+        write_text_file(d, "archivo ajeno puesto en una ruta registrada");
+        auto preview = env.backup->preview_backup_cleanup();
+        TEST_CHECK(preview.is_success() && preview.value().to_delete.empty() && preview.value().changed.size() == 1 &&
+                   contains_name(preview.value().changed, "d.db"), "La vista previa lo marca como cambiado y no como borrable");
+        auto res = env.backup->cleanup_old_backups();
+        TEST_CHECK(res.is_success() && res.value().to_delete.empty() && res.value().changed.size() == 1, "Se cuenta aparte como cambiado");
+        TEST_CHECK(fs::exists(d) && fs::exists(e), "El archivo ajeno no se borró");
+        std::ifstream in(d, std::ios::binary);
+        std::string content((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+        TEST_CHECK(content == "archivo ajeno puesto en una ruta registrada", "El contenido ajeno quedó intacto");
+        TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM backup_files WHERE status='CHANGED';") == 1, "La fila queda marcada como cambiada");
+        auto again = env.backup->cleanup_old_backups();
+        TEST_CHECK(again.is_success() && again.value().changed.empty() && fs::exists(d), "No se vuelve a considerar ni se borra");
+        env.cleanup();
+    }
+#ifdef _WIN32
+    {
+        Env env(base / "t14", mig);
+        env.login_owner();
+        TEST_CHECK(env.backup->set_retention_policy({1, 0}).is_success(), "Política de 1 respaldo");
+        fs::path f1 = env.snapshot("f1.db");
+        fs::path f2 = env.snapshot("f2.db");
+        fs::path f3 = env.snapshot("f3.db");
+        // f1 queda abierto sin permiso de borrado: el borrado falla a medias
+        HANDLE hold = CreateFileW(f1.wstring().c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+        TEST_CHECK(hold != INVALID_HANDLE_VALUE, "Bloquear f1");
+        auto res = env.backup->cleanup_old_backups();
+        TEST_CHECK(res.is_success(), "La limpieza no falla en bloque");
+        TEST_CHECK(res.value().failed.size() == 1 && contains_name(res.value().failed, "f1.db"), "El borrado fallido se reporta");
+        TEST_CHECK(contains_name(res.value().to_delete, "f2.db") && res.value().to_delete.size() == 1 && !fs::exists(f2), "Lo demás sí se borró");
+        TEST_CHECK(fs::exists(f1) && fs::exists(f3), "f1 (bloqueado) y f3 (el último) siguen ahí: no se pierde nada válido");
+        TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM backup_files WHERE status='ACTIVE' AND last_error <> '';") == 1, "El error queda anotado en el registro");
+        TEST_CHECK(text_scalar(env.db, "SELECT details FROM audit_events WHERE event_type='BACKUP_CLEANUP' ORDER BY rowid DESC LIMIT 1;").find("con error 1") != std::string::npos, "La auditoría cuenta el error");
+        CloseHandle(hold);
+        auto retry = env.backup->cleanup_old_backups();
+        TEST_CHECK(retry.is_success() && contains_name(retry.value().to_delete, "f1.db") && !fs::exists(f1) && fs::exists(f3), "Liberado el archivo, la siguiente limpieza lo borra");
+        env.cleanup();
+    }
+#endif
+}
+
+void test_restore_registers_pre_restore_backup(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B6: el respaldo previo a una restauración queda registrado..." << std::endl;
+    Env env(base / "t15", mig);
+    env.login_owner();
+    fs::path bk = env.snapshot("para-restaurar.db");
+    env.add_cashier("cajero_r");
+    auto res = env.backup->restore_from_backup(bk.u8string());
+    TEST_CHECK(res.is_success(), "Restaurar: " + res.error_message());
+    env.login_owner();
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM backup_files WHERE kind='PRE_RESTORE' AND status='ACTIVE';") == 1, "El respaldo previo queda registrado en la base restaurada");
+    TEST_CHECK(fs::exists(fs::u8path(res.value().pre_restore_backup_path)), "El respaldo previo existe");
+    env.cleanup();
+}
+
+void test_server_config_persistence(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B6: configuración del servidor de respaldos persistente y validada..." << std::endl;
+    Env env(base / "t16", mig);
+    env.login_owner();
+    TEST_CHECK(env.backup->get_developer_server_config().error_code() == ErrorCode::Forbidden, "El Dueño no puede leer la configuración técnica");
+    BackupServerConfigDto owner_try;
+    owner_try.server_url = "https://x.example/api"; owner_try.retention_days = "30";
+    TEST_CHECK(env.backup->update_developer_server_config(owner_try).error_code() == ErrorCode::Forbidden, "El Dueño no puede cambiarla");
+
+    UserDto dev_user;
+    dev_user.id = "user-dev"; dev_user.username = "desarrollador"; dev_user.display_name = "Desarrollador";
+    dev_user.role_id = "role-dev"; dev_user.role_name = "Desarrollador"; dev_user.is_active = true; dev_user.is_owner = false;
+    env.account->set_current_user_for_testing(dev_user);
+
+    auto initial = env.backup->get_developer_server_config();
+    TEST_CHECK(initial.is_success() && initial.value().server_url.empty() && initial.value().retention_days.empty() && initial.value().is_tls_enabled,
+               "Arranca vacía: sin URL ni días inventados");
+
+    BackupServerConfigDto good;
+    good.server_url = "https://respaldos.cafeteria.example/api/v1"; good.retention_days = "45"; good.is_tls_enabled = true;
+    TEST_CHECK(env.backup->update_developer_server_config(good).is_success(), "Configuración válida guardada");
+    auto stored = env.backup->get_developer_server_config();
+    TEST_CHECK(stored.is_success() && stored.value().server_url == good.server_url && stored.value().retention_days == "45" && stored.value().is_tls_enabled, "Se lee lo guardado");
+    TEST_CHECK(count_audit(env.db, "BACKUP_SERVER_CONFIG_CHANGED") == 1, "Auditoría al cambiarla");
+
+    struct Bad { const char* url; const char* days; bool tls; const char* why; };
+    const Bad bad[] = {
+        {"https://usuario:secreto@host.example/x", "30", true, "credenciales en la URL"},
+        {"https://host.example/x?token=abc", "30", true, "parámetros en la URL"},
+        {"https://host.example/x#frag", "30", true, "fragmento en la URL"},
+        {"http://host.example/x", "30", true, "http con TLS activado"},
+        {"ftp://host.example/x", "30", true, "esquema no permitido"},
+        {"https://host.example/x", "abc", true, "días no numéricos"},
+        {"https://host.example/x", "0", true, "días en 0"},
+        {"https://host.example/x", "99999", true, "días fuera de rango"},
+        {"https://host.example/x", "", true, "días vacíos con URL"},
+        {"https://", "30", true, "sin nombre de servidor"},
+        {"https://host.example/ x", "30", true, "espacios en la URL"},
+    };
+    for (const auto& b : bad) {
+        BackupServerConfigDto cfg;
+        cfg.server_url = b.url; cfg.retention_days = b.days; cfg.is_tls_enabled = b.tls;
+        auto r = env.backup->update_developer_server_config(cfg);
+        TEST_CHECK(!r.is_success() && r.error_code() == ErrorCode::InvalidInput, std::string("Rechazada: ") + b.why);
+    }
+    TEST_CHECK(env.backup->get_developer_server_config().value().server_url == good.server_url, "Las configuraciones rechazadas no cambian lo guardado");
+    TEST_CHECK(count_audit(env.db, "BACKUP_SERVER_CONFIG_CHANGED") == 1, "Lo rechazado no se audita como cambio");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM backup_server_config WHERE server_url LIKE '%secreto%' OR server_url LIKE '%token%';") == 0, "Ningún secreto llegó a la base");
+
+    BackupServerConfigDto internal;
+    internal.server_url = "http://interno.local/api"; internal.retention_days = "30"; internal.is_tls_enabled = false;
+    TEST_CHECK(env.backup->update_developer_server_config(internal).is_success(), "http se acepta si se desactiva TLS");
+    TEST_CHECK(env.backup->update_developer_server_config(good).is_success(), "Volver a la configuración con TLS");
+
+    // Sobrevive a cerrar y reabrir la base
+    env.backup.reset();
+    env.db.close();
+    TEST_CHECK(env.db.open(env.data_dir / "cafeteria.db").is_success(), "Reabrir la base");
+    env.make_backup_service();
+    auto reopened = env.backup->get_developer_server_config();
+    TEST_CHECK(reopened.is_success() && reopened.value().server_url == good.server_url && reopened.value().retention_days == "45", "La configuración sobrevive a cerrar y reabrir la base");
+    env.cleanup();
+}
+
 void test_failure_with_open_transaction(const fs::path& base, const fs::path& mig) {
     std::cout << "[TEST] B1: fallo de copia deja base utilizable y audita..." << std::endl;
     Env env(base / "t8", mig);
@@ -562,6 +797,10 @@ int main() {
     test_older_version_migrates(base, mig);
     test_v9_backup_restores_and_migrates(base, mig);
     test_successful_backup_leaves_no_tmp_files(base, mig);
+    test_cleanup_policy_preview_and_safety(base, mig);
+    test_cleanup_never_deletes_last_valid_or_changed_files(base, mig);
+    test_restore_registers_pre_restore_backup(base, mig);
+    test_server_config_persistence(base, mig);
     test_failure_with_open_transaction(base, mig);
 
     std::error_code ec;

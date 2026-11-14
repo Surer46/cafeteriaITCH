@@ -99,6 +99,7 @@ target_link_libraries(app_storage PUBLIC
 add_library(app_services STATIC
     src/services/identifiers.cpp
     src/services/stock_ledger.cpp
+    src/services/operating_context.cpp
     src/services/mock_services.cpp
     src/services/sqlite_account_service.cpp
     src/services/sqlite_backup_service.cpp
@@ -111,6 +112,7 @@ add_library(app_services STATIC
     src/services/sqlite_print_config_service.cpp
     include/app/services/identifiers.hpp
     include/app/services/stock_ledger.hpp
+    include/app/services/operating_context.hpp
     include/app/services/mock_services.hpp
     include/app/services/sqlite_account_service.hpp
     include/app/services/sqlite_backup_service.hpp

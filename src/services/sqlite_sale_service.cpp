@@ -1,6 +1,7 @@
 #include "app/services/sqlite_sale_service.hpp"
 #include "app/services/identifiers.hpp"
 #include "app/services/stock_ledger.hpp"
+#include "app/services/operating_context.hpp"
 #include "app/domain/clock.hpp"
 #include <chrono>
 #include <iomanip>
@@ -224,7 +225,11 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
 
                 // Comprobar contexto de autorización:
                 // Una cuenta o caja distinta NO puede apropiarse ni recuperar ventas con claves ajenas.
-                if (owner_user_id != user_id || owner_register_id != "reg-01") {
+                // La caja se compara con la del contexto actual del usuario cuando se puede resolver
+                // (el reintento puede llegar con el turno ya cerrado; entonces basta con el mismo usuario).
+                auto retry_ctx = resolve_operating_context(db_, user_id, /*allow_no_shift=*/true);
+                const bool register_mismatch = retry_ctx.is_success() && owner_register_id != retry_ctx.value().register_id;
+                if (owner_user_id != user_id || register_mismatch) {
                     return contracts::Result<contracts::SaleConfirmationDto>::fail(
                         contracts::ErrorCode::Forbidden,
                         "La clave de idempotencia especificada pertenece a otro usuario o contexto de caja"
@@ -288,22 +293,13 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     std::string shift_id;
     std::string shift_register_id;
     {
-        auto prep_s = db_.prepare("SELECT id, register_id FROM shifts WHERE is_open = 1 ORDER BY opened_at DESC LIMIT 1;");
-        if (!prep_s.is_success()) {
+        auto ctx = resolve_operating_context(db_, user_id, /*allow_no_shift=*/false);
+        if (!ctx.is_success()) {
             db_.execute("ROLLBACK;");
-            return contracts::Result<contracts::SaleConfirmationDto>::fail(prep_s.error_code(), prep_s.error_message());
+            return contracts::Result<contracts::SaleConfirmationDto>::fail(ctx.error_code(), ctx.error_message());
         }
-        auto stmt_s = std::move(prep_s.value());
-        auto step_s = stmt_s.step();
-        if (!step_s.is_success() || !step_s.value()) {
-            db_.execute("ROLLBACK;");
-            return contracts::Result<contracts::SaleConfirmationDto>::fail(
-                contracts::ErrorCode::ShiftClosed,
-                "No hay un turno de caja abierto para registrar ventas. Debe abrir un turno primero."
-            );
-        }
-        shift_id = stmt_s.get_text(0);
-        shift_register_id = stmt_s.get_text(1);
+        shift_id = ctx.value().shift_id;
+        shift_register_id = ctx.value().register_id;
     }
 
     // 6. Consultar carrito y líneas activas del usuario y caja actual
@@ -316,7 +312,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         }
         auto stmt_c = std::move(prep_c.value());
         stmt_c.bind_text(1, user_id);
-        stmt_c.bind_text(2, "reg-01");
+        stmt_c.bind_text(2, shift_register_id);
         auto step_c = stmt_c.step();
         if (!step_c.is_success() || !step_c.value()) {
             db_.execute("ROLLBACK;");
