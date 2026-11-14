@@ -63,6 +63,18 @@ Comprobacion visual: con python -u tests/capture_visual_qa.py NO (aun no es vali
 Entrega corta y literal: archivos; el mecanismo elegido en Theme con una linea de uso; numero de medidas convertidas por archivo; las llamadas que pasaban FromDIP a Theme o ui_helpers y como quedaron; que dice la documentacion sobre el tamano de FromSVG y el tamano fisico medido de un icono; comandos con codigo de salida; medidas logicas a 125 por ciento de la barra lateral, boton de perfil, subsecciones y filas de Bitacora; excepciones de test_t2 que ya no se reproducen; lo que viste en el recorrido manual; fallos intermedios y como los resolviste; hora de inicio y de fin, numero de compilaciones y de ejecuciones de cada prueba; limites de lo verificado. No escribas que algo funciona si no lo ejecutaste.
 ```
 
+### Anexo a D1 (2026-11-14, QA visual del usuario)
+
+El usuario vio a 100 % en Touch el texto de «Abrir Turno de Caja» desplazado e incompleto. Causa en el código: ancho fijo de 200 y, después, fuente de subtítulo en negrita más icono y margen. Se envía como mensaje aparte si D1 ya está en curso.
+
+```text
+Anexo a D1 (QA visual del usuario, a 100 por ciento): en Caja y turnos, perfil Touch, el texto del boton Abrir Turno de Caja se ve desplazado y se lee incompleto. Causa probable, revisala: cash_shift_panel.cpp le fija un ancho de 200 y luego Theme::style_button_success le pone la fuente de subtitulo en negrita (14 pt en Touch) y Theme::setup_button_icon le agrega icono de 18 mas margen de 10; texto mas icono ya no caben en 200. Cerrar Turno de Caja tiene el mismo patron.
+
+Agrega al bloque esta regla y aplicala en todo src/frontend/: ningun boton puede tener un ancho fijo menor que lo que necesita su contenido (texto con su fuente final, icono, margen del icono y relleno del boton). El ancho minimo se calcula DESPUES de aplicar fuente e icono (por ejemplo con GetBestSize), o el boton se deja crecer con el sizer; un ancho fijo solo puede ser mayor que ese minimo, nunca menor. Revisa todos los botones con icono de las pantallas reales, en Estandar y en Touch.
+
+En la entrega anade: la causa confirmada del recorte de Abrir Turno de Caja; la lista de botones a los que cambiaste el ancho, con ancho de texto mas icono y ancho final en unidades logicas, en Estandar y Touch.
+```
+
 ---
 
 ## D2 — AntiGravity, Gemini 4 Hydrogen (high) (`main`, después de aceptar D1)
@@ -79,7 +91,7 @@ Decision del usuario: las pruebas GUI deben ser validas con Windows al 100 y al 
 Archivos que puedes editar, y ningun otro:
 - nuevo: tests/gui_dpi.py (modulo comun);
 - tests/test_i1_integration.py, test_i2_integration.py, test_fe08_fe09_visual_integration.py, test_f1_roles_panel.py, test_f2_audit_log.py, test_f2b_subnav.py, test_f7_ingredients_panel.py y capture_visual_qa.py;
-- test_t1_touch_profile.py y test_t2_touch_targets.py solo para usar el modulo comun en lugar de su copia de las mismas funciones, sin cambiar ninguna asercion.
+- test_t1_touch_profile.py y test_t2_touch_targets.py solo para usar el modulo comun en lugar de su copia de las mismas funciones, sin cambiar ninguna asercion existente (en test_t2 se agrega la del punto 6).
 No toques src/, CMakeLists.txt ni nada fuera de tests/. Si una prueba falla por el programa (un control realmente pequeno o recortado), NO cambies el programa: detente y reportalo con la medida.
 
 1. tests/gui_dpi.py: declarar el proceso consciente de DPI por monitor antes de crear o medir nada; leer el DPI de una ventana (GetDpiForWindow); escala = DPI / 96; aceptar solo 96 y 120 DPI y en cualquier otro detenerse con un mensaje claro; convertir de unidades logicas a fisicas y al reves; y medir texto con las fuentes Roboto del proyecto (como hace test_f7, porque la fuente obtenida con WM_GETFONT no es fiable desde otro proceso). Una sola implementacion; las pruebas la importan.
@@ -87,8 +99,9 @@ No toques src/, CMakeLists.txt ni nada fuera de tests/. Si una prueba falla por 
 3. Prohibido relajar: un umbral escalado vale exactamente su valor a 100 por ciento multiplicado por la escala, redondeado hacia arriba cuando es un minimo y hacia abajo cuando es un maximo. Ningun umbral cambia su valor a 100 por ciento. Ninguna asercion se quita. Las tolerancias de medida (por ejemplo 2 o 3 px por redondeo) pueden escalarse, pero se listan todas en la entrega con su valor antes y despues.
 4. test_f7_ingredients_panel deja de exigir 96 DPI y usa el modulo comun.
 5. test_f1_roles_panel falla tambien a 100 por ciento desde el 2026-11-14 (caso 3.2, 960x600 Estandar: descripcion de pos.sell 219 px frente a 250 de texto) y el orquestador comprobo que no lo causo T2. Averigua si es la medicion (fuente de WM_GETFONT) o un recorte real visible en pantalla: haz una captura de esa zona y mide el texto con la fuente Roboto real. Si es la medicion, corrigela con el modulo comun. Si es un recorte real, NO lo arregles: reportalo con la captura.
-6. capture_visual_qa.py: las capturas se generan con cualquiera de los dos escalados; el nombre del archivo no cambia y la entrega dice con cual se generaron.
-7. No edites AGENTS.md ni ningun documento: el orquestador actualiza la regla de escalado al aceptar el bloque.
+6. Recorte de texto en botones (hallazgo del QA visual del usuario: Abrir Turno de Caja se leia incompleto en Touch y ninguna prueba lo detecto). En tests/test_t2_touch_targets.py anade una asercion para cada boton visible que recorre: ancho del texto medido con la fuente Roboto real, mas el icono y su margen si tiene, cabe en el area cliente del boton. Si falla por un boton que D1 no corrigio, NO cambies el programa: reportalo. Esta asercion es nueva; las existentes no cambian.
+7. capture_visual_qa.py: las capturas se generan con cualquiera de los dos escalados; el nombre del archivo no cambia y la entrega dice con cual se generaron.
+8. No edites AGENTS.md ni ningun documento: el orquestador actualiza la regla de escalado al aceptar el bloque.
 
 Verificacion (antepon al PATH <toolchain>\mingw64\bin y <toolchain>\wxwidgets\lib\gcc1610_x64_dll), con el escalado que tenga la PC:
    python -u tests/test_i1_integration.py
