@@ -11,3 +11,7 @@
 *.a binary
 *.exe binary
 *.dll binary
+
+# Los guiones de cmd.exe necesitan CRLF: con LF fallan las etiquetas de goto.
+*.cmd text eol=crlf
+*.bat text eol=crlf
