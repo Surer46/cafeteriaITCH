@@ -56,7 +56,7 @@ ctest --test-dir build_release --output-on-failure
 
 Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
 
-- **CTest (7):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`, `DataDirPolicyTest` y `PackageTest` (esta última solo en Release; en Debug queda omitida).
+- **CTest (11):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`, `DataDirPolicyTest`, `PackageTest` (solo en Release; en Debug queda omitida), `StartupTest`, `LoginLockoutTest`, `AuthorizationTest` y `StartupTimingSmokeTest`.
 - **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`, `test_t2_touch_targets.py`. Solo son válidas con el escalado de Windows al 100 %, salvo `test_t1_touch_profile.py` y `test_t2_touch_targets.py`, que se adaptan al escalado. `test_f1_roles_panel.py` falla desde el 2026-11-14 en la ventana de 960x600 (en investigación). `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
 - **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
 
