@@ -696,7 +696,7 @@ def audit_screen_touch_targets(hwnd_main, screen_name, scale):
     return items, overlaps
 
 
-def run_suite(label, exe_path, write_audit=False):
+def run_suite(label, exe_path):
     ensure_no_app_running()
     assert os.path.exists(exe_path), f"Ejecutable no encontrado: {exe_path}"
     work_dir = os.path.dirname(exe_path)
@@ -943,75 +943,11 @@ def run_suite(label, exe_path, write_audit=False):
         user32.PostMessageW(hwnd_owner_touch, WM_CLOSE, 0, 0)
         p_f.wait(timeout=5)
 
-        # -----------------------------------------------------------------
-        # Caso g: Inventario informativo de objetivos tactiles a 1200x720 logicos
-        # -----------------------------------------------------------------
-        dpi_g = get_window_dpi(hwnd_main2)
-        scale_g = dpi_g / 96.0
-        w_rc = get_rect(hwnd_main2)
-        c_rc = get_client_screen_rect(hwnd_main2)
-        frame_w = (w_rc[2] - w_rc[0]) - (c_rc[2] - c_rc[0])
-        frame_h = (w_rc[3] - w_rc[1]) - (c_rc[3] - c_rc[1])
-        user32.MoveWindow(hwnd_main2, 16, 16, round(1200 * scale_g) + frame_w, round(720 * scale_g) + frame_h, True)
-        time.sleep(0.5)
-
-        screens = [
-            ("Venta", "Punto de Venta", "Venta"),
-            ("Caja y turnos", "Caja y Reportes", "Caja y turnos"),
-            ("Bitácora", "Caja y Reportes", "Bitácora"),
-            ("Usuarios y cuentas", "BackOffice", "Usuarios y cuentas"),
-            ("Roles y permisos", "BackOffice", "Roles y permisos"),
-            ("Configuración", "BackOffice", "Configuración"),
-            ("Ingredientes", "Inventario", "Ingredientes"),
-        ]
-
-        audit_lines = [f"DPI={dpi_g} escala={scale_g:.2f} (1200x720 logicos, perfil Tactil)"]
-        audit_summary = []
-        last_section = None
-
-        for scr_name, sec_name, sub_name in screens:
-            if sec_name != last_section:
-                click_sidebar_section(hwnd_main2, sec_name)
-                last_section = sec_name
-            click_subnav(hwnd_main2, sub_name)
-            if scr_name == "Roles y permisos":
-                # Seleccionar fila Cajero (indice 1) para habilitar interruptores de permisos
-                r_lists = [h for (h, c, _t) in enum_children(hwnd_main2) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)]
-                if r_lists and send_msg(r_lists[0], LVM_GETITEMCOUNT, 0, 0) > 1:
-                    select_list_row(r_lists[0], 1)
-                    time.sleep(0.35)
-
-            items, overlaps = audit_screen_touch_targets(hwnd_main2, scr_name, scale_g)
-            flagged_cnt = sum(1 for it in items if it["small"] or it["overlap"])
-            audit_summary.append((scr_name, len(items), flagged_cnt))
-            print(f"[AUDIT][g][{label}] {scr_name}: total={len(items)}, marcados={flagged_cnt}")
-
-            audit_lines.append("")
-            audit_lines.append(f"=== {scr_name} (total={len(items)}, marcados={flagged_cnt}) ===")
-            for it in items:
-                flags = []
-                if it["small"]:
-                    flags.append("<48")
-                if it["overlap"]:
-                    flags.append("SOLAPA")
-                mark = ",".join(flags) if flags else "OK"
-                audit_lines.append(
-                    f"  {scr_name} | {it['kind']} | {it['label']} | {it['w_log']}x{it['h_log']} | {mark}"
-                )
-            for l1, l2 in overlaps:
-                audit_lines.append(f"  [SOLAPAMIENTO] '{l1}' <-> '{l2}'")
-
-        if write_audit:
-            os.makedirs(os.path.dirname(AUDIT_PATH), exist_ok=True)
-            with open(AUDIT_PATH, "w", encoding="utf-8") as f_aud:
-                f_aud.write("\n".join(audit_lines) + "\n")
-            print(f"[OK][g] Inventario escrito en {AUDIT_PATH}")
-
         user32.PostMessageW(hwnd_main2, WM_CLOSE, 0, 0)
         p2.wait(timeout=6)
 
         print(f"[{label}] Resumen alturas logicas: {metrics}")
-        return metrics, audit_summary
+        return metrics
 
     finally:
         for pr in procs:
@@ -1036,8 +972,8 @@ def main():
     sys_scale = sys_dpi / 96.0
     print(f"DPI sistema detectado: {sys_dpi} (escala={sys_scale:.2f})")
 
-    run_suite("Release", RELEASE_EXE, write_audit=True)
-    run_suite("Debug", DEBUG_EXE, write_audit=False)
+    run_suite("Release", RELEASE_EXE)
+    run_suite("Debug", DEBUG_EXE)
     print("\n=== PRUEBA T1 COMPLETA EXITOSA (Release y Debug) ===")
 
 

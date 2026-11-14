@@ -56,7 +56,7 @@ void SubnavBar::rebuild_buttons() {
         current_subsection_ = !sub_names.empty() ? sub_names.front() : "";
     }
 
-    int btn_h = Theme::is_touch() ? 44 : 36;
+    int btn_h = FromDIP(Theme::is_touch() ? 48 : 36);
 
     for (const auto& name : sub_names) {
         auto* btn = new wxButton(this, wxID_ANY, wxString::FromUTF8(name.c_str()),

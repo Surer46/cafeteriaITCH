@@ -3,6 +3,7 @@
 
 #include <wx/wx.h>
 #include <wx/listctrl.h>
+#include <wx/odcombo.h>
 #include <memory>
 #include <string>
 #include <vector>
@@ -35,7 +36,7 @@ private:
     wxStaticText* lbl_warning_{nullptr};
 
     // Filtros
-    wxChoice* choice_event_type_{nullptr};
+    wxOwnerDrawnComboBox* choice_event_type_{nullptr};
     wxTextCtrl* txt_user_{nullptr};
     wxTextCtrl* txt_date_from_{nullptr};
     wxTextCtrl* txt_date_to_{nullptr};

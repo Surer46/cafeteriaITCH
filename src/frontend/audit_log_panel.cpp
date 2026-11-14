@@ -6,6 +6,32 @@
 
 namespace app::frontend {
 
+namespace {
+
+class AuditComboBox : public wxOwnerDrawnComboBox {
+public:
+    AuditComboBox(wxWindow* parent, wxWindowID id, const wxSize& size)
+        : wxOwnerDrawnComboBox(parent, id, wxEmptyString, wxDefaultPosition, size, 0, nullptr, wxCB_READONLY) {}
+
+protected:
+    wxCoord OnMeasureItem(size_t) const override {
+        return Theme::is_touch() ? FromDIP(44) : -1;
+    }
+
+    void OnDrawItem(wxDC& dc, const wxRect& rect, int item, int flags) const override {
+        if (item == wxNOT_FOUND) return;
+        const wxString text = GetString(static_cast<unsigned int>(item));
+        wxCoord tw = 0;
+        wxCoord th = 0;
+        dc.GetTextExtent(text.empty() ? wxString(wxT("Ag")) : text, &tw, &th);
+        const int y = rect.y + std::max(0, (rect.height - th) / 2);
+        const int x = rect.x + ((flags & wxODCB_PAINTING_CONTROL) ? FromDIP(8) : FromDIP(10));
+        dc.DrawText(text, x, y);
+    }
+};
+
+} // namespace
+
 AuditLogPanel::AuditLogPanel(wxWindow* parent, std::shared_ptr<contracts::IAccountService> account_service)
     : wxPanel(parent, wxID_ANY),
       account_service_(std::move(account_service)) {
@@ -17,8 +43,8 @@ void AuditLogPanel::setup_ui() {
     SetBackgroundColour(Theme::ColorBackground);
     auto* root_sizer = new wxBoxSizer(wxVERTICAL);
 
-    int btn_h = Theme::is_touch() ? 48 : 34;
-    int ctrl_h = Theme::is_touch() ? 48 : 34;
+    int btn_h = FromDIP(Theme::is_touch() ? 48 : 34);
+    int ctrl_h = FromDIP(Theme::is_touch() ? 48 : 34);
 
     // 1. Barra superior
     auto* top_bar = new wxBoxSizer(wxHORIZONTAL);
@@ -63,11 +89,11 @@ void AuditLogPanel::setup_ui() {
     lbl_ev->SetForegroundColour(Theme::ColorText);
     row1_sizer->Add(lbl_ev, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
 
-    choice_event_type_ = new wxChoice(main_card_, wxID_ANY);
+    choice_event_type_ = new AuditComboBox(main_card_, wxID_ANY, wxSize(FromDIP(160), ctrl_h));
     choice_event_type_->SetFont(Theme::get_font_body());
     choice_event_type_->Append(wxT("Todos"));
     choice_event_type_->SetSelection(0);
-    choice_event_type_->SetMinSize(wxSize(160, ctrl_h));
+    choice_event_type_->SetMinSize(wxSize(FromDIP(160), ctrl_h));
     row1_sizer->Add(choice_event_type_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
 
     auto* lbl_u = new wxStaticText(main_card_, wxID_ANY, wxT("Usuario:"));
@@ -118,6 +144,9 @@ void AuditLogPanel::setup_ui() {
         wxLC_REPORT | wxLC_SINGLE_SEL | wxBORDER_NONE
     );
     list_events_->SetFont(Theme::get_font_body());
+    if (Theme::is_touch()) {
+        ui::apply_touch_row_height(list_events_);
+    }
     list_events_->InsertColumn(0, wxT("Fecha y hora"), wxLIST_FORMAT_LEFT, 160);
     list_events_->InsertColumn(1, wxT("Usuario"), wxLIST_FORMAT_LEFT, 110);
     list_events_->InsertColumn(2, wxT("Evento"), wxLIST_FORMAT_LEFT, 130);
@@ -199,7 +228,9 @@ void AuditLogPanel::load_events() {
 
     // 1. Filtro Tipo de evento
     if (choice_event_type_ && choice_event_type_->GetSelection() > 0) {
-        std::string sel = std::string(choice_event_type_->GetStringSelection().ToUTF8());
+        std::string sel = std::string(
+            choice_event_type_->GetString(static_cast<unsigned int>(choice_event_type_->GetSelection())).ToUTF8()
+        );
         if (sel != "Todos" && !sel.empty()) {
             filter.event_type = sel;
         }
@@ -283,7 +314,10 @@ void AuditLogPanel::load_events() {
 
     // Actualizar choice_event_type_ con tipos presentes en la página actual más "Todos"
     if (choice_event_type_) {
-        std::string current_sel = std::string(choice_event_type_->GetStringSelection().ToUTF8());
+        const int cur_idx = choice_event_type_->GetSelection();
+        std::string current_sel = (cur_idx != wxNOT_FOUND)
+            ? std::string(choice_event_type_->GetString(static_cast<unsigned int>(cur_idx)).ToUTF8())
+            : std::string();
         std::set<std::string> types_on_page;
         for (const auto& ev : current_events_) {
             if (!ev.event_type.empty()) {
@@ -296,7 +330,8 @@ void AuditLogPanel::load_events() {
             choice_event_type_->Append(wxString::FromUTF8(t.c_str()));
         }
         if (current_sel != "Todos" && types_on_page.count(current_sel)) {
-            choice_event_type_->SetStringSelection(wxString::FromUTF8(current_sel.c_str()));
+            const int found_idx = choice_event_type_->FindString(wxString::FromUTF8(current_sel.c_str()));
+            choice_event_type_->SetSelection(found_idx != wxNOT_FOUND ? found_idx : 0);
         } else {
             choice_event_type_->SetSelection(0);
         }

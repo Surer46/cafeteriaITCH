@@ -2,6 +2,7 @@
 #define APP_FRONTEND_BACKOFFICE_PRINT_CONFIG_PANEL_HPP
 
 #include <wx/wx.h>
+#include <wx/odcombo.h>
 #include <memory>
 #include <vector>
 #include <string>
@@ -27,8 +28,8 @@ private:
     services::ServiceRegistry services_;
     contracts::PrinterStationConfig current_config_;
 
-    wxChoice* choice_profile_{nullptr};
-    wxChoice* choice_printer_{nullptr};
+    wxOwnerDrawnComboBox* choice_profile_{nullptr};
+    wxOwnerDrawnComboBox* choice_printer_{nullptr};
     std::vector<std::string> installed_printers_;
     wxTextCtrl* txt_preview_{nullptr};
     wxButton* btn_save_{nullptr};

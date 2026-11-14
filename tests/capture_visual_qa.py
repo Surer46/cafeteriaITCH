@@ -433,41 +433,39 @@ def main():
                 time.sleep(0.8)
                 capture_window(hwnd_main, os.path.join(out_dir, "07_print_config_80mm.png"))
 
-                # Seleccionar SOLO el combo de perfil (identificado por "Perfil ..."), dejando la impresora como esté
+                # Seleccionar SOLO el combo de perfil (bajo la etiqueta 'Perfil de Papel Térmico:')
+                def _qa_rect(hwnd_x):
+                    rc = wintypes.RECT()
+                    user32.GetWindowRect(hwnd_x, ctypes.byref(rc))
+                    return rc.left, rc.top, rc.right, rc.bottom, rc.right - rc.left, rc.bottom - rc.top
+
                 cfg_ctrls = get_child_controls(hwnd_main)
-                combos = [h for (h, cls, txt) in cfg_ctrls if "combobox" in cls.lower()]
+                combos = [h for (h, cls, txt) in cfg_ctrls if "combobox" in cls.lower() or txt == "comboBox"]
                 cb_profile = None
-                for cb in combos:
-                    # Leer texto con WM_GETTEXTLENGTH + WM_GETTEXT
-                    cb_l = user32.SendMessageW(cb, 0x000E, 0, 0)
-                    if cb_l > 0:
-                        cb_b = ctypes.create_unicode_buffer(cb_l + 1)
-                        user32.SendMessageW(cb, 0x000D, cb_l + 1, ctypes.addressof(cb_b))
-                        if "Perfil " in cb_b.value:
-                            cb_profile = cb
-                            break
-                    # Alternativa por CB_GETLBTEXT (índice 0)
-                    lb_len = user32.SendMessageW(cb, 0x0149, 0, 0) # CB_GETLBTEXTLEN
-                    if lb_len > 0:
-                        lb_buf = ctypes.create_unicode_buffer(lb_len + 1)
-                        user32.SendMessageW(cb, 0x0148, 0, ctypes.addressof(lb_buf))
-                        if "Perfil " in lb_buf.value:
-                            cb_profile = cb
-                            break
+                lbl_perf = next((h for (h, cls, txt) in cfg_ctrls if cls.lower() == "static" and "Perfil de Papel Térmico" in txt), None)
+                if lbl_perf is not None:
+                    lbl_bottom = _qa_rect(lbl_perf)[3]
+                    below = [cb for cb in combos if _qa_rect(cb)[1] >= lbl_bottom - 4]
+                    if below:
+                        cb_profile = min(below, key=lambda h: _qa_rect(h)[1])
 
                 assert cb_profile is not None, "Combobox de perfil de papel térmico ('Perfil ...') no encontrado"
 
-                # Mostrar dropdown y seleccionar 55 mm con VK_DOWN + VK_RETURN (dispara CBN_SELCHANGE y wxEVT_CHOICE real)
+                # Mostrar dropdown y seleccionar 55 mm con VK_DOWN + VK_RETURN (dispara wxEVT_COMBOBOX real)
                 user32.SetForegroundWindow(hwnd_main)
-                user32.SetFocus(cb_profile)
-                time.sleep(0.2)
-                user32.SendMessageW(cb_profile, 0x014F, 1, 0) # CB_SHOWDROPDOWN True
-                time.sleep(0.2)
-                user32.SendMessageW(cb_profile, 0x0100, 0x28, 0) # WM_KEYDOWN VK_DOWN
-                user32.SendMessageW(cb_profile, 0x0101, 0x28, 0) # WM_KEYUP VK_DOWN
+                time.sleep(0.15)
+                _, _, _, _, cbp_w, cbp_h = _qa_rect(cb_profile)
+                lp_cb = ((cbp_h // 2) << 16) | (max(4, cbp_w - 12) & 0xFFFF)
+                user32.PostMessageW(cb_profile, 0x0201, 1, lp_cb) # WM_LBUTTONDOWN
+                time.sleep(0.05)
+                user32.PostMessageW(cb_profile, 0x0202, 0, lp_cb) # WM_LBUTTONUP
+                time.sleep(0.25)
+                target_cb = user32.GetFocus() or cb_profile
+                user32.PostMessageW(target_cb, 0x0100, 0x28, 0) # WM_KEYDOWN VK_DOWN
+                user32.PostMessageW(target_cb, 0x0101, 0x28, 0) # WM_KEYUP VK_DOWN
                 time.sleep(0.1)
-                user32.SendMessageW(cb_profile, 0x0100, 0x0D, 0) # WM_KEYDOWN VK_RETURN
-                user32.SendMessageW(cb_profile, 0x0101, 0x0D, 0) # WM_KEYUP VK_RETURN
+                user32.PostMessageW(target_cb, 0x0100, 0x0D, 0) # WM_KEYDOWN VK_RETURN
+                user32.PostMessageW(target_cb, 0x0101, 0x0D, 0) # WM_KEYUP VK_RETURN
                 time.sleep(0.6)
 
                 # Leer el texto de la vista previa interactiva con WM_GETTEXTLENGTH + WM_GETTEXT y verificar que mide 28 caracteres

@@ -9,10 +9,33 @@
 
 #include <vector>
 #include <string>
+#include <algorithm>
 
 namespace app::frontend {
 
 namespace {
+
+class PrintComboBox : public wxOwnerDrawnComboBox {
+public:
+    PrintComboBox(wxWindow* parent, wxWindowID id, const wxSize& size, const wxArrayString& choices)
+        : wxOwnerDrawnComboBox(parent, id, wxEmptyString, wxDefaultPosition, size, choices, wxCB_READONLY) {}
+
+protected:
+    wxCoord OnMeasureItem(size_t) const override {
+        return Theme::is_touch() ? FromDIP(44) : -1;
+    }
+
+    void OnDrawItem(wxDC& dc, const wxRect& rect, int item, int flags) const override {
+        if (item == wxNOT_FOUND) return;
+        const wxString text = GetString(static_cast<unsigned int>(item));
+        wxCoord tw = 0;
+        wxCoord th = 0;
+        dc.GetTextExtent(text.empty() ? wxString(wxT("Ag")) : text, &tw, &th);
+        const int y = rect.y + std::max(0, (rect.height - th) / 2);
+        const int x = rect.x + ((flags & wxODCB_PAINTING_CONTROL) ? FromDIP(8) : FromDIP(10));
+        dc.DrawText(text, x, y);
+    }
+};
 
 /// Obtiene la lista de impresoras instaladas (UTF-8). Vacía si no hay ninguna.
 std::vector<std::string> enumerate_installed_printers() {
@@ -101,8 +124,11 @@ void BackofficePrintConfigPanel::setup_ui() {
     if (installed_printers_.empty()) {
         printer_choices.Add(wxT("(No se detectaron impresoras instaladas)"));
     }
-    choice_printer_ = new wxChoice(card, wxID_ANY, wxDefaultPosition,
-                                   wxSize(380, Theme::is_touch() ? 44 : 36), printer_choices);
+    const int combo_w = FromDIP(380);
+    const int combo_h = FromDIP(Theme::is_touch() ? 48 : 36);
+    choice_printer_ = new PrintComboBox(card, wxID_ANY, wxSize(combo_w, combo_h), printer_choices);
+    choice_printer_->SetFont(Theme::get_font_body());
+    choice_printer_->SetMinSize(wxSize(combo_w, combo_h));
     choice_printer_->SetSelection(0);
     opt_sizer->Add(choice_printer_, 0, wxBOTTOM, 8);
 
@@ -122,8 +148,9 @@ void BackofficePrintConfigPanel::setup_ui() {
     wxArrayString profiles;
     profiles.Add(wxT("Perfil 80 mm (Estándar de mostrador — ~42 columnas nominales)"));
     profiles.Add(wxT("Perfil 55 mm (Térmica compacta — ~28 columnas nominales)"));
-    choice_profile_ = new wxChoice(card, wxID_ANY, wxDefaultPosition,
-                                   wxSize(380, Theme::is_touch() ? 44 : 36), profiles);
+    choice_profile_ = new PrintComboBox(card, wxID_ANY, wxSize(combo_w, combo_h), profiles);
+    choice_profile_->SetFont(Theme::get_font_body());
+    choice_profile_->SetMinSize(wxSize(combo_w, combo_h));
     choice_profile_->SetSelection(0);
     opt_sizer->Add(choice_profile_, 0, wxBOTTOM, 6);
 
@@ -178,7 +205,7 @@ void BackofficePrintConfigPanel::setup_ui() {
     main_sizer->Add(card, 1, wxEXPAND | wxALL, 16);
     SetSizer(main_sizer);
 
-    choice_profile_->Bind(wxEVT_CHOICE, &BackofficePrintConfigPanel::on_profile_selected, this);
+    choice_profile_->Bind(wxEVT_COMBOBOX, &BackofficePrintConfigPanel::on_profile_selected, this);
     btn_save_->Bind(wxEVT_BUTTON, &BackofficePrintConfigPanel::on_save_clicked, this);
 }
 

@@ -1,4 +1,5 @@
 #include "src/frontend/cash_shift_panel.hpp"
+#include "src/frontend/ui_helpers.hpp"
 #include <wx/statline.h>
 
 namespace app::frontend {
@@ -49,16 +50,19 @@ void CashShiftPanel::setup_ui() {
     lbl_open_prompt->SetForegroundColour(Theme::ColorText);
     open_box_->Add(lbl_open_prompt, 0, wxBOTTOM, 6);
 
+    int field_h = FromDIP(Theme::is_touch() ? 48 : 36);
+    int field_w = FromDIP(140);
+
     auto* open_row = new wxBoxSizer(wxHORIZONTAL);
-    txt_initial_cash_ = new wxTextCtrl(status_card_, wxID_ANY, wxT("300.00"), wxDefaultPosition, wxSize(140, Theme::is_touch() ? 44 : 36));
-    txt_initial_cash_->SetFont(Theme::get_font_body());
+    auto* initial_field = ui::make_text_field(status_card_, txt_initial_cash_, field_h, field_w, Theme::get_font_body());
+    txt_initial_cash_->SetValue(wxT("300.00"));
 
-    int btn_h = Theme::is_touch() ? 48 : 38;
-    btn_open_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Abrir Turno de Caja"), wxDefaultPosition, wxSize(200, btn_h));
+    int btn_h = FromDIP(Theme::is_touch() ? 48 : 38);
+    btn_open_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Abrir Turno de Caja"), wxDefaultPosition, FromDIP(wxSize(200, Theme::is_touch() ? 48 : 38)));
     Theme::style_button_success(btn_open_shift_, btn_h);
-    Theme::setup_button_icon(btn_open_shift_, "lock_open", wxSize(18, 18), Theme::ColorSurface);
+    Theme::setup_button_icon(btn_open_shift_, "lock_open", FromDIP(wxSize(18, 18)), Theme::ColorSurface);
 
-    open_row->Add(txt_initial_cash_, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 10);
+    open_row->Add(initial_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 10);
     open_row->Add(btn_open_shift_, 0, wxALIGN_CENTER_VERTICAL);
     open_box_->Add(open_row, 0, wxEXPAND | wxBOTTOM, 16);
 
@@ -74,14 +78,14 @@ void CashShiftPanel::setup_ui() {
     close_box_->Add(lbl_close_prompt, 0, wxBOTTOM, 6);
 
     auto* close_row = new wxBoxSizer(wxHORIZONTAL);
-    txt_final_cash_ = new wxTextCtrl(status_card_, wxID_ANY, wxT("0.00"), wxDefaultPosition, wxSize(140, Theme::is_touch() ? 44 : 36));
-    txt_final_cash_->SetFont(Theme::get_font_body());
+    auto* final_field = ui::make_text_field(status_card_, txt_final_cash_, field_h, field_w, Theme::get_font_body());
+    txt_final_cash_->SetValue(wxT("0.00"));
 
-    btn_close_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Cerrar Turno de Caja"), wxDefaultPosition, wxSize(200, btn_h));
+    btn_close_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Cerrar Turno de Caja"), wxDefaultPosition, FromDIP(wxSize(200, Theme::is_touch() ? 48 : 38)));
     Theme::style_button_destructive(btn_close_shift_, btn_h);
-    Theme::setup_button_icon(btn_close_shift_, "lock", wxSize(18, 18), Theme::ColorError);
+    Theme::setup_button_icon(btn_close_shift_, "lock", FromDIP(wxSize(18, 18)), Theme::ColorError);
 
-    close_row->Add(txt_final_cash_, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 10);
+    close_row->Add(final_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 10);
     close_row->Add(btn_close_shift_, 0, wxALIGN_CENTER_VERTICAL);
     close_box_->Add(close_row, 0, wxEXPAND | wxBOTTOM, 16);
 

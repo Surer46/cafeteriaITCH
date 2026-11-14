@@ -446,30 +446,42 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
         print(f"[OK] Detalle completo del evento seleccionado visualizado: '{detail_text[:50]}...'")
 
         # 2.4: Filtro por tipo de evento reduce la lista
-        combos = [h for (h, cls, txt) in get_child_controls(hwnd_main2) if "combobox" in cls.lower() or "choice" in cls.lower()]
+        combos = [h for (h, cls, txt) in get_child_controls(hwnd_main2) if "combobox" in cls.lower() or "choice" in cls.lower() or txt == "comboBox"]
         assert len(combos) >= 1, "Selector de tipo de evento no encontrado"
         cb_event_type = combos[0]
 
         btn_search = next((h for (h, cls, txt) in get_child_controls(hwnd_main2) if cls.lower() == "button" and "Buscar" in txt), None)
         assert btn_search is not None, "Botón 'Buscar' no encontrado"
 
-        # Leer items del combo para encontrar LOGIN_SUCCESS
-        c_count = user32.SendMessageW(cb_event_type, CB_GETCOUNT, 0, 0)
-        login_idx = -1
-        for i in range(c_count):
-            lb_len = user32.SendMessageW(cb_event_type, CB_GETLBTEXTLEN, i, 0)
-            if lb_len > 0:
-                buf = ctypes.create_unicode_buffer(lb_len + 1)
-                user32.SendMessageW(cb_event_type, CB_GETLBTEXT, i, ctypes.addressof(buf))
-                if buf.value == "LOGIN_SUCCESS":
-                    login_idx = i
-                    break
+        # Determinar el índice de 'LOGIN_SUCCESS' en choice_event_type_ ("Todos" + tipos ordenados)
+        con_ev = sqlite3.connect(db_path)
+        event_types = [r[0] for r in con_ev.execute("SELECT DISTINCT event_type FROM audit_events WHERE event_type != '' ORDER BY event_type").fetchall()]
+        con_ev.close()
+        assert "LOGIN_SUCCESS" in event_types, f"Opción 'LOGIN_SUCCESS' no encontrada en BD: {event_types}"
+        login_idx = 1 + event_types.index("LOGIN_SUCCESS")
 
-        assert login_idx >= 0, "Opción 'LOGIN_SUCCESS' no encontrada en combo de tipos de evento"
-        user32.SendMessageW(cb_event_type, CB_SETCURSEL, login_idx, 0)
-        parent_panel = user32.GetParent(cb_event_type)
-        user32.SendMessageW(parent_panel, 0x0111, (CBN_SELCHANGE << 16) | 0, cb_event_type) # WM_COMMAND CBN_SELCHANGE
-        time.sleep(0.2)
+        def _select_combo_index(hwnd_cb, idx):
+            user32.SetForegroundWindow(hwnd_main2)
+            time.sleep(0.1)
+            _, _, _, _, cw, ch = get_rect(hwnd_cb)
+            lp = ((ch // 2) << 16) | (max(4, cw - 12) & 0xFFFF)
+            user32.PostMessageW(hwnd_cb, 0x0201, 1, lp) # WM_LBUTTONDOWN
+            time.sleep(0.05)
+            user32.PostMessageW(hwnd_cb, 0x0202, 0, lp) # WM_LBUTTONUP
+            time.sleep(0.25)
+            target_h = user32.GetFocus() or hwnd_cb
+            user32.PostMessageW(target_h, 0x0100, 0x24, 0) # VK_HOME
+            user32.PostMessageW(target_h, 0x0101, 0x24, 0)
+            time.sleep(0.05)
+            for _ in range(idx):
+                user32.PostMessageW(target_h, 0x0100, 0x28, 0) # VK_DOWN
+                user32.PostMessageW(target_h, 0x0101, 0x28, 0)
+                time.sleep(0.05)
+            user32.PostMessageW(target_h, 0x0100, 0x0D, 0) # VK_RETURN
+            user32.PostMessageW(target_h, 0x0101, 0x0D, 0)
+            time.sleep(0.25)
+
+        _select_combo_index(cb_event_type, login_idx)
 
         send_click_button(btn_search)
         time.sleep(0.6)
@@ -479,8 +491,7 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
         print(f"[OK] Filtro por tipo 'LOGIN_SUCCESS' redujo la lista de {count} a {filtered_count} eventos.")
 
         # Restablecer a Todos
-        user32.SendMessageW(cb_event_type, CB_SETCURSEL, 0, 0)
-        user32.SendMessageW(parent_panel, 0x0111, (CBN_SELCHANGE << 16) | 0, cb_event_type)
+        _select_combo_index(cb_event_type, 0)
         send_click_button(btn_search)
         time.sleep(0.5)
 
