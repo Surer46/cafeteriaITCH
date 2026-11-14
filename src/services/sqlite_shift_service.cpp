@@ -40,6 +40,9 @@ contracts::OperationResult SqliteShiftService::check_permission_or_fail(std::str
 }
 
 contracts::Result<contracts::ShiftDto> SqliteShiftService::get_current_shift() {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<contracts::ShiftDto>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
     const char* sql =
         "SELECT s.id, s.register_id, r.name, s.cashier_user_id, u.display_name, "
         "s.opened_at, s.closed_at, s.initial_cash_cents, s.is_open "

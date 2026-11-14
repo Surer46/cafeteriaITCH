@@ -12,6 +12,7 @@
 #include "app/services/mock_services.hpp"
 #include "app/services/data_dir_policy.hpp"
 #include "app/services/package_self_check.hpp"
+#include "app/services/database_startup.hpp"
 
 #include <wx/stdpaths.h>
 #include <wx/cmdline.h>
@@ -154,33 +155,17 @@ public:
 
         fs::path db_path = data_dir / "cafeteria.db";
 
-        // 2. Abrir base de datos SQLite embebida
-        auto open_res = db_.open(db_path);
-        if (!open_res.is_success()) {
+        // 2-3. Abrir la base y migrarla de forma segura (integridad, respaldo previo y migraciones):
+        // la lógica y los mensajes viven en services::open_and_migrate_database.
+        services::StartupOptions startup;
+        startup.db_path = db_path;
+        startup.migrations_dir = mig_dir;
+        startup.backups_dir = data_dir / "backups";
+        const auto startup_res = services::open_and_migrate_database(db_, startup);
+        if (!startup_res.ok) {
             wxMessageBox(
-                wxString::FromUTF8(open_res.error_message().c_str()),
-                wxT("Error de Base de Datos Local"),
-                wxOK | wxICON_ERROR
-            );
-            return false;
-        }
-
-        // 3. Aplicar migraciones versionadas de forma obligatoria
-        if (!fs::exists(mig_dir, ec)) {
-            wxMessageBox(
-                wxT("No se encontró el directorio de migraciones del sistema.\nLa aplicación requiere sus archivos de esquema para operar."),
-                wxT("Error de Inicialización"),
-                wxOK | wxICON_ERROR
-            );
-            return false;
-        }
-
-        storage::MigrationRunner runner(db_);
-        auto mig_res = runner.run_pending_migrations_from_dir(mig_dir);
-        if (!mig_res.is_success()) {
-            wxMessageBox(
-                wxString::FromUTF8(mig_res.error_message().c_str()),
-                wxT("Error al ejecutar migraciones"),
+                wxString::FromUTF8(startup_res.message_utf8.c_str()),
+                wxT("Base de datos de la cafetería"),
                 wxOK | wxICON_ERROR
             );
             return false;

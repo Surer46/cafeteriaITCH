@@ -121,6 +121,9 @@ bool SqliteBackupService::has_permission(const char* key) const {
 }
 
 contracts::Result<contracts::BackupStatusDto> SqliteBackupService::get_status() {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<contracts::BackupStatusDto>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
     auto prep = db_.prepare(
         "SELECT is_enabled, last_backup_at, last_status, last_error FROM backup_state WHERE id = 1;");
     if (!prep.is_success()) {

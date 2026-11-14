@@ -206,7 +206,10 @@ contracts::OperationResult SqliteInventoryService::update_ingredient(const contr
 }
 
 contracts::Result<std::vector<contracts::IngredientDto>> SqliteInventoryService::list_ingredients() {
-    if (account_service_ && account_service_->is_authenticated()) {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<std::vector<contracts::IngredientDto>>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
+    {
         if (!account_service_->has_permission("inventory.view") &&
             !account_service_->has_permission("inventory.manage_products")) {
             return contracts::Result<std::vector<contracts::IngredientDto>>::fail(
@@ -247,7 +250,10 @@ contracts::Result<std::vector<contracts::IngredientDto>> SqliteInventoryService:
 }
 
 contracts::Result<contracts::IngredientDto> SqliteInventoryService::get_ingredient(const std::string& ingredient_id) {
-    if (account_service_ && account_service_->is_authenticated()) {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<contracts::IngredientDto>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
+    {
         if (!account_service_->has_permission("inventory.view") &&
             !account_service_->has_permission("inventory.manage_products")) {
             return contracts::Result<contracts::IngredientDto>::fail(
@@ -287,7 +293,10 @@ contracts::Result<contracts::IngredientDto> SqliteInventoryService::get_ingredie
 }
 
 contracts::Result<std::vector<contracts::StockAlertDto>> SqliteInventoryService::get_stock_alerts() {
-    if (account_service_ && account_service_->is_authenticated()) {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<std::vector<contracts::StockAlertDto>>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
+    {
         if (!account_service_->has_permission("inventory.view") &&
             !account_service_->has_permission("inventory.manage_products")) {
             return contracts::Result<std::vector<contracts::StockAlertDto>>::fail(

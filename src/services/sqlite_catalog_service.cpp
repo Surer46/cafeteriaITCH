@@ -79,7 +79,10 @@ contracts::Result<std::vector<contracts::ProductDto>> SqliteCatalogService::sear
     std::size_t limit,
     bool include_inactive
 ) {
-    if (account_service_ && account_service_->is_authenticated()) {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<std::vector<contracts::ProductDto>>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
+    {
         if (!account_service_->has_permission("inventory.view") &&
             !account_service_->has_permission("pos.sell") &&
             !account_service_->has_permission("pos.visual_catalog")) {
@@ -188,6 +191,9 @@ contracts::Result<std::vector<contracts::ProductDto>> SqliteCatalogService::sear
 }
 
 contracts::Result<contracts::ProductDto> SqliteCatalogService::get_product_by_id(const std::string& product_id) {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<contracts::ProductDto>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
     auto prep = db_.prepare(
         "SELECT p.id, p.sku, p.barcode, p.name, p.category, p.price_cents, "
         "p.is_prepared, p.is_active, (CASE WHEN img.id IS NOT NULL THEN 1 ELSE 0 END) "
@@ -225,6 +231,9 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::get_product_by_id
 }
 
 contracts::Result<contracts::ProductDto> SqliteCatalogService::get_product_by_sku_or_barcode(const std::string& code) {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<contracts::ProductDto>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
     auto prep = db_.prepare(
         "SELECT p.id, p.sku, p.barcode, p.name, p.category, p.price_cents, "
         "p.is_prepared, p.is_active, (CASE WHEN img.id IS NOT NULL THEN 1 ELSE 0 END) "
@@ -263,6 +272,9 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::get_product_by_sk
 }
 
 contracts::Result<std::vector<std::string>> SqliteCatalogService::list_categories() {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<std::vector<std::string>>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
     auto prep = db_.prepare("SELECT DISTINCT category FROM products WHERE is_active = 1 ORDER BY category ASC;");
     if (!prep.is_success()) {
         return contracts::Result<std::vector<std::string>>::fail(prep.error_code(), prep.error_message());
@@ -585,6 +597,9 @@ contracts::OperationResult SqliteCatalogService::set_product_image(
 }
 
 contracts::Result<contracts::ProductImageDto> SqliteCatalogService::get_product_image(const std::string& product_id) {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<contracts::ProductImageDto>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
     auto prep = db_.prepare("SELECT mime_type, image_blob, thumbnail_blob FROM product_images WHERE product_id = ?;");
     if (!prep.is_success()) {
         return contracts::Result<contracts::ProductImageDto>::fail(prep.error_code(), prep.error_message());
@@ -633,6 +648,9 @@ contracts::OperationResult SqliteCatalogService::remove_product_image(const std:
 }
 
 contracts::Result<contracts::RecipeDto> SqliteCatalogService::get_recipe(const std::string& product_id) {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<contracts::RecipeDto>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
     auto current_prod = get_product_by_id(product_id);
     if (!current_prod.is_success()) {
         return contracts::Result<contracts::RecipeDto>::fail(current_prod.error_code(), current_prod.error_message());

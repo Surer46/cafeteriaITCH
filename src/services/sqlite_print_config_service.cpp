@@ -146,6 +146,9 @@ bool SqlitePrintConfigService::save_to_disk() {
 
 
 contracts::Result<contracts::PrinterStationConfig> SqlitePrintConfigService::get_station_config() {
+    if (!account_service_ || !account_service_->is_authenticated()) {
+        return contracts::Result<contracts::PrinterStationConfig>::fail(contracts::ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    }
     if (!loaded_) {
         load_from_disk();
     }
