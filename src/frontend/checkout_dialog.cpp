@@ -8,7 +8,7 @@ namespace app::frontend {
 CheckoutDialog::CheckoutDialog(
     wxWindow* parent,
     contracts::Money total
-) : wxDialog(parent, wxID_ANY, wxT("Cobro de Venta — Cafetería ITCH II"), wxDefaultPosition, wxSize(440, 520), wxDEFAULT_DIALOG_STYLE),
+) : wxDialog(parent, wxID_ANY, wxT("Cobro de Venta — Cafetería ITCH II"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE),
     total_(total),
     cash_received_(total) {
     SetBackgroundColour(Theme::ColorBackground);
@@ -19,7 +19,7 @@ CheckoutDialog::CheckoutDialog(
     auto* lbl_title = new wxStaticText(this, wxID_ANY, wxT("Confirmación de Cobro"));
     lbl_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     lbl_title->SetForegroundColour(Theme::ColorBrandDeep);
-    main_sizer->Add(lbl_title, 0, wxALL, 16);
+    main_sizer->Add(lbl_title, 0, wxALL, FromDIP(16));
 
     // Tarjeta de Total a Cobrar
     auto* total_card = new CardPanel(this);
@@ -29,17 +29,17 @@ CheckoutDialog::CheckoutDialog(
     auto* lbl_total_caption = new wxStaticText(total_card, wxID_ANY, wxT("TOTAL A COBRAR"));
     lbl_total_caption->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_total_caption->SetForegroundColour(Theme::ColorTextSecondary);
-    card_sizer->Add(lbl_total_caption, 0, wxLEFT | wxRIGHT | wxTOP, 14);
+    card_sizer->Add(lbl_total_caption, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
 
     lbl_total_val_ = new wxStaticText(total_card, wxID_ANY, wxString::FromUTF8(total_.to_string().c_str()));
     lbl_total_val_->SetFont(Theme::get_font_hero(wxFONTWEIGHT_BOLD));
     lbl_total_val_->SetForegroundColour(Theme::ColorSuccess);
-    card_sizer->Add(lbl_total_val_, 0, wxALL, 14);
+    card_sizer->Add(lbl_total_val_, 0, wxALL, FromDIP(14));
 
     total_card->SetSizer(card_sizer);
-    main_sizer->Add(total_card, 0, wxEXPAND | wxLEFT | wxRIGHT, 16);
+    main_sizer->Add(total_card, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
 
-    main_sizer->AddSpacer(14);
+    main_sizer->AddSpacer(FromDIP(14));
 
     // Tarjeta de Método y Detalle de Pago
     auto* payment_card = new CardPanel(this);
@@ -49,7 +49,7 @@ CheckoutDialog::CheckoutDialog(
     auto* lbl_method = new wxStaticText(payment_card, wxID_ANY, wxT("Método de pago:"));
     lbl_method->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_method->SetForegroundColour(Theme::ColorTextSecondary);
-    pay_card_sizer->Add(lbl_method, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 6);
+    pay_card_sizer->Add(lbl_method, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(6));
 
     wxArrayString methods;
     methods.Add(wxT("Efectivo"));
@@ -58,7 +58,7 @@ CheckoutDialog::CheckoutDialog(
     choice_method_ = new wxChoice(payment_card, wxID_ANY, wxDefaultPosition, wxDefaultSize, methods);
     choice_method_->SetFont(Theme::get_font_body());
     choice_method_->SetSelection(0);
-    pay_card_sizer->Add(choice_method_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
+    pay_card_sizer->Add(choice_method_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
     // Sección de Efectivo (Recibido y Cambio)
     cash_details_sizer_ = new wxBoxSizer(wxVERTICAL);
@@ -66,12 +66,12 @@ CheckoutDialog::CheckoutDialog(
     auto* lbl_received = new wxStaticText(payment_card, wxID_ANY, wxT("Monto en efectivo recibido:"));
     lbl_received->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_received->SetForegroundColour(Theme::ColorTextSecondary);
-    cash_details_sizer_->Add(lbl_received, 0, wxBOTTOM, 4);
+    cash_details_sizer_->Add(lbl_received, 0, wxBOTTOM, FromDIP(4));
 
     txt_cash_received_ = new wxTextCtrl(payment_card, wxID_ANY, wxString::FromUTF8(total_.to_string().c_str()),
-                                        wxDefaultPosition, wxSize(-1, Theme::is_touch() ? 44 : 36));
+                                        wxDefaultPosition, FromDIP(wxSize(-1, Theme::is_touch() ? 44 : 36)));
     txt_cash_received_->SetFont(Theme::get_font_body());
-    cash_details_sizer_->Add(txt_cash_received_, 0, wxEXPAND | wxBOTTOM, 12);
+    cash_details_sizer_->Add(txt_cash_received_, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
 
     auto* change_row = new wxBoxSizer(wxHORIZONTAL);
     auto* lbl_change_caption = new wxStaticText(payment_card, wxID_ANY, wxT("Cambio a devolver:"));
@@ -84,29 +84,33 @@ CheckoutDialog::CheckoutDialog(
 
     change_row->Add(lbl_change_caption, 1, wxALIGN_CENTER_VERTICAL);
     change_row->Add(lbl_change_val_, 0, wxALIGN_CENTER_VERTICAL);
-    cash_details_sizer_->Add(change_row, 0, wxEXPAND | wxBOTTOM, 8);
+    cash_details_sizer_->Add(change_row, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
-    pay_card_sizer->Add(cash_details_sizer_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    pay_card_sizer->Add(cash_details_sizer_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
     payment_card->SetSizer(pay_card_sizer);
 
-    main_sizer->Add(payment_card, 0, wxEXPAND | wxLEFT | wxRIGHT, 16);
+    main_sizer->Add(payment_card, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
 
     main_sizer->AddStretchSpacer(1);
 
     // Botones de acción
     auto* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
-    auto* btn_cancel = new wxButton(this, wxID_CANCEL, wxT("Cancelar"), wxDefaultPosition, wxSize(110, Theme::is_touch() ? 48 : 40));
-    Theme::style_button_secondary(btn_cancel, Theme::is_touch() ? 48 : 40);
+    const int btn_h_logical = Theme::is_touch() ? 48 : 40;
+    auto* btn_cancel = new wxButton(this, wxID_CANCEL, wxT("Cancelar"));
+    Theme::style_button_secondary(btn_cancel, btn_h_logical);
+    Theme::ensure_button_min_size(btn_cancel, 110, btn_h_logical);
 
-    btn_confirm_ = new wxButton(this, wxID_ANY, wxT("Confirmar Venta"), wxDefaultPosition, wxSize(170, Theme::is_touch() ? 48 : 40));
-    Theme::style_button_success(btn_confirm_, Theme::is_touch() ? 48 : 40);
+    btn_confirm_ = new wxButton(this, wxID_ANY, wxT("Confirmar Venta"));
+    Theme::style_button_success(btn_confirm_, btn_h_logical);
     Theme::setup_button_icon(btn_confirm_, "check_circle", wxSize(20, 20), Theme::ColorSurface);
+    Theme::ensure_button_min_size(btn_confirm_, 170, btn_h_logical);
 
-    btn_sizer->Add(btn_cancel, 0, wxRIGHT, 12);
+    btn_sizer->Add(btn_cancel, 0, wxRIGHT, FromDIP(12));
     btn_sizer->Add(btn_confirm_, 1);
-    main_sizer->Add(btn_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 16);
+    main_sizer->Add(btn_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     SetSizer(main_sizer);
+    SetSize(FromDIP(wxSize(440, 520)));
     Center();
 
     // Eventos

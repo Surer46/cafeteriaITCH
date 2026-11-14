@@ -91,7 +91,7 @@ void BackofficePrintConfigPanel::setup_ui() {
     auto* lbl_title = new wxStaticText(card, wxID_ANY, wxT("Configuración de Impresora Térmica"));
     lbl_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     lbl_title->SetForegroundColour(Theme::ColorBrandDeep);
-    card_sizer->Add(lbl_title, 0, wxALL, 16);
+    card_sizer->Add(lbl_title, 0, wxALL, FromDIP(16));
 
     auto* lbl_subtitle = new wxStaticText(card, wxID_ANY,
         wxT("Seleccione la impresora instalada y el ancho nominal del papel para esta estación.\n")
@@ -100,7 +100,7 @@ void BackofficePrintConfigPanel::setup_ui() {
     );
     lbl_subtitle->SetFont(Theme::get_font_small());
     lbl_subtitle->SetForegroundColour(Theme::ColorTextSecondary);
-    card_sizer->Add(lbl_subtitle, 0, wxLEFT | wxRIGHT | wxBOTTOM, 16);
+    card_sizer->Add(lbl_subtitle, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     // Contenido dividido en 2 columnas: Opciones a la izquierda, Vista Previa a la derecha
     auto* cols_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -112,7 +112,7 @@ void BackofficePrintConfigPanel::setup_ui() {
     auto* lbl_printer_sel = new wxStaticText(card, wxID_ANY, wxT("Impresora instalada:"));
     lbl_printer_sel->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_printer_sel->SetForegroundColour(Theme::ColorText);
-    opt_sizer->Add(lbl_printer_sel, 0, wxBOTTOM, 6);
+    opt_sizer->Add(lbl_printer_sel, 0, wxBOTTOM, FromDIP(6));
 
     // Enumerar impresoras instaladas
     installed_printers_ = enumerate_installed_printers();
@@ -130,20 +130,20 @@ void BackofficePrintConfigPanel::setup_ui() {
     choice_printer_->SetFont(Theme::get_font_body());
     choice_printer_->SetMinSize(wxSize(combo_w, combo_h));
     choice_printer_->SetSelection(0);
-    opt_sizer->Add(choice_printer_, 0, wxBOTTOM, 8);
+    opt_sizer->Add(choice_printer_, 0, wxBOTTOM, FromDIP(8));
 
     auto* lbl_printer_hint = new wxStaticText(card, wxID_ANY,
         wxT("Seleccione la impresora térmica de este puesto. Si no aparece en la lista,\n")
         wxT("instale su controlador desde la configuración de Windows."));
     lbl_printer_hint->SetFont(Theme::get_font_small());
     lbl_printer_hint->SetForegroundColour(Theme::ColorTextSecondary);
-    opt_sizer->Add(lbl_printer_hint, 0, wxBOTTOM, 16);
+    opt_sizer->Add(lbl_printer_hint, 0, wxBOTTOM, FromDIP(16));
 
     // --- Perfil de papel ---
     auto* lbl_profile = new wxStaticText(card, wxID_ANY, wxT("Perfil de Papel Térmico:"));
     lbl_profile->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_profile->SetForegroundColour(Theme::ColorText);
-    opt_sizer->Add(lbl_profile, 0, wxBOTTOM, 6);
+    opt_sizer->Add(lbl_profile, 0, wxBOTTOM, FromDIP(6));
 
     wxArrayString profiles;
     profiles.Add(wxT("Perfil 80 mm (Estándar de mostrador — ~42 columnas nominales)"));
@@ -152,7 +152,7 @@ void BackofficePrintConfigPanel::setup_ui() {
     choice_profile_->SetFont(Theme::get_font_body());
     choice_profile_->SetMinSize(wxSize(combo_w, combo_h));
     choice_profile_->SetSelection(0);
-    opt_sizer->Add(choice_profile_, 0, wxBOTTOM, 6);
+    opt_sizer->Add(choice_profile_, 0, wxBOTTOM, FromDIP(6));
 
     // Nota: sin etiqueta "Columnas efectivas" ya que es estimación nominal,
     // no una medición real del DC del controlador.
@@ -161,21 +161,22 @@ void BackofficePrintConfigPanel::setup_ui() {
         wxT("del controlador y el DPI de la impresora seleccionada."));
     lbl_paper_hint->SetFont(Theme::get_font_small());
     lbl_paper_hint->SetForegroundColour(Theme::ColorTextSecondary);
-    opt_sizer->Add(lbl_paper_hint, 0, wxBOTTOM, 20);
+    opt_sizer->Add(lbl_paper_hint, 0, wxBOTTOM, FromDIP(20));
 
     // Botón Guardar
-    int btn_h = Theme::is_touch() ? 48 : 38;
-    btn_save_ = new wxButton(card, wxID_ANY, wxT("Guardar Configuración"), wxDefaultPosition, wxSize(220, btn_h));
-    Theme::style_button_primary(btn_save_, btn_h);
+    const int btn_h_logical = Theme::is_touch() ? 48 : 38;
+    btn_save_ = new wxButton(card, wxID_ANY, wxT("Guardar Configuración"));
+    Theme::style_button_primary(btn_save_, btn_h_logical);
     Theme::setup_button_icon(btn_save_, "check_circle", wxSize(18, 18), Theme::ColorSurface);
-    opt_sizer->Add(btn_save_, 0, wxBOTTOM, 12);
+    Theme::ensure_button_min_size(btn_save_, 220, btn_h_logical);
+    opt_sizer->Add(btn_save_, 0, wxBOTTOM, FromDIP(12));
 
     lbl_status_ = new wxStaticText(card, wxID_ANY, wxEmptyString);
     lbl_status_->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
     lbl_status_->SetForegroundColour(Theme::ColorTextMuted);
     opt_sizer->Add(lbl_status_, 0, wxEXPAND);
 
-    cols_sizer->Add(opt_sizer, 0, wxRIGHT, 24);
+    cols_sizer->Add(opt_sizer, 0, wxRIGHT, FromDIP(24));
 
     // Columna derecha: Vista previa interactiva en vivo
     auto* prev_box = new wxBoxSizer(wxVERTICAL);
@@ -183,15 +184,15 @@ void BackofficePrintConfigPanel::setup_ui() {
         wxT("Vista Previa Estimada del Formato de Impresión:"));
     lbl_prev_title->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_prev_title->SetForegroundColour(Theme::ColorText);
-    prev_box->Add(lbl_prev_title, 0, wxBOTTOM, 2);
+    prev_box->Add(lbl_prev_title, 0, wxBOTTOM, FromDIP(2));
 
     auto* lbl_prev_note = new wxStaticText(card, wxID_ANY,
         wxT("Estimación basada en columnas nominales del perfil."));
     lbl_prev_note->SetFont(Theme::get_font_small());
     lbl_prev_note->SetForegroundColour(Theme::ColorTextSecondary);
-    prev_box->Add(lbl_prev_note, 0, wxBOTTOM, 6);
+    prev_box->Add(lbl_prev_note, 0, wxBOTTOM, FromDIP(6));
 
-    txt_preview_ = new wxTextCtrl(card, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(360, 340), wxTE_MULTILINE | wxTE_READONLY);
+    txt_preview_ = new wxTextCtrl(card, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(360, 340)), wxTE_MULTILINE | wxTE_READONLY);
     wxFont f_mono(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
     txt_preview_->SetFont(f_mono);
     txt_preview_->SetBackgroundColour(Theme::ColorSurface);
@@ -199,10 +200,10 @@ void BackofficePrintConfigPanel::setup_ui() {
 
     cols_sizer->Add(prev_box, 1, wxEXPAND);
 
-    card_sizer->Add(cols_sizer, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 16);
+    card_sizer->Add(cols_sizer, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
     card->SetSizer(card_sizer);
 
-    main_sizer->Add(card, 1, wxEXPAND | wxALL, 16);
+    main_sizer->Add(card, 1, wxEXPAND | wxALL, FromDIP(16));
     SetSizer(main_sizer);
 
     choice_profile_->Bind(wxEVT_COMBOBOX, &BackofficePrintConfigPanel::on_profile_selected, this);

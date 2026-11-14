@@ -23,7 +23,7 @@ void CashShiftPanel::setup_ui() {
     auto* lbl_title = new wxStaticText(this, wxID_ANY, wxT("Control de Turno de Caja"));
     lbl_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     lbl_title->SetForegroundColour(Theme::ColorBrandDeep);
-    main_sizer_->Add(lbl_title, 0, wxALL, 16);
+    main_sizer_->Add(lbl_title, 0, wxALL, FromDIP(16));
 
     // Tarjeta de Estado
     status_card_ = new CardPanel(this);
@@ -31,15 +31,15 @@ void CashShiftPanel::setup_ui() {
     auto* card_sizer = new wxBoxSizer(wxVERTICAL);
 
     shift_badge_ = new StatusBadge(status_card_, wxT("Turno Cerrado"), false);
-    card_sizer->Add(shift_badge_, 0, wxALL, 16);
+    card_sizer->Add(shift_badge_, 0, wxALL, FromDIP(16));
 
     lbl_details_ = new wxStaticText(status_card_, wxID_ANY, wxEmptyString);
     lbl_details_->SetFont(Theme::get_font_body());
     lbl_details_->SetForegroundColour(Theme::ColorTextSecondary);
-    card_sizer->Add(lbl_details_, 0, wxLEFT | wxRIGHT | wxBOTTOM, 16);
+    card_sizer->Add(lbl_details_, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
-    card_sizer->Add(new wxStaticLine(status_card_, wxID_ANY), 0, wxEXPAND | wxLEFT | wxRIGHT, 16);
-    card_sizer->AddSpacer(14);
+    card_sizer->Add(new wxStaticLine(status_card_, wxID_ANY), 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
+    card_sizer->AddSpacer(FromDIP(14));
 
     // ---------------------------------------------------------
     // Controles para ABRIR turno (visible cuando el turno está cerrado)
@@ -48,25 +48,26 @@ void CashShiftPanel::setup_ui() {
     auto* lbl_open_prompt = new wxStaticText(status_card_, wxID_ANY, wxT("Ingrese el fondo inicial en efectivo para iniciar el turno:"));
     lbl_open_prompt->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_open_prompt->SetForegroundColour(Theme::ColorText);
-    open_box_->Add(lbl_open_prompt, 0, wxBOTTOM, 6);
+    open_box_->Add(lbl_open_prompt, 0, wxBOTTOM, FromDIP(6));
 
-    int field_h = FromDIP(Theme::is_touch() ? 48 : 36);
-    int field_w = FromDIP(140);
+    const int field_h_logical = Theme::is_touch() ? 48 : 36;
+    const int field_w_logical = 140;
 
     auto* open_row = new wxBoxSizer(wxHORIZONTAL);
-    auto* initial_field = ui::make_text_field(status_card_, txt_initial_cash_, field_h, field_w, Theme::get_font_body());
+    auto* initial_field = ui::make_text_field(status_card_, txt_initial_cash_, field_h_logical, field_w_logical, Theme::get_font_body());
     txt_initial_cash_->SetValue(wxT("300.00"));
 
-    int btn_h = FromDIP(Theme::is_touch() ? 48 : 38);
-    btn_open_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Abrir Turno de Caja"), wxDefaultPosition, FromDIP(wxSize(200, Theme::is_touch() ? 48 : 38)));
-    Theme::style_button_success(btn_open_shift_, btn_h);
-    Theme::setup_button_icon(btn_open_shift_, "lock_open", FromDIP(wxSize(18, 18)), Theme::ColorSurface);
+    const int btn_h_logical = Theme::is_touch() ? 48 : 38;
+    btn_open_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Abrir Turno de Caja"));
+    Theme::style_button_success(btn_open_shift_, btn_h_logical);
+    Theme::setup_button_icon(btn_open_shift_, "lock_open", wxSize(18, 18), Theme::ColorSurface);
+    Theme::ensure_button_min_size(btn_open_shift_, 200, btn_h_logical);
 
-    open_row->Add(initial_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 10);
+    open_row->Add(initial_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, FromDIP(10));
     open_row->Add(btn_open_shift_, 0, wxALIGN_CENTER_VERTICAL);
-    open_box_->Add(open_row, 0, wxEXPAND | wxBOTTOM, 16);
+    open_box_->Add(open_row, 0, wxEXPAND | wxBOTTOM, FromDIP(16));
 
-    card_sizer->Add(open_box_, 0, wxEXPAND | wxLEFT | wxRIGHT, 16);
+    card_sizer->Add(open_box_, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
 
     // ---------------------------------------------------------
     // Controles para CERRAR turno (visible cuando el turno está abierto)
@@ -75,24 +76,25 @@ void CashShiftPanel::setup_ui() {
     auto* lbl_close_prompt = new wxStaticText(status_card_, wxID_ANY, wxT("Ingrese el efectivo final contado en caja (Arqueo de cierre):"));
     lbl_close_prompt->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_close_prompt->SetForegroundColour(Theme::ColorText);
-    close_box_->Add(lbl_close_prompt, 0, wxBOTTOM, 6);
+    close_box_->Add(lbl_close_prompt, 0, wxBOTTOM, FromDIP(6));
 
     auto* close_row = new wxBoxSizer(wxHORIZONTAL);
-    auto* final_field = ui::make_text_field(status_card_, txt_final_cash_, field_h, field_w, Theme::get_font_body());
+    auto* final_field = ui::make_text_field(status_card_, txt_final_cash_, field_h_logical, field_w_logical, Theme::get_font_body());
     txt_final_cash_->SetValue(wxT("0.00"));
 
-    btn_close_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Cerrar Turno de Caja"), wxDefaultPosition, FromDIP(wxSize(200, Theme::is_touch() ? 48 : 38)));
-    Theme::style_button_destructive(btn_close_shift_, btn_h);
-    Theme::setup_button_icon(btn_close_shift_, "lock", FromDIP(wxSize(18, 18)), Theme::ColorError);
+    btn_close_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Cerrar Turno de Caja"));
+    Theme::style_button_destructive(btn_close_shift_, btn_h_logical);
+    Theme::setup_button_icon(btn_close_shift_, "lock", wxSize(18, 18), Theme::ColorError);
+    Theme::ensure_button_min_size(btn_close_shift_, 200, btn_h_logical);
 
-    close_row->Add(final_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, 10);
+    close_row->Add(final_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, FromDIP(10));
     close_row->Add(btn_close_shift_, 0, wxALIGN_CENTER_VERTICAL);
-    close_box_->Add(close_row, 0, wxEXPAND | wxBOTTOM, 16);
+    close_box_->Add(close_row, 0, wxEXPAND | wxBOTTOM, FromDIP(16));
 
-    card_sizer->Add(close_box_, 0, wxEXPAND | wxLEFT | wxRIGHT, 16);
+    card_sizer->Add(close_box_, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
 
     status_card_->SetSizer(card_sizer);
-    main_sizer_->Add(status_card_, 0, wxEXPAND | wxALL, 16);
+    main_sizer_->Add(status_card_, 0, wxEXPAND | wxALL, FromDIP(16));
 
     SetSizer(main_sizer_);
 
@@ -132,6 +134,7 @@ void CashShiftPanel::refresh_status() {
         close_box_->ShowItems(false);
     }
 
+    lbl_details_->Wrap(FromDIP(660));
     status_card_->Layout();
     Layout();
 }

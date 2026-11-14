@@ -184,8 +184,10 @@ InventoryIngredientsPanel::InventoryIngredientsPanel(
 
 void InventoryIngredientsPanel::build_ui() {
     const bool touch = Theme::is_touch();
-    const int btn_h = touch ? std::max(48, Theme::get_button_height()) : Theme::get_button_height();
-    const int field_h = touch ? std::max(48, Theme::get_touch_target_min()) : 34;
+    const int btn_h_px = touch ? std::max(FromDIP(48), Theme::get_button_height(this)) : Theme::get_button_height(this);
+    const int btn_h_logical = ToDIP(btn_h_px);
+    const int field_h_logical = touch ? std::max(48, ToDIP(Theme::get_touch_target_min(this))) : 34;
+    const int field_h_px = FromDIP(field_h_logical);
 
     auto* root = new wxBoxSizer(wxVERTICAL);
 
@@ -199,34 +201,40 @@ void InventoryIngredientsPanel::build_ui() {
 
     btn_new_ = new wxButton(this, wxID_ANY, wxString::FromUTF8("Nuevo ingrediente"));
     btn_new_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    Theme::style_button_primary(btn_new_, btn_h);
+    Theme::style_button_primary(btn_new_, btn_h_logical);
     {
         int tw = 0, th = 0;
         btn_new_->GetTextExtent(btn_new_->GetLabel(), &tw, &th);
-        btn_new_->SetMinSize(wxSize(tw + (touch ? 36 : 28), btn_h));
+        btn_new_->InvalidateBestSize();
+        const wxSize best = btn_new_->GetBestSize();
+        const int w = std::max(tw + FromDIP(touch ? 36 : 28), best.GetWidth());
+        btn_new_->SetMinSize(wxSize(w, std::max(btn_h_px, best.GetHeight())));
     }
     btn_new_->Bind(wxEVT_BUTTON, &InventoryIngredientsPanel::on_new_ingredient, this);
-    top_bar->Add(btn_new_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    top_bar->Add(btn_new_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
 
     btn_refresh_ = new wxButton(this, wxID_ANY, wxString::FromUTF8("Actualizar"));
     btn_refresh_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    Theme::style_button_secondary(btn_refresh_, btn_h);
+    Theme::style_button_secondary(btn_refresh_, btn_h_logical);
     {
         int tw = 0, th = 0;
         btn_refresh_->GetTextExtent(btn_refresh_->GetLabel(), &tw, &th);
-        btn_refresh_->SetMinSize(wxSize(tw + (touch ? 36 : 28), btn_h));
+        btn_refresh_->InvalidateBestSize();
+        const wxSize best = btn_refresh_->GetBestSize();
+        const int w = std::max(tw + FromDIP(touch ? 36 : 28), best.GetWidth());
+        btn_refresh_->SetMinSize(wxSize(w, std::max(btn_h_px, best.GetHeight())));
     }
     btn_refresh_->Bind(wxEVT_BUTTON, &InventoryIngredientsPanel::on_refresh, this);
     top_bar->Add(btn_refresh_, 0, wxALIGN_CENTER_VERTICAL);
 
     root->Add(top_bar, 0, wxEXPAND);
-    root->AddSpacer(touch ? 4 : 6);
+    root->AddSpacer(FromDIP(touch ? 4 : 6));
 
     // 2. Cuerpo dividido: Lista izquierda + Detalle derecha
     auto* body = new wxBoxSizer(wxHORIZONTAL);
 
     left_card_ = new CardPanel(this);
-    left_card_->SetMinSize(wxSize(touch ? 488 : 472, -1));
+    left_card_->SetMinSize(FromDIP(wxSize(touch ? 488 : 472, -1)));
     auto* left_sizer = new wxBoxSizer(wxVERTICAL);
 
     lbl_empty_state_ = new wxStaticText(
@@ -234,7 +242,7 @@ void InventoryIngredientsPanel::build_ui() {
     lbl_empty_state_->SetFont(Theme::get_font_body());
     lbl_empty_state_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_empty_state_->Hide();
-    left_sizer->Add(lbl_empty_state_, 1, wxEXPAND | wxALL, 16);
+    left_sizer->Add(lbl_empty_state_, 1, wxEXPAND | wxALL, FromDIP(16));
 
     list_ = new wxListView(left_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
     list_->SetFont(Theme::get_font_body());
@@ -248,20 +256,20 @@ void InventoryIngredientsPanel::build_ui() {
         ui::apply_touch_row_height(list_);
     }
     list_->Bind(wxEVT_LIST_ITEM_SELECTED, &InventoryIngredientsPanel::on_list_selected, this);
-    left_sizer->Add(list_, 1, wxEXPAND | wxALL, 4);
+    left_sizer->Add(list_, 1, wxEXPAND | wxALL, FromDIP(4));
 
     left_card_->SetSizer(left_sizer);
-    body->Add(left_card_, 14, wxEXPAND | wxRIGHT, 6);
+    body->Add(left_card_, 14, wxEXPAND | wxRIGHT, FromDIP(6));
 
     // 3. Tarjeta de detalle derecha
     right_card_ = new CardPanel(this);
-    right_card_->SetMinSize(wxSize(202, -1));
+    right_card_->SetMinSize(FromDIP(wxSize(202, -1)));
     auto* right_sizer = new wxBoxSizer(wxVERTICAL);
 
     lbl_form_title_ = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("Ingrediente"));
     lbl_form_title_->SetFont(Theme::get_font_subtitle());
     lbl_form_title_->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_form_title_, 0, wxEXPAND | wxBOTTOM, 2);
+    right_sizer->Add(lbl_form_title_, 0, wxEXPAND | wxBOTTOM, FromDIP(2));
 
     pnl_warning_ = new wxPanel(right_card_, wxID_ANY);
     pnl_warning_->SetBackgroundColour(Theme::ColorErrorSoft);
@@ -269,12 +277,12 @@ void InventoryIngredientsPanel::build_ui() {
     lbl_warning_ = new wxStaticText(pnl_warning_, wxID_ANY, wxEmptyString);
     lbl_warning_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_warning_->SetForegroundColour(Theme::ColorError);
-    warn_sizer->Add(lbl_warning_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, 4);
+    warn_sizer->Add(lbl_warning_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(4));
     pnl_warning_->SetSizer(warn_sizer);
     pnl_warning_->Hide();
-    right_sizer->Add(pnl_warning_, 0, wxEXPAND | wxBOTTOM, 4);
+    right_sizer->Add(pnl_warning_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
 
-    auto* form_grid = new wxFlexGridSizer(2, 3, 4);
+    auto* form_grid = new wxFlexGridSizer(2, FromDIP(3), FromDIP(4));
     form_grid->AddGrowableCol(1, 1);
 
     // Nombre
@@ -283,8 +291,8 @@ void InventoryIngredientsPanel::build_ui() {
     lbl_name->SetForegroundColour(Theme::ColorText);
     form_grid->Add(lbl_name, 0, wxALIGN_CENTER_VERTICAL);
 
-    wxWindow* name_box = ui::make_text_field(right_card_, txt_name_, field_h, -1, Theme::get_font_body());
-    name_box->SetMinSize(wxSize(90, name_box->GetMinSize().GetHeight()));
+    wxWindow* name_box = ui::make_text_field(right_card_, txt_name_, field_h_logical, -1, Theme::get_font_body());
+    name_box->SetMinSize(wxSize(FromDIP(90), name_box->GetMinSize().GetHeight()));
     form_grid->Add(name_box, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
 
     // Cómo se mide
@@ -301,8 +309,8 @@ void InventoryIngredientsPanel::build_ui() {
     ch_dimension_ = new wxChoice(right_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, dim_choices);
     ch_dimension_->SetFont(Theme::get_font_body());
     ch_dimension_->SetSelection(0);
-    ch_dimension_->SetMinSize(wxSize(96, field_h));
-    auto sync_touch_choice_height = [choice = ch_dimension_, field_h]() {
+    ch_dimension_->SetMinSize(wxSize(FromDIP(96), field_h_px));
+    auto sync_touch_choice_height = [choice = ch_dimension_, field_h_px]() {
 #ifdef __WXMSW__
         if (choice == nullptr || !Theme::is_touch()) {
             return;
@@ -311,24 +319,24 @@ void InventoryIngredientsPanel::build_ui() {
         if (hwnd == nullptr) {
             return;
         }
-        ::SendMessageW(hwnd, CB_SETITEMHEIGHT, static_cast<WPARAM>(0), 40);
+        ::SendMessageW(hwnd, CB_SETITEMHEIGHT, static_cast<WPARAM>(0), static_cast<LPARAM>(choice->FromDIP(40)));
         RECT rc{};
         if (!::GetWindowRect(hwnd, &rc)) {
             return;
         }
         const int cur_h = rc.bottom - rc.top;
-        if (cur_h >= field_h) {
+        if (cur_h >= field_h_px) {
             return;
         }
         const LRESULT cur_item = ::SendMessageW(hwnd, CB_GETITEMHEIGHT, static_cast<WPARAM>(-1), 0);
-        const int border_h = (cur_item > 0 && cur_h > cur_item) ? (cur_h - static_cast<int>(cur_item)) : 6;
-        const int desired_item = field_h - border_h;
+        const int border_h = (cur_item > 0 && cur_h > cur_item) ? (cur_h - static_cast<int>(cur_item)) : choice->FromDIP(6);
+        const int desired_item = field_h_px - border_h;
         if (desired_item > 0) {
             ::SendMessageW(hwnd, CB_SETITEMHEIGHT, static_cast<WPARAM>(-1), static_cast<LPARAM>(desired_item));
         }
 #else
         (void)choice;
-        (void)field_h;
+        (void)field_h_px;
 #endif
     };
     if (touch) {
@@ -347,13 +355,13 @@ void InventoryIngredientsPanel::build_ui() {
 
     pnl_dimension_ro_ = new wxPanel(right_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_SIMPLE);
     pnl_dimension_ro_->SetBackgroundColour(Theme::ColorSurfaceSubtle);
-    pnl_dimension_ro_->SetMinSize(wxSize(96, field_h));
+    pnl_dimension_ro_->SetMinSize(wxSize(FromDIP(96), field_h_px));
     auto* dim_ro_sizer = new wxBoxSizer(wxVERTICAL);
     dim_ro_sizer->AddStretchSpacer(1);
     lbl_dimension_ro_ = new wxStaticText(pnl_dimension_ro_, wxID_ANY, wxString::FromUTF8("Peso"));
     lbl_dimension_ro_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_dimension_ro_->SetForegroundColour(Theme::ColorTextSecondary);
-    dim_ro_sizer->Add(lbl_dimension_ro_, 0, wxEXPAND | wxLEFT | wxRIGHT, 10);
+    dim_ro_sizer->Add(lbl_dimension_ro_, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(10));
     dim_ro_sizer->AddStretchSpacer(1);
     pnl_dimension_ro_->SetSizer(dim_ro_sizer);
     pnl_dimension_ro_->Hide();
@@ -369,33 +377,33 @@ void InventoryIngredientsPanel::build_ui() {
         right_card_, wxID_ANY, wxString::FromUTF8("Avisar con menos de:"));
     lbl_thresh->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_thresh->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_thresh, 0, wxEXPAND | wxTOP, 4);
+    right_sizer->Add(lbl_thresh, 0, wxEXPAND | wxTOP, FromDIP(4));
 
     auto* thresh_row = new wxBoxSizer(wxHORIZONTAL);
-    wxWindow* thresh_box = ui::make_text_field(right_card_, txt_threshold_, field_h, 60, Theme::get_font_body());
-    thresh_row->Add(thresh_box, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    wxWindow* thresh_box = ui::make_text_field(right_card_, txt_threshold_, field_h_logical, 60, Theme::get_font_body());
+    thresh_row->Add(thresh_box, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 
     lbl_threshold_unit_ = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("gramos"));
     lbl_threshold_unit_->SetFont(Theme::get_font_body());
     lbl_threshold_unit_->SetForegroundColour(Theme::ColorText);
     thresh_row->Add(lbl_threshold_unit_, 0, wxALIGN_CENTER_VERTICAL);
-    right_sizer->Add(thresh_row, 0, wxEXPAND | wxTOP, 2);
+    right_sizer->Add(thresh_row, 0, wxEXPAND | wxTOP, FromDIP(2));
 
     lbl_threshold_hint_ = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("0 significa sin aviso."));
     lbl_threshold_hint_->SetFont(Theme::get_font_small());
     lbl_threshold_hint_->SetForegroundColour(Theme::ColorTextSecondary);
-    right_sizer->Add(lbl_threshold_hint_, 0, wxEXPAND | wxTOP, 2);
+    right_sizer->Add(lbl_threshold_hint_, 0, wxEXPAND | wxTOP, FromDIP(2));
 
     // Existencia actual (solo lectura, en su propia línea para evitar recorte en 960x600)
     auto* lbl_stock_caption = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("Existencia actual:"));
     lbl_stock_caption->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_stock_caption->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_stock_caption, 0, wxEXPAND | wxTOP, 3);
+    right_sizer->Add(lbl_stock_caption, 0, wxEXPAND | wxTOP, FromDIP(3));
 
     lbl_stock_value_ = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("-"));
     lbl_stock_value_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_stock_value_->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_stock_value_, 0, wxEXPAND | wxTOP, 1);
+    right_sizer->Add(lbl_stock_value_, 0, wxEXPAND | wxTOP, FromDIP(1));
 
     lbl_stock_hint_ = new wxStaticText(
         right_card_,
@@ -403,26 +411,26 @@ void InventoryIngredientsPanel::build_ui() {
         wxString::FromUTF8("Se modifica registrando compras o mermas."));
     lbl_stock_hint_->SetFont(Theme::get_font_small());
     lbl_stock_hint_->SetForegroundColour(Theme::ColorTextSecondary);
-    lbl_stock_hint_->Wrap(180);
-    right_sizer->Add(lbl_stock_hint_, 0, wxEXPAND | wxTOP | wxBOTTOM, 2);
+    lbl_stock_hint_->Wrap(FromDIP(180));
+    right_sizer->Add(lbl_stock_hint_, 0, wxEXPAND | wxTOP | wxBOTTOM, FromDIP(2));
 
     // Botón Guardar siempre visible sin desplazarse
     btn_save_ = new wxButton(right_card_, wxID_ANY, wxString::FromUTF8("Guardar"));
     btn_save_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    Theme::style_button_primary(btn_save_, btn_h);
-    btn_save_->SetMinSize(wxSize(120, btn_h));
+    Theme::style_button_primary(btn_save_, btn_h_logical);
+    Theme::ensure_button_min_size(btn_save_, 120, btn_h_logical);
     btn_save_->Bind(wxEVT_BUTTON, &InventoryIngredientsPanel::on_save, this);
-    right_sizer->Add(btn_save_, 0, wxALIGN_LEFT | wxTOP, 2);
+    right_sizer->Add(btn_save_, 0, wxALIGN_LEFT | wxTOP, FromDIP(2));
 
     lbl_feedback_ = new wxStaticText(right_card_, wxID_ANY, wxEmptyString);
     lbl_feedback_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_feedback_->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_feedback_, 0, wxEXPAND | wxTOP, 2);
+    right_sizer->Add(lbl_feedback_, 0, wxEXPAND | wxTOP, FromDIP(2));
 
     right_sizer->AddStretchSpacer(1);
 
     auto* right_outer = new wxBoxSizer(wxVERTICAL);
-    right_outer->Add(right_sizer, 1, wxEXPAND | wxALL, touch ? 5 : 12);
+    right_outer->Add(right_sizer, 1, wxEXPAND | wxALL, FromDIP(touch ? 5 : 12));
     right_card_->SetSizer(right_outer);
     body->Add(right_card_, 8, wxEXPAND);
 
@@ -532,7 +540,7 @@ void InventoryIngredientsPanel::update_empty_state() {
         lbl_empty_state_->SetLabel(wxString::FromUTF8(last_list_error_));
         lbl_empty_state_->SetForegroundColour(Theme::ColorError);
         lbl_empty_state_->Show();
-        const int wrap_w = std::max(180, left_card_->GetClientSize().GetWidth() - 40);
+        const int wrap_w = std::max(FromDIP(180), left_card_->GetClientSize().GetWidth() - FromDIP(40));
         lbl_empty_state_->Wrap(wrap_w);
     } else if (ingredients_.empty()) {
         list_->Hide();
@@ -542,7 +550,7 @@ void InventoryIngredientsPanel::update_empty_state() {
         lbl_empty_state_->SetLabel(empty_msg);
         lbl_empty_state_->SetForegroundColour(Theme::ColorTextSecondary);
         lbl_empty_state_->Show();
-        const int wrap_w = std::max(180, left_card_->GetClientSize().GetWidth() - 40);
+        const int wrap_w = std::max(FromDIP(180), left_card_->GetClientSize().GetWidth() - FromDIP(40));
         lbl_empty_state_->Wrap(wrap_w);
     } else {
         lbl_empty_state_->Hide();
@@ -552,7 +560,7 @@ void InventoryIngredientsPanel::update_empty_state() {
 }
 
 void InventoryIngredientsPanel::update_permissions() {
-    const int warn_wrap_w = std::max(160, right_card_->GetClientSize().GetWidth() - (Theme::is_touch() ? 18 : 28));
+    const int warn_wrap_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 18 : 28));
     if (load_failed_) {
         btn_new_->Enable(false);
         ui::set_text_field_enabled(txt_name_, false);
@@ -705,7 +713,7 @@ void InventoryIngredientsPanel::set_feedback(const std::string& message, bool is
     last_feedback_is_error_ = is_error;
     lbl_feedback_->SetLabel(wxString::FromUTF8(last_feedback_));
     lbl_feedback_->SetForegroundColour(last_feedback_is_error_ ? Theme::ColorError : Theme::ColorSuccess);
-    const int wrap_w = std::max(160, right_card_->GetClientSize().GetWidth() - (Theme::is_touch() ? 14 : 26));
+    const int wrap_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 14 : 26));
     lbl_feedback_->Wrap(wrap_w);
     right_card_->Layout();
 }
@@ -855,7 +863,7 @@ void InventoryIngredientsPanel::on_size(wxSizeEvent& event) {
         update_empty_state();
         update_list_column_widths();
         if (lbl_warning_ != nullptr && pnl_warning_ != nullptr && pnl_warning_->IsShown() && right_card_ != nullptr) {
-            const int warn_w = std::max(160, right_card_->GetClientSize().GetWidth() - (Theme::is_touch() ? 18 : 28));
+            const int warn_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 18 : 28));
             const wxString warn_txt = load_failed_
                 ? wxString::FromUTF8("Solo lectura: no se pudo consultar el inventario.")
                 : wxString::FromUTF8("Solo lectura: no tienes permiso para modificar ingredientes.");
@@ -863,12 +871,12 @@ void InventoryIngredientsPanel::on_size(wxSizeEvent& event) {
             lbl_warning_->Wrap(warn_w);
         }
         if (lbl_feedback_ != nullptr && right_card_ != nullptr) {
-            const int wrap_w = std::max(160, right_card_->GetClientSize().GetWidth() - (Theme::is_touch() ? 14 : 26));
+            const int wrap_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 14 : 26));
             lbl_feedback_->SetLabel(wxString::FromUTF8(last_feedback_));
             lbl_feedback_->Wrap(wrap_w);
         }
         if (lbl_stock_hint_ != nullptr && right_card_ != nullptr) {
-            const int wrap_w = std::max(160, right_card_->GetClientSize().GetWidth() - (Theme::is_touch() ? 14 : 26));
+            const int wrap_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 14 : 26));
             lbl_stock_hint_->SetLabel(wxString::FromUTF8("Se modifica registrando compras o mermas."));
             lbl_stock_hint_->Wrap(wrap_w);
         }

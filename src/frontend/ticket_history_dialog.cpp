@@ -9,7 +9,7 @@ TicketHistoryDialog::TicketHistoryDialog(
     wxWindow* parent,
     services::ServiceRegistry services
 ) : wxDialog(parent, wxID_ANY, wxT("Historial de Tickets y Reimpresión"),
-             wxDefaultPosition, wxSize(740, 520), wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+             wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
     services_(services) {
     setup_ui();
     load_tickets();
@@ -22,7 +22,7 @@ void TicketHistoryDialog::setup_ui() {
     auto* lbl_title = new wxStaticText(this, wxID_ANY, wxT("Historial de Ventas y Tickets"));
     lbl_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     lbl_title->SetForegroundColour(Theme::ColorBrandDeep);
-    main_sizer->Add(lbl_title, 0, wxALL, 16);
+    main_sizer->Add(lbl_title, 0, wxALL, FromDIP(16));
 
     // Barra de búsqueda por Folio
     auto* search_row = new wxBoxSizer(wxHORIZONTAL);
@@ -30,48 +30,53 @@ void TicketHistoryDialog::setup_ui() {
     lbl_prompt->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_prompt->SetForegroundColour(Theme::ColorTextSecondary);
 
-    int btn_h = Theme::is_touch() ? 44 : 34;
+    const int search_h_logical = Theme::is_touch() ? 44 : 34;
 
-    txt_search_folio_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxSize(220, btn_h), wxTE_PROCESS_ENTER);
+    txt_search_folio_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(220, search_h_logical)), wxTE_PROCESS_ENTER);
     txt_search_folio_->SetFont(Theme::get_font_body());
 
-    btn_search_ = new wxButton(this, wxID_ANY, wxT("Buscar"), wxDefaultPosition, wxSize(100, btn_h));
-    Theme::style_button_secondary(btn_search_, btn_h);
+    btn_search_ = new wxButton(this, wxID_ANY, wxT("Buscar"));
+    Theme::style_button_secondary(btn_search_, search_h_logical);
     Theme::setup_button_icon(btn_search_, "search", wxSize(16, 16), Theme::ColorTextSecondary);
+    Theme::ensure_button_min_size(btn_search_, 100, search_h_logical);
 
-    search_row->Add(lbl_prompt, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
-    search_row->Add(txt_search_folio_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 8);
+    search_row->Add(lbl_prompt, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+    search_row->Add(txt_search_folio_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
     search_row->Add(btn_search_, 0, wxALIGN_CENTER_VERTICAL);
-    main_sizer->Add(search_row, 0, wxLEFT | wxRIGHT | wxBOTTOM, 14);
+    main_sizer->Add(search_row, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
 
     // Tabla de Tickets
     list_tickets_ = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
     list_tickets_->SetFont(Theme::get_font_body());
-    list_tickets_->InsertColumn(0, wxT("Folio"), wxLIST_FORMAT_LEFT, 140);
-    list_tickets_->InsertColumn(1, wxT("Fecha y Hora"), wxLIST_FORMAT_LEFT, 160);
-    list_tickets_->InsertColumn(2, wxT("Total"), wxLIST_FORMAT_RIGHT, 100);
-    list_tickets_->InsertColumn(3, wxT("Artículos"), wxLIST_FORMAT_RIGHT, 80);
-    list_tickets_->InsertColumn(4, wxT("Cajero"), wxLIST_FORMAT_LEFT, 130);
-    list_tickets_->InsertColumn(5, wxT("Método de Pago"), wxLIST_FORMAT_LEFT, 110);
+    list_tickets_->InsertColumn(0, wxT("Folio"), wxLIST_FORMAT_LEFT, FromDIP(140));
+    list_tickets_->InsertColumn(1, wxT("Fecha y Hora"), wxLIST_FORMAT_LEFT, FromDIP(160));
+    list_tickets_->InsertColumn(2, wxT("Total"), wxLIST_FORMAT_RIGHT, FromDIP(100));
+    list_tickets_->InsertColumn(3, wxT("Artículos"), wxLIST_FORMAT_RIGHT, FromDIP(80));
+    list_tickets_->InsertColumn(4, wxT("Cajero"), wxLIST_FORMAT_LEFT, FromDIP(130));
+    list_tickets_->InsertColumn(5, wxT("Método de Pago"), wxLIST_FORMAT_LEFT, FromDIP(110));
 
-    main_sizer->Add(list_tickets_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 14);
+    main_sizer->Add(list_tickets_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
 
     // Botones de acción
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
-    btn_reprint_ = new wxButton(this, wxID_ANY, wxT("Ver / Reimprimir Ticket"), wxDefaultPosition, wxSize(210, Theme::is_touch() ? 48 : 38));
-    Theme::style_button_primary(btn_reprint_, Theme::is_touch() ? 48 : 38);
+    const int action_h_logical = Theme::is_touch() ? 48 : 38;
+    btn_reprint_ = new wxButton(this, wxID_ANY, wxT("Ver / Reimprimir Ticket"));
+    Theme::style_button_primary(btn_reprint_, action_h_logical);
     Theme::setup_button_icon(btn_reprint_, "print", wxSize(18, 18), Theme::ColorSurface);
+    Theme::ensure_button_min_size(btn_reprint_, 210, action_h_logical);
 
-    btn_close_ = new wxButton(this, wxID_CANCEL, wxT("Cerrar"), wxDefaultPosition, wxSize(110, Theme::is_touch() ? 48 : 38));
-    Theme::style_button_secondary(btn_close_, Theme::is_touch() ? 48 : 38);
+    btn_close_ = new wxButton(this, wxID_CANCEL, wxT("Cerrar"));
+    Theme::style_button_secondary(btn_close_, action_h_logical);
+    Theme::ensure_button_min_size(btn_close_, 110, action_h_logical);
 
-    btn_row->Add(btn_reprint_, 0, wxRIGHT, 10);
+    btn_row->Add(btn_reprint_, 0, wxRIGHT, FromDIP(10));
     btn_row->AddStretchSpacer(1);
     btn_row->Add(btn_close_, 0);
 
-    main_sizer->Add(btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 16);
+    main_sizer->Add(btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     SetSizer(main_sizer);
+    SetSize(FromDIP(wxSize(740, 520)));
     Center();
 
     btn_search_->Bind(wxEVT_BUTTON, &TicketHistoryDialog::on_search, this);

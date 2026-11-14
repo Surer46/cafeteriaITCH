@@ -22,9 +22,9 @@ HeaderPanel::HeaderPanel(wxWindow* parent, const std::string& app_title,
     title_text_ = new wxStaticText(this, wxID_ANY, wxString::FromUTF8(app_title_.c_str()));
     title_text_->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     title_text_->SetForegroundColour(Theme::ColorBrandDeep);
-    brand_box->Add(title_text_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, 16);
+    brand_box->Add(title_text_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(16));
 
-    main_sizer->Add(brand_box, 0, wxALIGN_CENTER_VERTICAL | wxTOP | wxBOTTOM, 10);
+    main_sizer->Add(brand_box, 0, wxALIGN_CENTER_VERTICAL | wxTOP | wxBOTTOM, FromDIP(10));
     main_sizer->AddStretchSpacer(1);
 
     // 2. Controles y estado a la derecha
@@ -33,22 +33,22 @@ HeaderPanel::HeaderPanel(wxWindow* parent, const std::string& app_title,
     // Selector rápido de perfil (Estándar / Touch - FE-08 / FE-09)
     profile_toggle_btn_ = new wxButton(this, wxID_ANY, Theme::is_touch() ? wxT("Estándar") : wxT("Touch"));
     profile_toggle_btn_->SetToolTip(wxT("Alternar tamaño de interfaz entre Estándar y Touch"));
-    Theme::setup_button_icon(profile_toggle_btn_, "touch_app", wxSize(18, 18), Theme::ColorTextSecondary);
     Theme::style_button_secondary(profile_toggle_btn_, Theme::is_touch() ? 48 : 34);
+    Theme::setup_button_icon(profile_toggle_btn_, "touch_app", wxSize(18, 18), Theme::ColorTextSecondary);
     profile_toggle_btn_->Bind(wxEVT_BUTTON, &HeaderPanel::on_toggle_profile, this);
-    right_box->Add(profile_toggle_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
+    right_box->Add(profile_toggle_btn_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(14));
 
     // Badge de estado de caja
     bool is_open = (shift_status_.find("Abierta") != std::string::npos);
     shift_badge_ = new StatusBadge(this, wxString::FromUTF8(shift_status_.c_str()), is_open);
-    right_box->Add(shift_badge_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
+    right_box->Add(shift_badge_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(14));
 
     // Píldora de cuenta / usuario
     auto* user_box = new wxBoxSizer(wxHORIZONTAL);
     wxBitmapBundle person_icon = Theme::get_icon("person", wxSize(20, 20), Theme::ColorBrandDeep);
     if (person_icon.IsOk()) {
         user_avatar_ = new wxStaticBitmap(this, wxID_ANY, person_icon);
-        user_box->Add(user_avatar_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+        user_box->Add(user_avatar_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
     }
 
     user_text_ = new wxStaticText(this, wxID_ANY, wxString::FromUTF8(user_name_.c_str()));
@@ -56,9 +56,9 @@ HeaderPanel::HeaderPanel(wxWindow* parent, const std::string& app_title,
     user_text_->SetForegroundColour(Theme::ColorText);
     user_box->Add(user_text_, 0, wxALIGN_CENTER_VERTICAL);
 
-    right_box->Add(user_box, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 16);
+    right_box->Add(user_box, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(16));
 
-    main_sizer->Add(right_box, 0, wxALIGN_CENTER_VERTICAL | wxTOP | wxBOTTOM, 10);
+    main_sizer->Add(right_box, 0, wxALIGN_CENTER_VERTICAL | wxTOP | wxBOTTOM, FromDIP(10));
 
     SetSizer(main_sizer);
 
@@ -91,13 +91,26 @@ void HeaderPanel::on_paint(wxPaintEvent&) {
 }
 
 void HeaderPanel::sync_profile_button() {
+    if (title_text_) {
+        title_text_->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
+    }
+    if (user_text_) {
+        user_text_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    }
+    if (shift_badge_) {
+        bool is_open = (shift_status_.find("Abierta") != std::string::npos);
+        shift_badge_->set_status(wxString::FromUTF8(shift_status_.c_str()), is_open);
+    }
     if (!profile_toggle_btn_) {
+        Layout();
+        Refresh();
         return;
     }
     profile_toggle_btn_->SetLabel(Theme::is_touch() ? wxT("Estándar") : wxT("Touch"));
-    Theme::setup_button_icon(profile_toggle_btn_, "touch_app", wxSize(18, 18), Theme::ColorTextSecondary);
     Theme::style_button_secondary(profile_toggle_btn_, Theme::is_touch() ? 48 : 34);
+    Theme::setup_button_icon(profile_toggle_btn_, "touch_app", wxSize(18, 18), Theme::ColorTextSecondary);
     Layout();
+    Refresh();
 }
 
 void HeaderPanel::on_toggle_profile(wxCommandEvent&) {

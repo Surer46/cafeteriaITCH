@@ -9,7 +9,7 @@ SubnavBar::SubnavBar(wxWindow* parent, OnSubsectionChangedCallback callback)
 
     auto* root_sizer = new wxBoxSizer(wxHORIZONTAL);
     buttons_sizer_ = new wxBoxSizer(wxHORIZONTAL);
-    root_sizer->Add(buttons_sizer_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, Theme::get_spacing_md());
+    root_sizer->Add(buttons_sizer_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, Theme::get_spacing_md(this));
     SetSizer(root_sizer);
 
     set_section(SectionId::PointOfSale);
@@ -66,7 +66,7 @@ void SubnavBar::rebuild_buttons() {
             on_button_clicked(name);
         });
 
-        buttons_sizer_->Add(btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxTOP | wxBOTTOM, 6);
+        buttons_sizer_->Add(btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(6));
         items_.push_back({btn, name});
     }
 
@@ -88,6 +88,7 @@ void SubnavBar::update_button_styles() {
             item.button->SetForegroundColour(Theme::ColorTextSecondary);
             item.button->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
         }
+        item.button->InvalidateBestSize();
         item.button->Refresh();
     }
 }

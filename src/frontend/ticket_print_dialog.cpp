@@ -77,7 +77,7 @@ TicketPrintDialog::TicketPrintDialog(
     auto* lbl_folio = new wxStaticText(banner, wxID_ANY, wxString::Format(wxT("¡Venta confirmada! Folio: %s"), wxString::FromUTF8(ticket_.folio.c_str())));
     lbl_folio->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     lbl_folio->SetForegroundColour(Theme::ColorSuccess);
-    banner_sizer->Add(lbl_folio, 0, wxALL, 14);
+    banner_sizer->Add(lbl_folio, 0, wxALL, FromDIP(14));
 
     banner->SetSizer(banner_sizer);
     main_sizer->Add(banner, 0, wxEXPAND);
@@ -86,7 +86,7 @@ TicketPrintDialog::TicketPrintDialog(
     auto* lbl_question = new wxStaticText(this, wxID_ANY, wxT("¿Deseas imprimir el ticket?"));
     lbl_question->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_question->SetForegroundColour(Theme::ColorText);
-    main_sizer->Add(lbl_question, 0, wxLEFT | wxRIGHT | wxTOP, 16);
+    main_sizer->Add(lbl_question, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
 
     auto* lbl_hint = new wxStaticText(
         this,
@@ -96,8 +96,8 @@ TicketPrintDialog::TicketPrintDialog(
     );
     lbl_hint->SetFont(Theme::get_font_small());
     lbl_hint->SetForegroundColour(Theme::ColorTextSecondary);
-    lbl_hint->Wrap(460);
-    main_sizer->Add(lbl_hint, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
+    lbl_hint->Wrap(FromDIP(460));
+    main_sizer->Add(lbl_hint, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
     // Etiqueta de impresora configurada (informativa)
     wxString printer_info;
@@ -109,14 +109,14 @@ TicketPrintDialog::TicketPrintDialog(
     auto* lbl_printer = new wxStaticText(this, wxID_ANY, printer_info);
     lbl_printer->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
     lbl_printer->SetForegroundColour(Theme::ColorTextSecondary);
-    main_sizer->Add(lbl_printer, 0, wxLEFT | wxRIGHT | wxBOTTOM, 10);
+    main_sizer->Add(lbl_printer, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
 
     // Vista previa nominal del ticket (geometría estimada; la real se calcula en OnPreparePrinting)
     auto* lbl_prev_title = new wxStaticText(this, wxID_ANY,
         wxT("Vista previa estimada (geometría exacta calculada al imprimir):"));
     lbl_prev_title->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
     lbl_prev_title->SetForegroundColour(Theme::ColorTextSecondary);
-    main_sizer->Add(lbl_prev_title, 0, wxLEFT | wxRIGHT, 14);
+    main_sizer->Add(lbl_prev_title, 0, wxLEFT | wxRIGHT, FromDIP(14));
 
     std::string formatted_ticket = ticket_.to_formatted_text(config_.characters_per_line);
     auto* txt_preview = new wxTextCtrl(
@@ -130,30 +130,32 @@ TicketPrintDialog::TicketPrintDialog(
     wxFont f_mono(10, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
     txt_preview->SetFont(f_mono);
     txt_preview->SetBackgroundColour(Theme::ColorSurface);
-    txt_preview->SetMinSize(wxSize(450, 260));
-    main_sizer->Add(txt_preview, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 14);
+    txt_preview->SetMinSize(FromDIP(wxSize(450, 260)));
+    main_sizer->Add(txt_preview, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
 
     // Botones obligatorios: Imprimir y Ahora no
     auto* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
-    int btn_h = Theme::is_touch() ? 48 : 40;
+    const int btn_h_logical = Theme::is_touch() ? 48 : 40;
 
-    auto* btn_not_now = new wxButton(this, wxID_ANY, wxT("Ahora no"), wxDefaultPosition, wxSize(130, btn_h));
-    Theme::style_button_secondary(btn_not_now, btn_h);
-    btn_sizer->Add(btn_not_now, 1, wxRIGHT, 12);
+    auto* btn_not_now = new wxButton(this, wxID_ANY, wxT("Ahora no"));
+    Theme::style_button_secondary(btn_not_now, btn_h_logical);
+    Theme::ensure_button_min_size(btn_not_now, 130, btn_h_logical);
+    btn_sizer->Add(btn_not_now, 1, wxRIGHT, FromDIP(12));
 
-    auto* btn_print = new wxButton(this, wxID_ANY, wxT("Imprimir"), wxDefaultPosition, wxSize(150, btn_h));
-    Theme::style_button_primary(btn_print, btn_h);
+    auto* btn_print = new wxButton(this, wxID_ANY, wxT("Imprimir"));
+    Theme::style_button_primary(btn_print, btn_h_logical);
     Theme::setup_button_icon(btn_print, "print", wxSize(18, 18), Theme::ColorSurface);
+    Theme::ensure_button_min_size(btn_print, 150, btn_h_logical);
     btn_sizer->Add(btn_print, 1);
 
-    main_sizer->Add(btn_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 16);
+    main_sizer->Add(btn_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     SetSizer(main_sizer);
     main_sizer->SetSizeHints(this);
     Fit();
     wxSize fitted = GetSize();
-    fitted.SetWidth(std::max(fitted.GetWidth(), 500));
-    fitted.SetHeight(std::max(fitted.GetHeight(), 580));
+    fitted.SetWidth(std::max(fitted.GetWidth(), FromDIP(500)));
+    fitted.SetHeight(std::max(fitted.GetHeight(), FromDIP(580)));
     SetSize(fitted);
     SetMinSize(fitted);
     Center();

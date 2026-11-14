@@ -43,15 +43,16 @@ void AuditLogPanel::setup_ui() {
     SetBackgroundColour(Theme::ColorBackground);
     auto* root_sizer = new wxBoxSizer(wxVERTICAL);
 
-    int btn_h = FromDIP(Theme::is_touch() ? 48 : 34);
-    int ctrl_h = FromDIP(Theme::is_touch() ? 48 : 34);
+    const int btn_h_logical = Theme::is_touch() ? 48 : 34;
+    const int ctrl_h_logical = Theme::is_touch() ? 48 : 34;
+    const int ctrl_h = FromDIP(ctrl_h_logical);
 
     // 1. Barra superior
     auto* top_bar = new wxBoxSizer(wxHORIZONTAL);
     auto* title = new wxStaticText(this, wxID_ANY, wxT("Bitácora de Auditoría y Eventos"));
     title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     title->SetForegroundColour(Theme::ColorBrandDeep);
-    top_bar->Add(title, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 16);
+    top_bar->Add(title, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(16));
 
     auto* subtitle = new wxStaticText(this, wxID_ANY, wxT("Registro cronológico inmutable de operaciones del sistema"));
     subtitle->SetFont(Theme::get_font_small());
@@ -59,7 +60,7 @@ void AuditLogPanel::setup_ui() {
     top_bar->Add(subtitle, 0, wxALIGN_CENTER_VERTICAL);
 
     top_bar->AddStretchSpacer(1);
-    root_sizer->Add(top_bar, 0, wxEXPAND | wxALL, 12);
+    root_sizer->Add(top_bar, 0, wxEXPAND | wxALL, FromDIP(12));
 
     // 2. Banner de aviso/error
     pnl_warning_ = new wxPanel(this, wxID_ANY);
@@ -68,10 +69,10 @@ void AuditLogPanel::setup_ui() {
     lbl_warning_ = new wxStaticText(pnl_warning_, wxID_ANY, wxEmptyString);
     lbl_warning_->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_warning_->SetForegroundColour(Theme::ColorError);
-    warn_sizer->Add(lbl_warning_, 1, wxALL, 10);
+    warn_sizer->Add(lbl_warning_, 1, wxALL, FromDIP(10));
     pnl_warning_->SetSizer(warn_sizer);
     pnl_warning_->Show(false);
-    root_sizer->Add(pnl_warning_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
+    root_sizer->Add(pnl_warning_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
     // 3. Tarjeta contenedora principal
     main_card_ = new CardPanel(this, wxID_ANY);
@@ -87,32 +88,32 @@ void AuditLogPanel::setup_ui() {
     auto* lbl_ev = new wxStaticText(main_card_, wxID_ANY, wxT("Tipo de evento:"));
     lbl_ev->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_ev->SetForegroundColour(Theme::ColorText);
-    row1_sizer->Add(lbl_ev, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    row1_sizer->Add(lbl_ev, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 
     choice_event_type_ = new AuditComboBox(main_card_, wxID_ANY, wxSize(FromDIP(160), ctrl_h));
     choice_event_type_->SetFont(Theme::get_font_body());
     choice_event_type_->Append(wxT("Todos"));
     choice_event_type_->SetSelection(0);
     choice_event_type_->SetMinSize(wxSize(FromDIP(160), ctrl_h));
-    row1_sizer->Add(choice_event_type_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
+    row1_sizer->Add(choice_event_type_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(14));
 
     auto* lbl_u = new wxStaticText(main_card_, wxID_ANY, wxT("Usuario:"));
     lbl_u->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_u->SetForegroundColour(Theme::ColorText);
-    row1_sizer->Add(lbl_u, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    row1_sizer->Add(lbl_u, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 
-    auto* user_field = ui::make_text_field(main_card_, txt_user_, ctrl_h, 140, Theme::get_font_body());
+    auto* user_field = ui::make_text_field(main_card_, txt_user_, ctrl_h_logical, 140, Theme::get_font_body());
     txt_user_->SetHint(wxT("Username o ID"));
-    row1_sizer->Add(user_field, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
+    row1_sizer->Add(user_field, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(14));
 
     btn_search_ = new wxButton(main_card_, wxID_ANY, wxT("Buscar"));
-    Theme::style_button_primary(btn_search_, btn_h);
+    Theme::style_button_primary(btn_search_, btn_h_logical);
     Theme::setup_button_icon(btn_search_, "search", wxSize(18, 18), Theme::ColorSurface);
-    btn_search_->SetMinSize(wxSize(110, btn_h));
+    Theme::ensure_button_min_size(btn_search_, 110, btn_h_logical);
     btn_search_->Bind(wxEVT_BUTTON, &AuditLogPanel::on_search_clicked, this);
     row1_sizer->Add(btn_search_, 0, wxALIGN_CENTER_VERTICAL);
 
-    filters_box->Add(row1_sizer, 0, wxEXPAND | wxBOTTOM, 8);
+    filters_box->Add(row1_sizer, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     // Fila 2 de filtros: Fecha desde, Fecha hasta
     auto* row2_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -120,23 +121,23 @@ void AuditLogPanel::setup_ui() {
     auto* lbl_from = new wxStaticText(main_card_, wxID_ANY, wxT("Fecha desde:"));
     lbl_from->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_from->SetForegroundColour(Theme::ColorText);
-    row2_sizer->Add(lbl_from, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    row2_sizer->Add(lbl_from, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 
-    auto* from_field = ui::make_text_field(main_card_, txt_date_from_, ctrl_h, 120, Theme::get_font_body());
+    auto* from_field = ui::make_text_field(main_card_, txt_date_from_, ctrl_h_logical, 120, Theme::get_font_body());
     txt_date_from_->SetHint(wxT("YYYY-MM-DD"));
-    row2_sizer->Add(from_field, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 14);
+    row2_sizer->Add(from_field, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(14));
 
     auto* lbl_to = new wxStaticText(main_card_, wxID_ANY, wxT("Fecha hasta:"));
     lbl_to->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_to->SetForegroundColour(Theme::ColorText);
-    row2_sizer->Add(lbl_to, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 6);
+    row2_sizer->Add(lbl_to, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 
-    auto* to_field = ui::make_text_field(main_card_, txt_date_to_, ctrl_h, 120, Theme::get_font_body());
+    auto* to_field = ui::make_text_field(main_card_, txt_date_to_, ctrl_h_logical, 120, Theme::get_font_body());
     txt_date_to_->SetHint(wxT("YYYY-MM-DD"));
     row2_sizer->Add(to_field, 0, wxALIGN_CENTER_VERTICAL);
 
-    filters_box->Add(row2_sizer, 0, wxEXPAND | wxBOTTOM, 12);
-    card_sizer->Add(filters_box, 0, wxEXPAND | wxALL, 12);
+    filters_box->Add(row2_sizer, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
+    card_sizer->Add(filters_box, 0, wxEXPAND | wxALL, FromDIP(12));
 
     // 3.2 Lista de eventos
     list_events_ = new wxListView(
@@ -147,10 +148,10 @@ void AuditLogPanel::setup_ui() {
     if (Theme::is_touch()) {
         ui::apply_touch_row_height(list_events_);
     }
-    list_events_->InsertColumn(0, wxT("Fecha y hora"), wxLIST_FORMAT_LEFT, 160);
-    list_events_->InsertColumn(1, wxT("Usuario"), wxLIST_FORMAT_LEFT, 110);
-    list_events_->InsertColumn(2, wxT("Evento"), wxLIST_FORMAT_LEFT, 130);
-    list_events_->InsertColumn(3, wxT("Detalle"), wxLIST_FORMAT_LEFT, 260);
+    list_events_->InsertColumn(0, wxT("Fecha y hora"), wxLIST_FORMAT_LEFT, FromDIP(160));
+    list_events_->InsertColumn(1, wxT("Usuario"), wxLIST_FORMAT_LEFT, FromDIP(110));
+    list_events_->InsertColumn(2, wxT("Evento"), wxLIST_FORMAT_LEFT, FromDIP(130));
+    list_events_->InsertColumn(3, wxT("Detalle"), wxLIST_FORMAT_LEFT, FromDIP(260));
 
     // Recalcular al cambiar el tamaño de la lista o al aparecer/desaparecer la barra vertical.
     list_events_->Bind(wxEVT_SIZE, [this](wxSizeEvent& e) {
@@ -159,15 +160,15 @@ void AuditLogPanel::setup_ui() {
     });
     list_events_->Bind(wxEVT_LIST_ITEM_SELECTED, &AuditLogPanel::on_item_selected, this);
     list_events_->Bind(wxEVT_LIST_ITEM_DESELECTED, &AuditLogPanel::on_item_deselected, this);
-    card_sizer->Add(list_events_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
+    card_sizer->Add(list_events_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
     // 3.3 Visualizador de detalle completo
     auto* lbl_detail_hdr = new wxStaticText(main_card_, wxID_ANY, wxT("Detalle completo del evento seleccionado:"));
     lbl_detail_hdr->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_detail_hdr->SetForegroundColour(Theme::ColorTextSecondary);
-    card_sizer->Add(lbl_detail_hdr, 0, wxLEFT | wxRIGHT | wxBOTTOM, 4);
+    card_sizer->Add(lbl_detail_hdr, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(4));
 
-    int detail_h = Theme::is_touch() ? 64 : 48;
+    int detail_h = FromDIP(Theme::is_touch() ? 64 : 48);
     txt_detail_ = new wxTextCtrl(
         main_card_, wxID_ANY,
         wxT("Seleccione un evento de la lista para ver el detalle completo."),
@@ -176,25 +177,25 @@ void AuditLogPanel::setup_ui() {
     );
     txt_detail_->SetFont(Theme::get_font_body());
     txt_detail_->SetBackgroundColour(Theme::ColorSurfaceSubtle);
-    card_sizer->Add(txt_detail_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
+    card_sizer->Add(txt_detail_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
     // 3.4 Barra de paginación inferior
     auto* page_sizer = new wxBoxSizer(wxHORIZONTAL);
 
     btn_prev_ = new wxButton(main_card_, wxID_ANY, wxT("Anterior"));
-    Theme::style_button_secondary(btn_prev_, btn_h);
-    btn_prev_->SetMinSize(wxSize(100, btn_h));
+    Theme::style_button_secondary(btn_prev_, btn_h_logical);
+    Theme::ensure_button_min_size(btn_prev_, 100, btn_h_logical);
     btn_prev_->Bind(wxEVT_BUTTON, &AuditLogPanel::on_prev_page, this);
-    page_sizer->Add(btn_prev_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+    page_sizer->Add(btn_prev_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
 
     lbl_page_ = new wxStaticText(main_card_, wxID_ANY, wxT("Página 1"));
     lbl_page_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_page_->SetForegroundColour(Theme::ColorText);
-    page_sizer->Add(lbl_page_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, 10);
+    page_sizer->Add(lbl_page_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
 
     btn_next_ = new wxButton(main_card_, wxID_ANY, wxT("Siguiente"));
-    Theme::style_button_secondary(btn_next_, btn_h);
-    btn_next_->SetMinSize(wxSize(100, btn_h));
+    Theme::style_button_secondary(btn_next_, btn_h_logical);
+    Theme::ensure_button_min_size(btn_next_, 100, btn_h_logical);
     btn_next_->Bind(wxEVT_BUTTON, &AuditLogPanel::on_next_page, this);
     page_sizer->Add(btn_next_, 0, wxALIGN_CENTER_VERTICAL);
 
@@ -205,10 +206,10 @@ void AuditLogPanel::setup_ui() {
     lbl_count_->SetForegroundColour(Theme::ColorTextSecondary);
     page_sizer->Add(lbl_count_, 0, wxALIGN_CENTER_VERTICAL);
 
-    card_sizer->Add(page_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
+    card_sizer->Add(page_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
     main_card_->SetSizer(card_sizer);
-    root_sizer->Add(main_card_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, 12);
+    root_sizer->Add(main_card_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
     SetSizer(root_sizer);
     Bind(wxEVT_SIZE, &AuditLogPanel::on_size, this);

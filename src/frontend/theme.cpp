@@ -1,4 +1,5 @@
 #include "theme.hpp"
+#include <algorithm>
 #include <wx/stdpaths.h>
 #include <wx/filename.h>
 #include <wx/file.h>
@@ -152,18 +153,36 @@ bool Theme::is_touch() {
     return current_profile_ == UiProfile::Touch;
 }
 
-int Theme::get_spacing_xs() { return is_touch() ? 6 : 4; }
-int Theme::get_spacing_sm() { return is_touch() ? 12 : 8; }
-int Theme::get_spacing_md() { return is_touch() ? 16 : 12; }
-int Theme::get_spacing_lg() { return is_touch() ? 20 : 16; }
-int Theme::get_spacing_xl() { return is_touch() ? 28 : 24; }
+namespace {
 
-int Theme::get_card_radius() { return is_touch() ? 16 : 12; }
-int Theme::get_button_radius() { return is_touch() ? 12 : 8; }
-int Theme::get_control_radius() { return is_touch() ? 8 : 6; }
-int Theme::get_button_height() { return is_touch() ? 48 : 36; }
-int Theme::get_primary_button_height() { return is_touch() ? 56 : 42; }
-int Theme::get_touch_target_min() { return is_touch() ? 48 : 40; }
+int scale_metric(const wxWindow* win, int logical_px) {
+    return win ? win->FromDIP(logical_px) : logical_px;
+}
+
+void apply_button_style(wxButton* btn, const wxColour& bg, const wxColour& fg,
+                        const wxFont& font, int min_height_logical, int default_height_logical) {
+    if (!btn) return;
+    btn->SetBackgroundColour(bg);
+    btn->SetForegroundColour(fg);
+    btn->SetFont(font);
+    const int h_logical = min_height_logical > 0 ? min_height_logical : default_height_logical;
+    Theme::ensure_button_min_size(btn, -1, h_logical);
+}
+
+} // namespace
+
+int Theme::get_spacing_xs(const wxWindow* win) { return scale_metric(win, is_touch() ? 6 : 4); }
+int Theme::get_spacing_sm(const wxWindow* win) { return scale_metric(win, is_touch() ? 12 : 8); }
+int Theme::get_spacing_md(const wxWindow* win) { return scale_metric(win, is_touch() ? 16 : 12); }
+int Theme::get_spacing_lg(const wxWindow* win) { return scale_metric(win, is_touch() ? 20 : 16); }
+int Theme::get_spacing_xl(const wxWindow* win) { return scale_metric(win, is_touch() ? 28 : 24); }
+
+int Theme::get_card_radius(const wxWindow* win) { return scale_metric(win, is_touch() ? 16 : 12); }
+int Theme::get_button_radius(const wxWindow* win) { return scale_metric(win, is_touch() ? 12 : 8); }
+int Theme::get_control_radius(const wxWindow* win) { return scale_metric(win, is_touch() ? 8 : 6); }
+int Theme::get_button_height(const wxWindow* win) { return scale_metric(win, is_touch() ? 48 : 36); }
+int Theme::get_primary_button_height(const wxWindow* win) { return scale_metric(win, is_touch() ? 56 : 42); }
+int Theme::get_touch_target_min(const wxWindow* win) { return scale_metric(win, is_touch() ? 48 : 40); }
 
 wxFont Theme::get_font(int size_pt, wxFontWeight weight, bool italic) {
     wxFont font(wxFontInfo(size_pt).Family(wxFONTFAMILY_SWISS).FaceName("Roboto").Weight(weight).Italic(italic));
@@ -248,49 +267,41 @@ wxBitmapBundle Theme::get_icon(const std::string& icon_name, const wxSize& size,
     return bundle;
 }
 
-void Theme::style_button_primary(wxButton* btn, int min_height) {
+void Theme::ensure_button_min_size(wxButton* btn, int min_width_logical, int min_height_logical) {
     if (!btn) return;
-    int h = min_height > 0 ? min_height : get_button_height();
-    btn->SetBackgroundColour(ColorBrand);
-    btn->SetForegroundColour(ColorSurface);
-    btn->SetFont(get_font_body(wxFONTWEIGHT_BOLD));
-    btn->SetMinSize(wxSize(btn->GetMinSize().GetWidth() > 0 ? btn->GetMinSize().GetWidth() : -1, h));
+    btn->InvalidateBestSize();
+    const wxSize best = btn->GetBestSize();
+    const wxSize cur_min = btn->GetMinSize();
+    const int req_h = (min_height_logical > 0) ? btn->FromDIP(min_height_logical) : cur_min.GetHeight();
+    const int final_h = (req_h > 0) ? std::max(req_h, best.GetHeight()) : -1;
+    const int req_w = (min_width_logical > 0) ? btn->FromDIP(min_width_logical) : cur_min.GetWidth();
+    const int final_w = (req_w > 0) ? std::max(req_w, best.GetWidth()) : -1;
+    btn->SetMinSize(wxSize(final_w, final_h));
+}
+
+void Theme::style_button_primary(wxButton* btn, int min_height) {
+    apply_button_style(btn, ColorBrand, ColorSurface, get_font_body(wxFONTWEIGHT_BOLD),
+                       min_height, is_touch() ? 48 : 36);
 }
 
 void Theme::style_button_success(wxButton* btn, int min_height) {
-    if (!btn) return;
-    int h = min_height > 0 ? min_height : get_primary_button_height();
-    btn->SetBackgroundColour(ColorSuccess);
-    btn->SetForegroundColour(ColorSurface);
-    btn->SetFont(get_font_subtitle(wxFONTWEIGHT_BOLD));
-    btn->SetMinSize(wxSize(btn->GetMinSize().GetWidth() > 0 ? btn->GetMinSize().GetWidth() : -1, h));
+    apply_button_style(btn, ColorSuccess, ColorSurface, get_font_subtitle(wxFONTWEIGHT_BOLD),
+                       min_height, is_touch() ? 56 : 42);
 }
 
 void Theme::style_button_secondary(wxButton* btn, int min_height) {
-    if (!btn) return;
-    int h = min_height > 0 ? min_height : get_button_height();
-    btn->SetBackgroundColour(ColorSurface);
-    btn->SetForegroundColour(ColorText);
-    btn->SetFont(get_font_body(wxFONTWEIGHT_MEDIUM));
-    btn->SetMinSize(wxSize(btn->GetMinSize().GetWidth() > 0 ? btn->GetMinSize().GetWidth() : -1, h));
+    apply_button_style(btn, ColorSurface, ColorText, get_font_body(wxFONTWEIGHT_MEDIUM),
+                       min_height, is_touch() ? 48 : 36);
 }
 
 void Theme::style_button_destructive(wxButton* btn, int min_height) {
-    if (!btn) return;
-    int h = min_height > 0 ? min_height : get_button_height();
-    btn->SetBackgroundColour(ColorErrorSoft);
-    btn->SetForegroundColour(ColorError);
-    btn->SetFont(get_font_body(wxFONTWEIGHT_BOLD));
-    btn->SetMinSize(wxSize(btn->GetMinSize().GetWidth() > 0 ? btn->GetMinSize().GetWidth() : -1, h));
+    apply_button_style(btn, ColorErrorSoft, ColorError, get_font_body(wxFONTWEIGHT_BOLD),
+                       min_height, is_touch() ? 48 : 36);
 }
 
 void Theme::style_button_brand(wxButton* btn, int min_height) {
-    if (!btn) return;
-    int h = min_height > 0 ? min_height : get_button_height();
-    btn->SetBackgroundColour(ColorBrandSoft);
-    btn->SetForegroundColour(ColorBrand);
-    btn->SetFont(get_font_body(wxFONTWEIGHT_BOLD));
-    btn->SetMinSize(wxSize(btn->GetMinSize().GetWidth() > 0 ? btn->GetMinSize().GetWidth() : -1, h));
+    apply_button_style(btn, ColorBrandSoft, ColorBrand, get_font_body(wxFONTWEIGHT_BOLD),
+                       min_height, is_touch() ? 48 : 36);
 }
 
 void Theme::setup_button_icon(wxButton* btn, const std::string& icon_name, const wxSize& size, const wxColour& tint) {
@@ -299,7 +310,8 @@ void Theme::setup_button_icon(wxButton* btn, const std::string& icon_name, const
     if (ico.IsOk()) {
         btn->SetBitmap(ico);
         btn->SetBitmapPosition(wxLEFT);
-        btn->SetBitmapMargins(is_touch() ? 10 : 8, 0);
+        btn->SetBitmapMargins(btn->FromDIP(is_touch() ? 10 : 8), 0);
+        ensure_button_min_size(btn);
     }
 }
 
@@ -350,18 +362,21 @@ void CardPanel::on_paint(wxPaintEvent&) {
         return;
     }
 
+    const int bw = (border_width_ > 0) ? std::max(1, FromDIP(border_width_)) : 0;
+    const double rad = static_cast<double>(FromDIP(corner_radius_));
+
     gc->SetBrush(wxBrush(bg_colour_));
-    if (border_width_ > 0) {
-        gc->SetPen(wxPen(border_colour_, border_width_));
+    if (bw > 0) {
+        gc->SetPen(wxPen(border_colour_, bw));
     } else {
         gc->SetPen(*wxTRANSPARENT_PEN);
     }
 
-    double offset = (border_width_ > 0) ? (border_width_ / 2.0) : 0.0;
-    double w = sz.GetWidth() - (border_width_ > 0 ? border_width_ : 0);
-    double h = sz.GetHeight() - (border_width_ > 0 ? border_width_ : 0);
+    double offset = (bw > 0) ? (bw / 2.0) : 0.0;
+    double w = sz.GetWidth() - bw;
+    double h = sz.GetHeight() - bw;
 
-    gc->DrawRoundedRectangle(offset, offset, w, h, corner_radius_);
+    gc->DrawRoundedRectangle(offset, offset, w, h, rad);
     delete gc;
 }
 
@@ -390,9 +405,9 @@ wxSize StatusBadge::DoGetBestSize() const {
     wxClientDC dc(const_cast<StatusBadge*>(this));
     dc.SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     wxSize textSize = dc.GetTextExtent(text_);
-    int w = textSize.GetWidth() + 38;
-    int min_h = Theme::is_touch() ? 34 : 28;
-    int h = textSize.GetHeight() + 10;
+    int w = textSize.GetWidth() + FromDIP(38);
+    int min_h = FromDIP(Theme::is_touch() ? 34 : 28);
+    int h = textSize.GetHeight() + FromDIP(10);
     if (h < min_h) h = min_h;
     return wxSize(w, h);
 }
@@ -412,18 +427,20 @@ void StatusBadge::on_paint(wxPaintEvent&) {
     wxColour bg = is_open_ ? Theme::ColorSuccessSoft : Theme::ColorBorderSubtle;
     wxColour border = is_open_ ? Theme::ColorSuccess : Theme::ColorBorder;
     wxColour text_col = is_open_ ? Theme::ColorSuccess : Theme::ColorTextSecondary;
+    const int bw = std::max(1, FromDIP(1));
 
     wxGraphicsContext* gc = wxGraphicsContext::Create(dc);
     if (gc) {
         gc->SetBrush(wxBrush(bg));
-        gc->SetPen(wxPen(border, 1));
+        gc->SetPen(wxPen(border, bw));
 
-        double radius = sz.GetHeight() / 2.0;
-        gc->DrawRoundedRectangle(0.5, 0.5, sz.GetWidth() - 1, sz.GetHeight() - 1, radius);
+        const double off = bw / 2.0;
+        double radius = (sz.GetHeight() - bw) / 2.0;
+        gc->DrawRoundedRectangle(off, off, sz.GetWidth() - bw, sz.GetHeight() - bw, radius);
 
         // Indicador circular (dot)
-        double dot_radius = 4.0;
-        double dot_x = 12.0;
+        double dot_radius = FromDIP(40) / 10.0;
+        double dot_x = static_cast<double>(FromDIP(12));
         double dot_y = sz.GetHeight() / 2.0;
         gc->SetBrush(wxBrush(text_col));
         gc->SetPen(*wxTRANSPARENT_PEN);
@@ -438,7 +455,7 @@ void StatusBadge::on_paint(wxPaintEvent&) {
     dc.SetBackgroundMode(wxBRUSHSTYLE_TRANSPARENT);
 
     wxSize textSize = dc.GetTextExtent(text_);
-    int tx = 22;
+    int tx = FromDIP(22);
     int ty = (sz.GetHeight() - textSize.GetHeight()) / 2;
     dc.DrawText(text_, tx, ty);
 }

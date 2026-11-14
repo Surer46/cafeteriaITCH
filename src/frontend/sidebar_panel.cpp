@@ -1,5 +1,6 @@
 #include "src/frontend/sidebar_panel.hpp"
 #include "src/frontend/theme.hpp"
+#include <algorithm>
 
 namespace app::frontend {
 
@@ -8,10 +9,10 @@ SidebarPanel::SidebarPanel(wxWindow* parent, OnSectionChangedCallback callback)
     SetBackgroundColour(Theme::ColorBrandDeep);
 
     auto* sizer = new wxBoxSizer(wxVERTICAL);
-    sizer->AddSpacer(14);
+    sizer->AddSpacer(FromDIP(14));
 
-    int btn_h = Theme::is_touch() ? 56 : 46;
-    int btn_w = Theme::is_touch() ? 220 : 190;
+    const int btn_h = FromDIP(Theme::is_touch() ? 56 : 46);
+    const int btn_w = FromDIP(Theme::is_touch() ? 220 : 190);
 
     auto make_btn = [this, btn_h, btn_w](const wxString& label) {
         auto* btn = new wxButton(this, wxID_ANY, label, wxDefaultPosition, wxSize(btn_w, btn_h));
@@ -29,7 +30,7 @@ SidebarPanel::SidebarPanel(wxWindow* parent, OnSectionChangedCallback callback)
     btn_cash_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { on_button_click(SectionId::CashAndReports); });
     btn_backoffice_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { on_button_click(SectionId::BackOffice); });
 
-    int pad = Theme::get_spacing_sm();
+    const int pad = Theme::get_spacing_sm(this);
     sizer->Add(btn_pos_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, pad);
     sizer->Add(btn_inventory_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, pad);
     sizer->Add(btn_cash_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, pad);
@@ -55,15 +56,6 @@ void SidebarPanel::set_active_section(SectionId section) {
 }
 
 void SidebarPanel::refresh_profile() {
-    int btn_h = Theme::is_touch() ? 56 : 46;
-    int btn_w = Theme::is_touch() ? 220 : 190;
-    wxSize sz(btn_w, btn_h);
-    for (auto* btn : {btn_pos_, btn_inventory_, btn_cash_, btn_backoffice_}) {
-        if (btn) {
-            btn->SetMinSize(sz);
-            btn->SetSize(sz);
-        }
-    }
     update_button_styles();
     Layout();
 }
@@ -91,6 +83,22 @@ void SidebarPanel::update_button_styles() {
     apply_style(btn_inventory_, "inventory_2", current_section_ == SectionId::Inventory);
     apply_style(btn_cash_, "account_balance_wallet", current_section_ == SectionId::CashAndReports);
     apply_style(btn_backoffice_, "manage_accounts", current_section_ == SectionId::BackOffice);
+
+    const int min_h = FromDIP(Theme::is_touch() ? 56 : 46);
+    int uniform_w = FromDIP(Theme::is_touch() ? 220 : 190);
+    for (auto* btn : {btn_pos_, btn_inventory_, btn_cash_, btn_backoffice_}) {
+        if (btn) {
+            btn->InvalidateBestSize();
+            uniform_w = std::max(uniform_w, btn->GetBestSize().GetWidth());
+        }
+    }
+    const wxSize sz(uniform_w, min_h);
+    for (auto* btn : {btn_pos_, btn_inventory_, btn_cash_, btn_backoffice_}) {
+        if (btn) {
+            btn->SetMinSize(sz);
+            btn->SetSize(sz);
+        }
+    }
 }
 
 } // namespace app::frontend

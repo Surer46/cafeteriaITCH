@@ -133,10 +133,9 @@ void BackofficeSettingsPanel::setup_ui() {
 
 void BackofficeSettingsPanel::sync_profile_selection() {
     const bool touch = Theme::is_touch();
-    const int btn_h = FromDIP(touch ? 56 : 48);
-    const int border_active = std::max(2, FromDIP(2));
+    const int btn_h_logical = touch ? 56 : 48;
 
-    auto apply_tile = [this, btn_h, border_active](
+    auto apply_tile = [this, btn_h_logical](
                           CardPanel* card,
                           wxButton* btn,
                           wxStaticText* status,
@@ -145,18 +144,18 @@ void BackofficeSettingsPanel::sync_profile_selection() {
                           bool active) {
         if (card) {
             card->set_card_background(active ? Theme::ColorBrandSoft : Theme::ColorSurfaceSubtle);
-            card->set_card_border(active ? Theme::ColorBrand : Theme::ColorBorder, active ? border_active : 1);
+            card->set_card_border(active ? Theme::ColorBrand : Theme::ColorBorder, active ? 2 : 1);
             card->Refresh();
         }
         if (btn) {
             if (active) {
                 btn->SetLabel(base_label + wxT(" (Activa)"));
-                Theme::style_button_primary(btn, btn_h);
-                Theme::setup_button_icon(btn, "check_circle", FromDIP(wxSize(20, 20)), Theme::ColorSurface);
+                Theme::style_button_primary(btn, btn_h_logical);
+                Theme::setup_button_icon(btn, "check_circle", wxSize(20, 20), Theme::ColorSurface);
             } else {
                 btn->SetLabel(base_label);
-                Theme::style_button_secondary(btn, btn_h);
-                Theme::setup_button_icon(btn, inactive_icon, FromDIP(wxSize(20, 20)), Theme::ColorTextSecondary);
+                Theme::style_button_secondary(btn, btn_h_logical);
+                Theme::setup_button_icon(btn, inactive_icon, wxSize(20, 20), Theme::ColorTextSecondary);
             }
         }
         if (status) {

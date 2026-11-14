@@ -53,19 +53,19 @@ public:
     static void load_station_profile();
     static void save_station_profile(UiProfile profile);
 
-    // Métricas dinámicas por perfil
-    static int get_spacing_xs();
-    static int get_spacing_sm();
-    static int get_spacing_md();
-    static int get_spacing_lg();
-    static int get_spacing_xl();
+    // Métricas dinámicas por perfil (en píxeles escalados para `win` usando su FromDIP)
+    static int get_spacing_xs(const wxWindow* win);
+    static int get_spacing_sm(const wxWindow* win);
+    static int get_spacing_md(const wxWindow* win);
+    static int get_spacing_lg(const wxWindow* win);
+    static int get_spacing_xl(const wxWindow* win);
 
-    static int get_card_radius();
-    static int get_button_radius();
-    static int get_control_radius();
-    static int get_button_height();
-    static int get_primary_button_height();
-    static int get_touch_target_min();
+    static int get_card_radius(const wxWindow* win);
+    static int get_button_radius(const wxWindow* win);
+    static int get_control_radius(const wxWindow* win);
+    static int get_button_height(const wxWindow* win);
+    static int get_primary_button_height(const wxWindow* win);
+    static int get_touch_target_min(const wxWindow* win);
 
     // Fuentes locales (Roboto con fallback al sistema)
     static wxFont get_font(int size_pt, wxFontWeight weight = wxFONTWEIGHT_NORMAL, bool italic = false);
@@ -75,19 +75,22 @@ public:
     static wxFont get_font_title(wxFontWeight weight = wxFONTWEIGHT_BOLD);
     static wxFont get_font_hero(wxFontWeight weight = wxFONTWEIGHT_BOLD);
 
-    // Iconos locales (Material Symbols SVG con caché por DPI y color)
+    // Iconos locales (Material Symbols SVG; size en unidades lógicas a 100%)
     static wxBitmapBundle get_icon(const std::string& icon_name, const wxSize& size = wxSize(20, 20),
                                    const wxColour& tint_color = wxNullColour);
 
-    // Estilos de botones estándar
+    // Estilos de botones estándar (min_height en unidades lógicas a 100%)
     static void style_button_primary(wxButton* btn, int min_height = -1);
     static void style_button_success(wxButton* btn, int min_height = -1);
     static void style_button_secondary(wxButton* btn, int min_height = -1);
     static void style_button_destructive(wxButton* btn, int min_height = -1);
     static void style_button_brand(wxButton* btn, int min_height = -1);
 
-    // Configuración uniforme de icono, posición y márgenes interiores en botones
+    // Configuración uniforme de icono, posición y márgenes interiores (size en unidades lógicas a 100%)
     static void setup_button_icon(wxButton* btn, const std::string& icon_name, const wxSize& size, const wxColour& tint = wxNullColour);
+
+    // Asegura que un botón con ancho mínimo fijo nunca quede más estrecho que su contenido actual.
+    static void ensure_button_min_size(wxButton* btn, int min_width_logical = -1, int min_height_logical = -1);
 
 private:
     static std::string assets_dir_;

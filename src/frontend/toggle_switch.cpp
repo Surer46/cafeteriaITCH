@@ -178,7 +178,7 @@ void ToggleSwitch::on_paint(wxPaintEvent&) {
     gc->SetPen(*wxTRANSPARENT_PEN);
     gc->DrawRoundedRectangle(tx, ty, tw, th, track_radius);
 
-    const double knob_margin = std::max(2.0, th * 0.14);
+    const double knob_margin = std::max(static_cast<double>(FromDIP(2)), th * 0.14);
     const double knob_d = th - 2.0 * knob_margin;
     const double knob_y = ty + knob_margin;
     const double knob_x = checked_ ? (tx + tw - knob_margin - knob_d) : (tx + knob_margin);
@@ -192,7 +192,7 @@ void ToggleSwitch::on_paint(wxPaintEvent&) {
         const double cy = knob_y + knob_d / 2.0;
         const double r = knob_d * 0.28;
 
-        wxPen mark_pen(mark_col, static_cast<int>(std::max(2L, std::lround(knob_d * 0.14))));
+        wxPen mark_pen(mark_col, static_cast<int>(std::max(static_cast<long>(FromDIP(2)), std::lround(knob_d * 0.14))));
         mark_pen.SetCap(wxCAP_ROUND);
         mark_pen.SetJoin(wxJOIN_ROUND);
         gc->SetPen(mark_pen);

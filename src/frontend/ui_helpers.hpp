@@ -23,10 +23,10 @@ bool has_vertical_scrollbar(wxListCtrl* list);
 // Descripción de una columna para distribute_list_columns.
 struct ColumnSpec {
     wxString header;
-    int content_px{0};         // ancho del contenido más largo (fuente de la lista)
-    int floor_content_px{-1};  // contenido que no puede recortarse (-1: igual a content_px)
-    int content_pad{16};       // relleno alrededor del contenido
-    int extra_px{0};           // reserva adicional (p. ej. imagen de la fila en Touch)
+    int content_px{0};         // ancho del contenido más largo en píxeles reales (GetTextExtent)
+    int floor_content_px{-1};  // contenido que no puede recortarse en píxeles reales (-1: igual a content_px)
+    int content_pad{16};       // relleno alrededor del contenido en unidades lógicas
+    int extra_px{0};           // reserva adicional en unidades lógicas (p. ej. imagen de la fila en Touch)
 };
 
 // Reparte los anchos de columna de la lista:

@@ -16,8 +16,8 @@ MainWindow::MainWindow(const services::ServiceRegistry& services)
     : wxFrame(nullptr, wxID_ANY, wxT("Cafetería ITCH II"),
               wxDefaultPosition, wxDefaultSize),
       services_(services) {
-    SetClientSize(wxSize(1200, 720));
-    SetMinClientSize(wxSize(960, 600));
+    SetClientSize(FromDIP(wxSize(1200, 720)));
+    SetMinClientSize(FromDIP(wxSize(960, 600)));
     setup_ui();
 }
 
@@ -139,7 +139,7 @@ void MainWindow::update_content_view() {
                 "Acceso Denegado",
                 "Error 403: " + config_res.error_message()
             );
-            content_sizer_->Add(current_view_, 1, wxEXPAND | wxALL, 12);
+            content_sizer_->Add(current_view_, 1, wxEXPAND | wxALL, FromDIP(12));
             content_container_->Layout();
             return;
         }
@@ -176,7 +176,7 @@ void MainWindow::update_content_view() {
         current_view_ = create_placeholder_view(content_container_, section_label + " > " + current_subsection_, desc);
     }
 
-    content_sizer_->Add(current_view_, 1, wxEXPAND | wxALL, 12);
+    content_sizer_->Add(current_view_, 1, wxEXPAND | wxALL, FromDIP(12));
     content_container_->Layout();
 }
 
@@ -185,24 +185,24 @@ wxPanel* MainWindow::create_placeholder_view(wxWindow* parent, const std::string
     panel->set_card_background(Theme::ColorSurface);
     auto* sizer = new wxBoxSizer(wxVERTICAL);
 
-    sizer->AddSpacer(20);
+    sizer->AddSpacer(FromDIP(20));
 
     auto* t = new wxStaticText(panel, wxID_ANY, wxString::FromUTF8(title.c_str()));
     t->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     t->SetForegroundColour(Theme::ColorBrandDeep);
-    sizer->Add(t, 0, wxLEFT | wxRIGHT | wxBOTTOM, 16);
+    sizer->Add(t, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     auto* d = new wxStaticText(panel, wxID_ANY, wxString::FromUTF8(desc.c_str()));
     d->SetFont(Theme::get_font_body());
     d->SetForegroundColour(Theme::ColorText);
-    sizer->Add(d, 0, wxLEFT | wxRIGHT | wxBOTTOM, 16);
+    sizer->Add(d, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     auto* note = new wxStaticText(panel, wxID_ANY,
         wxT("Base integrable preparada: contratos compartidos, almacenamiento SQLite embebido\n")
         wxT("y componentes visuales nativos conforme al sistema de diseño Cupertino / ITCH II."));
     note->SetFont(Theme::get_font_small());
     note->SetForegroundColour(Theme::ColorTextSecondary);
-    sizer->Add(note, 0, wxLEFT | wxRIGHT, 16);
+    sizer->Add(note, 0, wxLEFT | wxRIGHT, FromDIP(16));
 
     sizer->AddStretchSpacer(1);
     panel->SetSizer(sizer);

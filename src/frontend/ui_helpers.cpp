@@ -78,7 +78,7 @@ void distribute_list_columns(wxListCtrl* list, const std::vector<ColumnSpec>& co
     }
     const int rows_h = header_height(list) + rows * row_h;
     const bool needs_vbar = client.GetHeight() > 0 && rows_h > client.GetHeight();
-    const int budget = full_w - (needs_vbar ? sb_w : 0) - 2;
+    const int budget = full_w - (needs_vbar ? sb_w : 0) - std::max(2, list->FromDIP(2));
 
     const int hpad = list->FromDIP(20);
     const std::size_t n = columns.size();
@@ -87,8 +87,10 @@ void distribute_list_columns(wxListCtrl* list, const std::vector<ColumnSpec>& co
         const auto& c = columns[i];
         const int hdr = header_text_width(list, c.header) + hpad;
         const int floor_content = c.floor_content_px >= 0 ? c.floor_content_px : c.content_px;
-        want[i] = std::max(hdr, c.content_px + c.content_pad + c.extra_px);
-        floor_w[i] = std::max(hdr, floor_content + c.content_pad + c.extra_px);
+        const int pad = list->FromDIP(c.content_pad);
+        const int extra = list->FromDIP(c.extra_px);
+        want[i] = std::max(hdr, c.content_px + pad + extra);
+        floor_w[i] = std::max(hdr, floor_content + pad + extra);
     }
     const int flex_min = header_text_width(list, columns[flexible_index].header) + hpad;
 
@@ -124,18 +126,23 @@ void distribute_list_columns(wxListCtrl* list, const std::vector<ColumnSpec>& co
 
 void apply_touch_row_height(wxListCtrl* list) {
     if (!list) return;
-    list->AssignImageList(new wxImageList(1, 42), wxIMAGE_LIST_SMALL);
+    list->AssignImageList(new wxImageList(1, list->FromDIP(42)), wxIMAGE_LIST_SMALL);
 }
 
 wxWindow* make_text_field(wxWindow* parent, wxTextCtrl*& out, int fixed_height, int fixed_width, const wxFont& font) {
     const wxFont use_font = font.IsOk() ? font : Theme::get_font_body();
+    const int phys_w = (fixed_width > 0) ? parent->FromDIP(fixed_width) : -1;
     if (fixed_height <= 0) {
         out = new wxTextCtrl(parent, wxID_ANY);
         out->SetFont(use_font);
+        if (phys_w > 0) {
+            out->SetMinSize(wxSize(phys_w, -1));
+        }
         return out;
     }
 
-    auto* box = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(fixed_width, fixed_height), wxBORDER_SIMPLE);
+    const int phys_h = parent->FromDIP(fixed_height);
+    auto* box = new wxPanel(parent, wxID_ANY, wxDefaultPosition, wxSize(phys_w, phys_h), wxBORDER_SIMPLE);
     box->SetName(kFieldBoxName);
     box->SetBackgroundColour(Theme::ColorSurface);
 
@@ -145,13 +152,13 @@ wxWindow* make_text_field(wxWindow* parent, wxTextCtrl*& out, int fixed_height, 
 
     // Alto del contenedor independiente del tema: nunca menor que el campo natural + 2.
     const int best_h = out->GetBestSize().GetHeight();
-    const int box_h = std::max(fixed_height, best_h + 2);
-    box->SetMinSize(wxSize(fixed_width, box_h));
-    box->SetSize(wxSize(fixed_width, box_h));
+    const int box_h = std::max(phys_h, best_h + box->FromDIP(2));
+    box->SetMinSize(wxSize(phys_w, box_h));
+    box->SetSize(wxSize(phys_w, box_h));
 
     auto* sz = new wxBoxSizer(wxVERTICAL);
     sz->AddStretchSpacer(1);
-    sz->Add(out, 0, wxEXPAND | wxLEFT | wxRIGHT, 6);
+    sz->Add(out, 0, wxEXPAND | wxLEFT | wxRIGHT, box->FromDIP(6));
     sz->AddStretchSpacer(1);
     box->SetSizer(sz);
 
