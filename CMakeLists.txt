@@ -185,6 +185,8 @@ if(wxWidgets_FOUND)
         src/frontend/backoffice_roles_panel.hpp
         src/frontend/backoffice_print_config_panel.cpp
         src/frontend/backoffice_print_config_panel.hpp
+        src/frontend/backoffice_settings_panel.cpp
+        src/frontend/backoffice_settings_panel.hpp
         src/frontend/checkout_dialog.cpp
         src/frontend/checkout_dialog.hpp
         src/frontend/ticket_layout.cpp

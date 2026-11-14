@@ -22,6 +22,8 @@ private:
     void on_subsection_changed(const std::string& sub_name);
     void update_content_view();
     void update_header_status();
+    void apply_profile_refresh();
+    void schedule_profile_refresh();
 
     wxPanel* create_placeholder_view(wxWindow* parent, const std::string& title, const std::string& desc);
 

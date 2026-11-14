@@ -609,8 +609,94 @@ def main():
         # CAPTURA 13: Inventario > Ingredientes (Touch)
         capture_window(hwnd_main, os.path.join(out_dir, "13_inventory_ingredients_touch.png"))
 
+        # Navegar a BackOffice > Configuracion (sigue en Touch)
+        btn_bo2 = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "BackOffice" in t), None)
+        assert btn_bo2 is not None, "Botón BackOffice no encontrado para T1"
+        _f7_click_btn(btn_bo2)
+        time.sleep(0.45)
+        btn_cfg = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Configuración"), None)
+        assert btn_cfg is not None, "Subsección Configuración no encontrada para T1"
+        _f7_click_btn(btn_cfg)
+        time.sleep(0.6)
+
+        # CAPTURA 15: BackOffice > Configuración (Táctil)
+        capture_window(hwnd_main, os.path.join(out_dir, "15_settings_touch.png"))
+
+        def _t1_bottommost_btn(label_txt):
+            matches = [h for (h, t) in _f7_list_buttons(hwnd_main) if t == label_txt]
+            if not matches:
+                return None
+            def _top(hwnd_b):
+                r = wintypes.RECT()
+                user32.GetWindowRect(wintypes.HWND(hwnd_b), ctypes.byref(r))
+                return r.top
+            return max(matches, key=_top)
+
+        # Cambiar a Estándar desde la pantalla de Configuración
+        btn_std_cfg = _t1_bottommost_btn("Estándar")
+        assert btn_std_cfg is not None, "Opción Estándar en Configuración no encontrada"
+        _f7_click_btn(btn_std_cfg)
+        time.sleep(0.6)
+
+        # CAPTURA 14: BackOffice > Configuración (Estándar)
+        capture_window(hwnd_main, os.path.join(out_dir, "14_settings_standard.png"))
+
+        # Dejar Táctil para capturar Login y Primer Inicio en Táctil
+        btn_touch_cfg = _t1_bottommost_btn("Táctil")
+        assert btn_touch_cfg is not None, "Opción Táctil en Configuración no encontrada"
+        _f7_click_btn(btn_touch_cfg)
+        time.sleep(0.6)
+
         user32.PostMessageW(hwnd_main, WM_CLOSE, 0, 0)
         proc.wait(timeout=5)
+
+        proc_extra = None
+        temp_dir_owner_touch = None
+        try:
+            # CAPTURA 16: Login en perfil Táctil
+            proc_extra = subprocess.Popen([exe_path], cwd=work_dir, env=env)
+            hwnd_login_t = None
+            for _ in range(30):
+                wins_l = find_windows_by_pid(proc_extra.pid, "Iniciar Sesión")
+                if wins_l:
+                    hwnd_login_t = wins_l[0][0]
+                    break
+                time.sleep(0.2)
+            assert hwnd_login_t is not None, "Ventana Iniciar Sesión (Táctil) no apareció"
+            time.sleep(0.35)
+            capture_window(hwnd_login_t, os.path.join(out_dir, "16_login_touch.png"))
+            user32.PostMessageW(hwnd_login_t, WM_CLOSE, 0, 0)
+            proc_extra.wait(timeout=5)
+            proc_extra = None
+
+            # CAPTURA 17: Alta del Dueño en perfil Táctil
+            temp_dir_owner_touch = tempfile.mkdtemp(prefix="cafeteria_qa_owner_touch_")
+            src_cfg = os.path.join(temp_dir, "station_profile.cfg")
+            assert os.path.exists(src_cfg), "station_profile.cfg no encontrado tras activar Táctil"
+            shutil.copy2(src_cfg, os.path.join(temp_dir_owner_touch, "station_profile.cfg"))
+
+            env_owner_t = env.copy()
+            env_owner_t["CAFETERIA_DATA_DIR"] = temp_dir_owner_touch
+            proc_extra = subprocess.Popen([exe_path], cwd=work_dir, env=env_owner_t)
+            hwnd_owner_t = None
+            for _ in range(30):
+                wins_o = find_windows_by_pid(proc_extra.pid, "Primer Inicio")
+                if wins_o:
+                    hwnd_owner_t = wins_o[0][0]
+                    break
+                time.sleep(0.2)
+            assert hwnd_owner_t is not None, "Ventana Primer Inicio (Táctil) no apareció"
+            time.sleep(0.35)
+            capture_window(hwnd_owner_t, os.path.join(out_dir, "17_initial_owner_touch.png"))
+            user32.PostMessageW(hwnd_owner_t, WM_CLOSE, 0, 0)
+            proc_extra.wait(timeout=5)
+            proc_extra = None
+        finally:
+            if proc_extra is not None and proc_extra.poll() is None:
+                proc_extra.kill()
+            if temp_dir_owner_touch:
+                shutil.rmtree(temp_dir_owner_touch, ignore_errors=True)
+
         print("=== TODAS LAS CAPTURAS DE QA VISUAL COMPLETADAS EXITOSAMENTE ===")
 
     finally:

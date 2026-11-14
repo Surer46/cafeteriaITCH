@@ -15,6 +15,7 @@ public:
                 std::function<void(UiProfile)> on_profile_changed = nullptr);
 
     void update_status(const std::string& shift_status, const std::string& user_name);
+    void sync_profile_button();
 
 private:
     void on_paint(wxPaintEvent& evt);

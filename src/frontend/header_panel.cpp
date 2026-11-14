@@ -90,12 +90,20 @@ void HeaderPanel::on_paint(wxPaintEvent&) {
     dc.DrawLine(0, sz.GetHeight() - 1, sz.GetWidth(), sz.GetHeight() - 1);
 }
 
-void HeaderPanel::on_toggle_profile(wxCommandEvent&) {
-    UiProfile next_profile = Theme::is_touch() ? UiProfile::Standard : UiProfile::Touch;
-    Theme::set_profile(next_profile);
+void HeaderPanel::sync_profile_button() {
+    if (!profile_toggle_btn_) {
+        return;
+    }
     profile_toggle_btn_->SetLabel(Theme::is_touch() ? wxT("Estándar") : wxT("Touch"));
     Theme::setup_button_icon(profile_toggle_btn_, "touch_app", wxSize(18, 18), Theme::ColorTextSecondary);
     Theme::style_button_secondary(profile_toggle_btn_, Theme::is_touch() ? 48 : 34);
+    Layout();
+}
+
+void HeaderPanel::on_toggle_profile(wxCommandEvent&) {
+    UiProfile next_profile = Theme::is_touch() ? UiProfile::Standard : UiProfile::Touch;
+    Theme::set_profile(next_profile);
+    sync_profile_button();
 
     if (on_profile_changed_) {
         on_profile_changed_(next_profile);

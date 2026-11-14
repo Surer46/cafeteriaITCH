@@ -2,6 +2,7 @@
 #include "src/frontend/backoffice_users_panel.hpp"
 #include "src/frontend/backoffice_roles_panel.hpp"
 #include "src/frontend/backoffice_print_config_panel.hpp"
+#include "src/frontend/backoffice_settings_panel.hpp"
 #include "src/frontend/pos_panel.hpp"
 #include "src/frontend/cash_shift_panel.hpp"
 #include "src/frontend/audit_log_panel.hpp"
@@ -50,11 +51,7 @@ void MainWindow::setup_ui() {
     // 1. Encabezado superior con estado inicial real y toggle de perfil (FE-08/FE-09)
     header_panel_ = new HeaderPanel(this, "Cafetería ITCH II", "Caja Principal · Cerrada", "Usuario: ...",
         [this](UiProfile) {
-            if (sidebar_panel_) {
-                sidebar_panel_->refresh_profile();
-            }
-            on_section_changed(current_section_);
-            Layout();
+            apply_profile_refresh();
         });
     root_sizer->Add(header_panel_, 0, wxEXPAND);
     update_header_status();
@@ -97,6 +94,23 @@ void MainWindow::setup_ui() {
             current_view_->GetEventHandler()->ProcessEvent(e);
         }
     }, 1001);
+}
+
+void MainWindow::apply_profile_refresh() {
+    if (header_panel_) {
+        header_panel_->sync_profile_button();
+    }
+    if (sidebar_panel_) {
+        sidebar_panel_->refresh_profile();
+    }
+    on_section_changed(current_section_);
+    Layout();
+}
+
+void MainWindow::schedule_profile_refresh() {
+    CallAfter([this]() {
+        apply_profile_refresh();
+    });
 }
 
 void MainWindow::on_section_changed(SectionId section) {
@@ -147,7 +161,9 @@ void MainWindow::update_content_view() {
     } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Roles y permisos") {
         current_view_ = new BackofficeRolesPanel(content_container_, services_.account_service);
     } else if (current_section_ == SectionId::BackOffice && (current_subsection_ == "Configuración" || current_subsection_ == "Impresión")) {
-        current_view_ = new BackofficePrintConfigPanel(content_container_, services_);
+        current_view_ = new BackofficeSettingsPanel(content_container_, services_, [this](UiProfile) {
+            schedule_profile_refresh();
+        });
     } else {
         std::string section_label;
         switch (current_section_) {

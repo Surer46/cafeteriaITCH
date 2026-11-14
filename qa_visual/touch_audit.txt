@@ -1,0 +1,108 @@
+DPI=96 escala=1.00 (1200x720 logicos, perfil Tactil)
+
+=== Venta (total=21, marcados=2) ===
+  Venta | button | Estándar | 140.0x48.0 | OK
+  Venta | button | Punto de Venta | 220.0x56.0 | OK
+  Venta | button | Inventario | 220.0x56.0 | OK
+  Venta | button | Caja y Reportes | 220.0x56.0 | OK
+  Venta | button | BackOffice | 220.0x56.0 | OK
+  Venta | button | Venta | 75.0x44.0 | <48
+  Venta | button | Catálogo visual | 140.0x44.0 | <48
+  Venta | edit | <edit> | 220.0x48.0 | OK
+  Venta | edit | Edit:1 | 64.0x48.0 | OK
+  Venta | edit | <edit> | 586.0x48.0 | OK
+  Venta | button | − | 48.0x48.0 | OK
+  Venta | button | + | 48.0x48.0 | OK
+  Venta | button | Buscar | 100.0x48.0 | OK
+  Venta | switch/combo | comboBox | 246.0x48.0 | OK
+  Venta | button | Agregar al Carrito | 210.0x56.0 | OK
+  Venta | button | Editar cantidad | 170.0x48.0 | OK
+  Venta | button | Editar nota | 145.0x48.0 | OK
+  Venta | button | Quitar línea | 145.0x48.0 | OK
+  Venta | button | Más acciones ▾ | 188.0x48.0 | OK
+  Venta | button | Cobrar | 294.0x60.0 | OK
+  Venta | button | Cancelar pedido | 294.0x48.0 | OK
+
+=== Caja y turnos (total=10, marcados=4) ===
+  Caja y turnos | button | Estándar | 140.0x48.0 | OK
+  Caja y turnos | button | Punto de Venta | 220.0x56.0 | OK
+  Caja y turnos | button | Inventario | 220.0x56.0 | OK
+  Caja y turnos | button | Caja y Reportes | 220.0x56.0 | OK
+  Caja y turnos | button | BackOffice | 220.0x56.0 | OK
+  Caja y turnos | button | Caja y turnos | 124.0x44.0 | <48
+  Caja y turnos | button | Bitácora | 90.0x44.0 | <48
+  Caja y turnos | button | Reportes | 95.0x44.0 | <48
+  Caja y turnos | edit | Edit:300.00 | 140.0x44.0 | <48
+  Caja y turnos | button | Abrir Turno de Caja | 200.0x48.0 | OK
+
+=== Bitácora (total=13, marcados=4) ===
+  Bitácora | button | Estándar | 140.0x48.0 | OK
+  Bitácora | button | Punto de Venta | 220.0x56.0 | OK
+  Bitácora | button | Inventario | 220.0x56.0 | OK
+  Bitácora | button | Caja y Reportes | 220.0x56.0 | OK
+  Bitácora | button | BackOffice | 220.0x56.0 | OK
+  Bitácora | button | Caja y turnos | 124.0x44.0 | <48
+  Bitácora | button | Bitácora | 90.0x44.0 | <48
+  Bitácora | button | Reportes | 95.0x44.0 | <48
+  Bitácora | combobox | <combobox> | 160.0x29.0 | <48
+  Bitácora | edit | <edit> | 140.0x48.0 | OK
+  Bitácora | button | Buscar | 110.0x48.0 | OK
+  Bitácora | edit | <edit> | 120.0x48.0 | OK
+  Bitácora | edit | <edit> | 120.0x48.0 | OK
+
+=== Usuarios y cuentas (total=11, marcados=4) ===
+  Usuarios y cuentas | button | Estándar | 140.0x48.0 | OK
+  Usuarios y cuentas | button | Punto de Venta | 220.0x56.0 | OK
+  Usuarios y cuentas | button | Inventario | 220.0x56.0 | OK
+  Usuarios y cuentas | button | Caja y Reportes | 220.0x56.0 | OK
+  Usuarios y cuentas | button | BackOffice | 220.0x56.0 | OK
+  Usuarios y cuentas | button | Usuarios y cuentas | 167.0x44.0 | <48
+  Usuarios y cuentas | button | Roles y permisos | 153.0x44.0 | <48
+  Usuarios y cuentas | button | Configuración | 131.0x44.0 | <48
+  Usuarios y cuentas | button | Respaldos | 105.0x44.0 | <48
+  Usuarios y cuentas | button | Nuevo Usuario | 160.0x48.0 | OK
+  Usuarios y cuentas | button | Actualizar | 110.0x48.0 | OK
+
+=== Roles y permisos (total=11, marcados=4) ===
+  Roles y permisos | button | Estándar | 140.0x48.0 | OK
+  Roles y permisos | button | Punto de Venta | 220.0x56.0 | OK
+  Roles y permisos | button | Inventario | 220.0x56.0 | OK
+  Roles y permisos | button | Caja y Reportes | 220.0x56.0 | OK
+  Roles y permisos | button | BackOffice | 220.0x56.0 | OK
+  Roles y permisos | button | Usuarios y cuentas | 167.0x44.0 | <48
+  Roles y permisos | button | Roles y permisos | 153.0x44.0 | <48
+  Roles y permisos | button | Configuración | 131.0x44.0 | <48
+  Roles y permisos | button | Respaldos | 105.0x44.0 | <48
+  Roles y permisos | button | Nuevo rol | 145.0x48.0 | OK
+  Roles y permisos | button | Actualizar | 103.0x48.0 | OK
+
+=== Configuración (total=14, marcados=6) ===
+  Configuración | button | Estándar | 140.0x48.0 | OK
+  Configuración | button | Punto de Venta | 220.0x56.0 | OK
+  Configuración | button | Inventario | 220.0x56.0 | OK
+  Configuración | button | Caja y Reportes | 220.0x56.0 | OK
+  Configuración | button | BackOffice | 220.0x56.0 | OK
+  Configuración | button | Usuarios y cuentas | 167.0x44.0 | <48
+  Configuración | button | Roles y permisos | 153.0x44.0 | <48
+  Configuración | button | Configuración | 131.0x44.0 | <48
+  Configuración | button | Respaldos | 105.0x44.0 | <48
+  Configuración | button | Estándar | 386.0x56.0 | OK
+  Configuración | button | Táctil (Activa) | 397.0x56.0 | OK
+  Configuración | combobox | <combobox> | 380.0x23.0 | <48
+  Configuración | combobox | <combobox> | 380.0x23.0 | <48
+  Configuración | button | Guardar Configuración | 220.0x48.0 | OK
+
+=== Ingredientes (total=13, marcados=6) ===
+  Ingredientes | button | Estándar | 140.0x48.0 | OK
+  Ingredientes | button | Punto de Venta | 220.0x56.0 | OK
+  Ingredientes | button | Inventario | 220.0x56.0 | OK
+  Ingredientes | button | Caja y Reportes | 220.0x56.0 | OK
+  Ingredientes | button | BackOffice | 220.0x56.0 | OK
+  Ingredientes | button | Existencias | 111.0x44.0 | <48
+  Ingredientes | button | Reabastecimiento | 160.0x44.0 | <48
+  Ingredientes | button | Productos y recetas | 173.0x44.0 | <48
+  Ingredientes | button | Ingredientes | 121.0x44.0 | <48
+  Ingredientes | button | Promociones y combos | 198.0x44.0 | <48
+  Ingredientes | button | Barra | 75.0x44.0 | <48
+  Ingredientes | button | Nuevo ingrediente | 168.0x48.0 | OK
+  Ingredientes | button | Actualizar | 109.0x48.0 | OK
