@@ -377,6 +377,9 @@ void test_status_persists_across_reopen(const fs::path& base, const fs::path& mi
     TEST_CHECK(db2.open(db_file).is_success(), "Debe reabrir la base");
     auto account2 = std::make_shared<SqliteAccountService>(db2);
     SqliteBackupService backup2(db2, account2, data_dir.u8string(), mig.u8string());
+    // B8: get_status exige sesión; sin ella debe rechazar (y con el Dueño, devolver el estado persistido).
+    TEST_CHECK(!backup2.get_status().is_success(), "get_status sin sesión debe rechazarse");
+    TEST_CHECK(account2->login("dueno_b1", kOwnerPwd).is_success(), "Dueño debe iniciar sesión tras reabrir");
     auto st = backup2.get_status();
     TEST_CHECK(st.is_success(), "get_status tras reabrir");
     const auto& s = st.value();

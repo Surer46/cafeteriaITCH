@@ -111,8 +111,10 @@ add_library(app_services STATIC
     src/services/sqlite_sale_service.cpp
     src/services/sqlite_print_config_service.cpp
     src/services/data_dir_policy.cpp
+    src/services/database_startup.cpp
     src/services/package_self_check.cpp
     include/app/services/data_dir_policy.hpp
+    include/app/services/database_startup.hpp
     include/app/services/package_self_check.hpp
     include/app/services/identifiers.hpp
     include/app/services/stock_ledger.hpp

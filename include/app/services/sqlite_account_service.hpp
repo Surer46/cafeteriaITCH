@@ -1,12 +1,22 @@
 #ifndef APP_SERVICES_SQLITE_ACCOUNT_SERVICE_HPP
 #define APP_SERVICES_SQLITE_ACCOUNT_SERVICE_HPP
 
+#include <chrono>
+#include <functional>
 #include <memory>
 #include <optional>
 #include "app/contracts/account_service.hpp"
 #include "app/storage/sqlite_database.hpp"
 
 namespace app::services {
+
+// Límite de intentos de inicio de sesión: tras `max_failures` fallos seguidos de un mismo usuario
+// (el nombre tal como se escribe: el inicio de sesión distingue mayúsculas), ese nombre queda
+// bloqueado `lock_minutes` minutos. El bloqueo siempre expira solo.
+struct LoginLockoutPolicy {
+    int max_failures{5};
+    int lock_minutes{5};
+};
 
 class SqliteAccountService : public contracts::IAccountService {
 public:
@@ -59,6 +69,12 @@ public:
         const std::string& details
     ) override;
 
+    // Política y reloj del límite de intentos (el reloj es inyectable para pruebas; por omisión,
+    // la hora del sistema en UTC). No forma parte del contrato.
+    void configure_login_lockout(
+        const LoginLockoutPolicy& policy,
+        std::function<std::chrono::system_clock::time_point()> clock = {});
+
     // Método para cambiar sesión en pruebas o flujos autorizados
     void set_current_user_for_testing(const contracts::UserDto& user);
 
@@ -66,7 +82,18 @@ private:
     contracts::OperationResult check_permission_or_fail(std::string_view permission_key) const;
     contracts::Result<std::vector<std::string>> load_role_permissions(const std::string& role_id);
 
+    // Escritura interna de auditoría: no exige sesión (el inicio de sesión fallido la necesita).
+    contracts::OperationResult write_audit_event(const std::string& event_type, const std::string& details);
+
+    std::int64_t lockout_now_ms() const;
+    // Milisegundos que faltan para que expire el bloqueo de `key`; 0 si no está bloqueado.
+    std::int64_t login_lock_remaining_ms(const std::string& key, std::int64_t now_ms);
+    void record_login_failure(const std::string& key, const std::string& username, std::int64_t now_ms);
+    void clear_login_failures(const std::string& key);
+
     storage::SqliteDatabase& db_;
+    LoginLockoutPolicy lockout_policy_;
+    std::function<std::chrono::system_clock::time_point()> lockout_clock_;
     std::optional<contracts::UserDto> current_user_;
     std::vector<std::string> current_user_permissions_;
 };

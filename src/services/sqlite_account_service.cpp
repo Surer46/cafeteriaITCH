@@ -12,6 +12,28 @@ namespace app::services {
 
 namespace {
 
+// Hash de relleno con el mismo costo que uno real: se verifica cuando el usuario no existe, para que
+// el tiempo de respuesta no revele si el nombre existe. Nunca coincide con ninguna contraseña.
+const std::string& decoy_password_hash() {
+    static const std::string hash =
+        "pbkdf2_sha256$" + std::to_string(crypto::PasswordHasher::DEFAULT_ITERATIONS) + "$" +
+        std::string(32, '0') + "$" + std::string(64, '0');
+    return hash;
+}
+
+// Clave del límite de intentos: el nombre tal como se escribe (igual que la búsqueda de login, que
+// distingue mayúsculas), recortado a 128 bytes para acotar el tamaño de la tabla.
+std::string login_key_for(const std::string& username) {
+    return username.size() > 128 ? username.substr(0, 128) : username;
+}
+
+std::string lock_wait_message(std::int64_t remaining_ms) {
+    std::int64_t minutes = (remaining_ms + 59999) / 60000;
+    if (minutes < 1) minutes = 1;
+    return "Demasiados intentos fallidos. Espere " + std::to_string(minutes) +
+           (minutes == 1 ? " minuto" : " minutos") + " para volver a intentar.";
+}
+
 bool is_valid_email(const std::string& email) {
     if (email.empty() || email.length() > 254) return false;
     auto at_pos = email.find('@');
@@ -206,6 +228,17 @@ contracts::Result<contracts::UserDto> SqliteAccountService::login(
     const std::string& username,
     const std::string& raw_password
 ) {
+    const std::string key = login_key_for(username);
+    const std::int64_t now_ms = lockout_now_ms();
+
+    // Bloqueado: se responde sin mirar si el usuario existe ni verificar la contraseña.
+    // Los intentos durante el bloqueo no se cuentan ni lo alargan.
+    const std::int64_t remaining = login_lock_remaining_ms(key, now_ms);
+    if (remaining > 0) {
+        return contracts::Result<contracts::UserDto>::fail(
+            contracts::ErrorCode::Forbidden, lock_wait_message(remaining));
+    }
+
     auto prep = db_.prepare(
         "SELECT u.id, u.username, u.display_name, u.password_hash, u.role_id, r.name, u.is_active, u.email, (u.avatar_blob IS NOT NULL) "
         "FROM users u "
@@ -222,12 +255,21 @@ contracts::Result<contracts::UserDto> SqliteAccountService::login(
     if (!step_res.is_success()) {
         return contracts::Result<contracts::UserDto>::fail(step_res.error_code(), step_res.error_message());
     }
-    if (!step_res.value()) {
-        record_audit_event("LOGIN_FAILED", "Intento fallido: usuario no encontrado (" + username + ")");
+
+    auto fail_login = [&](const std::string& audit_text) {
+        write_audit_event("LOGIN_FAILED", audit_text);
+        record_login_failure(key, username, now_ms);
+        // Si este fallo acaba de bloquear el nombre, se avisa ya; si no, mensaje genérico.
+        const std::int64_t rem = login_lock_remaining_ms(key, now_ms);
         return contracts::Result<contracts::UserDto>::fail(
             contracts::ErrorCode::Forbidden,
-            "Usuario o contraseña incorrectos"
-        );
+            rem > 0 ? lock_wait_message(rem) : std::string("Usuario o contraseña incorrectos"));
+    };
+
+    if (!step_res.value()) {
+        // Usuario inexistente: se gasta el mismo tiempo que con uno real.
+        crypto::PasswordHasher::verify_password(raw_password, decoy_password_hash());
+        return fail_login("Intento fallido: usuario no encontrado (" + username + ")");
     }
 
     std::string id = stmt.get_text(0);
@@ -240,21 +282,20 @@ contracts::Result<contracts::UserDto> SqliteAccountService::login(
     std::string email = stmt.get_text(7);
     bool has_avatar = stmt.get_int64(8) != 0;
 
+    // La contraseña se verifica SIEMPRE primero: el aviso de cuenta desactivada solo lo ve quien la sabe.
+    if (!crypto::PasswordHasher::verify_password(raw_password, stored_hash)) {
+        return fail_login("Contraseña incorrecta para usuario: " + username);
+    }
+
     if (!is_active) {
-        record_audit_event("LOGIN_FAILED", "Intento de inicio de sesión con cuenta inactiva (" + username + ")");
+        write_audit_event("LOGIN_FAILED", "Intento de inicio de sesión con cuenta inactiva (" + username + ")");
         return contracts::Result<contracts::UserDto>::fail(
             contracts::ErrorCode::Forbidden,
             "La cuenta de usuario está desactivada"
         );
     }
 
-    if (!crypto::PasswordHasher::verify_password(raw_password, stored_hash)) {
-        record_audit_event("LOGIN_FAILED", "Contraseña incorrecta para usuario: " + username);
-        return contracts::Result<contracts::UserDto>::fail(
-            contracts::ErrorCode::Forbidden,
-            "Usuario o contraseña incorrectos"
-        );
-    }
+    clear_login_failures(key);
 
     contracts::UserDto dto;
     dto.id = id;
@@ -274,7 +315,7 @@ contracts::Result<contracts::UserDto> SqliteAccountService::login(
         current_user_permissions_ = perms.value();
     }
 
-    record_audit_event("LOGIN_SUCCESS", "Inicio de sesión exitoso para: " + username);
+    write_audit_event("LOGIN_SUCCESS", "Inicio de sesión exitoso para: " + username);
     return contracts::Result<contracts::UserDto>::ok(dto);
 }
 
@@ -360,6 +401,9 @@ contracts::Result<std::vector<std::string>> SqliteAccountService::load_role_perm
 }
 
 contracts::Result<bool> SqliteAccountService::can_deactivate_user(const std::string& user_id) {
+    if (!is_authenticated()) {
+        return contracts::Result<bool>::fail(contracts::ErrorCode::Forbidden, "Se requiere autenticación");
+    }
     auto prep_target = db_.prepare(
         "SELECT u.role_id, r.name, u.is_active FROM users u "
         "JOIN roles r ON u.role_id = r.id WHERE u.id = ?;"
@@ -1304,6 +1348,9 @@ contracts::OperationResult SqliteAccountService::delete_role(const std::string& 
 }
 
 contracts::Result<contracts::RoleDto> SqliteAccountService::get_role_by_id(const std::string& role_id) {
+    if (!is_authenticated()) {
+        return contracts::Result<contracts::RoleDto>::fail(contracts::ErrorCode::Forbidden, "Se requiere autenticación");
+    }
     auto prep = db_.prepare("SELECT id, name, description, is_system FROM roles WHERE id = ?;");
     if (!prep.is_success()) return contracts::Result<contracts::RoleDto>::fail(prep.error_code(), prep.error_message());
     auto stmt = std::move(prep.value());
@@ -1328,6 +1375,9 @@ contracts::Result<contracts::RoleDto> SqliteAccountService::get_role_by_id(const
 }
 
 contracts::Result<std::vector<contracts::RoleDto>> SqliteAccountService::list_roles() {
+    if (!is_authenticated()) {
+        return contracts::Result<std::vector<contracts::RoleDto>>::fail(contracts::ErrorCode::Forbidden, "Se requiere autenticación");
+    }
     auto prep = db_.prepare("SELECT id, name, description, is_system FROM roles ORDER BY name ASC;");
     if (!prep.is_success()) return contracts::Result<std::vector<contracts::RoleDto>>::fail(prep.error_code(), prep.error_message());
 
@@ -1461,6 +1511,17 @@ contracts::OperationResult SqliteAccountService::record_audit_event(
     const std::string& event_type,
     const std::string& details
 ) {
+    // Escribir en la bitácora desde fuera exige sesión: sin ella cualquiera podría falsificar eventos.
+    if (!current_user_.has_value()) {
+        return contracts::OperationResult::fail(contracts::ErrorCode::Forbidden, "No hay sesión activa");
+    }
+    return write_audit_event(event_type, details);
+}
+
+contracts::OperationResult SqliteAccountService::write_audit_event(
+    const std::string& event_type,
+    const std::string& details
+) {
     const auto ts = domain::now();
     std::string audit_id = generate_id("audit");
 
@@ -1492,6 +1553,105 @@ contracts::OperationResult SqliteAccountService::record_audit_event(
     }
 
     return contracts::OperationResult::ok();
+}
+
+void SqliteAccountService::configure_login_lockout(
+    const LoginLockoutPolicy& policy,
+    std::function<std::chrono::system_clock::time_point()> clock
+) {
+    lockout_policy_ = policy;
+    lockout_clock_ = std::move(clock);
+}
+
+std::int64_t SqliteAccountService::lockout_now_ms() const {
+    const auto tp = lockout_clock_ ? lockout_clock_() : std::chrono::system_clock::now();
+    return std::chrono::duration_cast<std::chrono::milliseconds>(tp.time_since_epoch()).count();
+}
+
+std::int64_t SqliteAccountService::login_lock_remaining_ms(const std::string& key, std::int64_t now_ms) {
+    auto prep = db_.prepare("SELECT locked_until_ms FROM login_attempts WHERE login_key = ?;");
+    if (!prep.is_success()) return 0;  // sin la tabla (esquema anterior a la migración 015) no hay límite
+    auto stmt = std::move(prep.value());
+    stmt.bind_text(1, key);
+    auto step = stmt.step();
+    if (!step.is_success() || !step.value()) return 0;
+    const std::int64_t until = stmt.get_int64(0);
+    if (until <= now_ms) return 0;
+    // Si el reloj se atrasó mucho, el bloqueo nunca dura más que la política.
+    const std::int64_t cap = static_cast<std::int64_t>(lockout_policy_.lock_minutes) * 60000;
+    return std::min(until - now_ms, cap);
+}
+
+void SqliteAccountService::record_login_failure(const std::string& key, const std::string& username, std::int64_t now_ms) {
+    std::int64_t count = 0;
+    {
+        auto prep = db_.prepare("SELECT failed_count, locked_until_ms FROM login_attempts WHERE login_key = ?;");
+        if (!prep.is_success()) return;
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, key);
+        auto step = stmt.step();
+        if (step.is_success() && step.value()) {
+            count = stmt.get_int64(0);
+            const std::int64_t until = stmt.get_int64(1);
+            // Un bloqueo ya vencido empieza la cuenta de cero.
+            if (until != 0 && until <= now_ms) count = 0;
+        }
+    }
+    count += 1;
+    const bool lock_now = count >= lockout_policy_.max_failures;
+    const std::int64_t until = lock_now ? now_ms + static_cast<std::int64_t>(lockout_policy_.lock_minutes) * 60000 : 0;
+
+    auto up = db_.prepare(
+        "INSERT INTO login_attempts (login_key, failed_count, last_failed_ms, locked_until_ms) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(login_key) DO UPDATE SET failed_count = excluded.failed_count, "
+        "last_failed_ms = excluded.last_failed_ms, locked_until_ms = excluded.locked_until_ms;");
+    if (!up.is_success()) return;
+    {
+        auto stmt = std::move(up.value());
+        stmt.bind_text(1, key);
+        stmt.bind_int64(2, count);
+        stmt.bind_int64(3, now_ms);
+        stmt.bind_int64(4, until);
+        stmt.step();
+    }
+
+    // Poda: filas de más de 24 h y sin bloqueo vigente, y tope de 1000 filas (se descartan primero las
+    // más antiguas sin bloqueo vigente). Una fila con bloqueo vigente nunca se borra.
+    {
+        auto prune = db_.prepare(
+            "DELETE FROM login_attempts WHERE last_failed_ms < ? AND locked_until_ms <= ?;");
+        if (prune.is_success()) {
+            auto stmt = std::move(prune.value());
+            stmt.bind_int64(1, now_ms - 24LL * 3600 * 1000);
+            stmt.bind_int64(2, now_ms);
+            stmt.step();
+        }
+        auto cap = db_.prepare(
+            "DELETE FROM login_attempts WHERE login_key IN ("
+            "  SELECT login_key FROM login_attempts WHERE locked_until_ms <= ? "
+            "  ORDER BY last_failed_ms ASC "
+            "  LIMIT MAX(0, (SELECT COUNT(*) FROM login_attempts) - 1000));");
+        if (cap.is_success()) {
+            auto stmt = std::move(cap.value());
+            stmt.bind_int64(1, now_ms);
+            stmt.step();
+        }
+    }
+
+    if (lock_now) {
+        // Sin la contraseña intentada, nunca.
+        write_audit_event("LOGIN_LOCKED",
+            "Cuenta bloqueada por " + std::to_string(lockout_policy_.max_failures) + " intentos fallidos seguidos (" +
+            username + "); bloqueada " + std::to_string(lockout_policy_.lock_minutes) + " minutos");
+    }
+}
+
+void SqliteAccountService::clear_login_failures(const std::string& key) {
+    auto prep = db_.prepare("DELETE FROM login_attempts WHERE login_key = ?;");
+    if (!prep.is_success()) return;
+    auto stmt = std::move(prep.value());
+    stmt.bind_text(1, key);
+    stmt.step();
 }
 
 void SqliteAccountService::set_current_user_for_testing(const contracts::UserDto& user) {

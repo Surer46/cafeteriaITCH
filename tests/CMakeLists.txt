@@ -167,3 +167,23 @@ if(WIN32)
     add_test(NAME PackageTest COMMAND test_package)
     set_tests_properties(PackageTest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
 endif()
+
+# Tests B8: arranque seguro (respaldo previo, integridad), límite de intentos de inicio de sesión
+# y autorización en todos los servicios reales.
+foreach(b8_test test_startup test_login_lockout test_authorization test_startup_timing)
+    add_executable(${b8_test} ${b8_test}.cpp)
+    target_link_libraries(${b8_test} PRIVATE
+        app_services
+        app_storage
+        app_contracts
+        app_crypto
+        sqlite3
+    )
+    target_compile_definitions(${b8_test} PRIVATE
+        SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations"
+    )
+endforeach()
+add_test(NAME StartupTest COMMAND test_startup)
+add_test(NAME LoginLockoutTest COMMAND test_login_lockout)
+add_test(NAME AuthorizationTest COMMAND test_authorization)
+add_test(NAME StartupTimingSmokeTest COMMAND test_startup_timing 1500)
