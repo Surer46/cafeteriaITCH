@@ -193,9 +193,74 @@ Entrega corta y literal: archivos; comandos con codigo de salida; DPI y escala c
 
 ---
 
+## T2 — AntiGravity, Gemini 4 Hydrogen (high) (`main`, desde T1 en `ac8348f`)
+
+Corrige los 30 controles que el inventario de T1 marcó por debajo de 48 en Táctil, amplía la medición a los estados que T1 no vio y la convierte en aserciones. Corre en paralelo con B7; no comparten archivos.
+
+```text
+Eres el agente de frontend de este proyecto. Si esta es una sesion nueva, lee primero AGENTS.md completo y docs/coordinacion-agentes.md. Bloque T2. Trabaja SOLO en <copia principal>, rama main. No hagas commits. No compiles ni corras pruebas antes de editar: main compila, CTest pasa 5/5 y toda la bateria GUI pasa en build_release y build_debug.
+
+Anota la hora de inicio ahora: la entrega debe incluir hora de inicio, hora de fin y cuantas veces compilaste y ejecutaste cada prueba.
+
+Objetivo: que en perfil Tactil ningun control que se pulsa o en el que se escribe mida menos de 48 x 48 unidades logicas, y que eso quede vigilado por una prueba que falla. El inventario de T1 (qa_visual/touch_audit.txt) marco 30 de 93 controles; todos caen en cuatro causas:
+- botones de subseccion: 44 de alto. Estan en src/frontend/subnav_bar.cpp (btn_h = is_touch ? 44 : 36);
+- Caja y turnos: los campos de fondo inicial y de efectivo final son wxTextCtrl de 44 de alto en src/frontend/cash_shift_panel.cpp;
+- Bitacora: la lista desplegable de tipo de evento es un wxChoice nativo, 29 de alto, en src/frontend/audit_log_panel.cpp;
+- Configuracion de impresion: las dos listas desplegables son wxChoice nativos, 23 de alto, en src/frontend/backoffice_print_config_panel.cpp. El wxChoice nativo de Windows ignora el alto que se le pide.
+
+Archivos que puedes editar, y ningun otro:
+- src/frontend/subnav_bar.cpp, cash_shift_panel.cpp, audit_log_panel.cpp y backoffice_print_config_panel.cpp (y sus .hpp solo si cambia el tipo de un miembro);
+- src/frontend/login_dialog.cpp e initial_owner_dialog.cpp (solo para el punto 5);
+- nuevo: tests/test_t2_touch_targets.py;
+- tests/test_t1_touch_profile.py (solo para quitar la seccion g, que pasa a la prueba nueva);
+- tests/test_f2_audit_log.py, tests/test_f2b_subnav.py y tests/capture_visual_qa.py, SOLO en las lineas que localizan o manejan un control que cambio de clase o que comparan contra el alto anterior exacto de Tactil. Cada linea tocada en estas tres se lista en la entrega con su antes y su despues.
+No toques main_app.cpp ni app.rc (otro agente los esta editando), theme.*, ui_helpers.*, toggle_switch.*, pos_panel.*, otros paneles, contratos, servicios ni migraciones. Si la correccion de un control exige un archivo que no esta en la lista, NO lo edites: dejalo marcado y reportalo.
+
+1. Subsecciones: 48 de alto en Tactil. En Estandar no cambia.
+
+2. Caja y turnos: los dos campos de efectivo a 48 de alto en Tactil con el texto centrado verticalmente, usando ui::make_text_field de ui_helpers tal como esta. El comportamiento (validacion, llamadas al servicio, habilitar y deshabilitar) no cambia; usa ui::set_text_field_enabled donde hoy se habilita o deshabilita el campo.
+
+3. Listas desplegables de Bitacora y de impresion: 48 de alto en Tactil, con opciones tambien comodas al desplegar (al menos 40 de alto cada una). Usa el mismo tipo de control que ya usa Venta para elegir producto (wxOwnerDrawnComboBox en pos_panel.cpp; leelo, no lo edites). Usa el mismo control en Estandar y en Tactil, no dos caminos distintos. Las opciones, la seleccion inicial, lo que se guarda y lo que se filtra no cambian.
+   - Esto cambia la clase Win32 del control: tests/test_f2_audit_log.py y tests/capture_visual_qa.py lo manejan como ComboBox nativo. Adapta solo la forma de localizarlo y de elegir una opcion; ninguna comprobacion de resultado se quita ni se debilita.
+
+4. Prueba nueva tests/test_t2_touch_targets.py, con el ejecutable real (Release y Debug), base temporal aislada, consciente de DPI igual que test_t1_touch_profile.py (copia sus funciones). En perfil Tactil, a 1200x720 logicos:
+   a. Mueve aqui el inventario de la seccion g de T1 y conviertelo en aserciones: la prueba FALLA si algun control visible y habilitado que se pulsa o en el que se escribe mide menos de 48 de ancho o de alto en unidades logicas, o si dos controles hermanos se solapan. Sigue escribiendo la tabla completa en qa_visual/touch_audit.txt.
+   b. Amplia el recorrido a los estados que T1 no vio. Mide ademas de la pantalla recien abierta:
+      - Venta con una linea del carrito seleccionada;
+      - Caja y turnos con el turno abierto (campo de efectivo final y boton de cierre);
+      - Bitacora con filas y con la lista desplegable abierta;
+      - Usuarios y cuentas con un usuario seleccionado y con el formulario de usuario nuevo;
+      - Roles y permisos con un rol seleccionado (interruptores visibles);
+      - Configuracion con cada lista desplegable abierta;
+      - Ingredientes con el formulario de ingrediente nuevo y con un ingrediente seleccionado;
+      - dialogos de cobro, de ticket y de historial de tickets.
+   c. Filas de listas: cada lista con filas mide al menos 40 de alto por fila (LVM_GETITEMRECT).
+   d. Lo que la parte b o c encuentre por debajo del minimo: si esta en uno de los archivos permitidos, corrigelo. Si esta en otro archivo, NO lo corrijas: registralo en una lista de excepciones dentro de la prueba, con pantalla, control y medida, que la prueba imprime completa al terminar. La prueba falla ante cualquier control pequeno que no este en esa lista, y tambien si una excepcion de la lista ya no se reproduce. Prohibido meter en la lista algo que si puedes corregir.
+   Prohibido relajar o quitar una asercion para que pase: si una medida no se puede cumplir, detente y reporta el numero medido.
+
+5. Limpieza menor de T1: login_dialog.cpp e initial_owner_dialog.cpp tienen cada uno una copia de make_dialog_text_field. Sustituyelas por ui::make_text_field SOLO si tests/test_t1_touch_profile.py sigue pasando sin tocar ninguna de sus aserciones; si no da las mismas medidas, deja el codigo como esta y dilo en la entrega.
+
+Verificacion (antepon al PATH <toolchain>\mingw64\bin y <toolchain>\wxwidgets\lib\gcc1610_x64_dll):
+   cmake --build build_release --parallel 2
+   cmake --build build_debug --parallel 2
+   ctest --test-dir build_release --output-on-failure
+   ctest --test-dir build_debug --output-on-failure
+   python -u tests/test_t2_touch_targets.py
+   python -u tests/test_t1_touch_profile.py
+   python -u tests/test_f2_audit_log.py
+   python -u tests/test_f2b_subnav.py
+   python -u tests/test_fe08_fe09_visual_integration.py
+   python -u tests/test_i1_integration.py
+   python -u tests/capture_visual_qa.py
+Las pruebas anteriores a T1 solo son validas con Windows a 100 por ciento: comprueba el escalado antes; si no es 100 por ciento, NO las ejecutes y dilo. Las dos pruebas de perfil tactil si se ejecutan con el escalado que haya. No cambies el escalado de Windows. Antes de cada prueba GUI comprueba con tasklist que no haya ningun app_desktop.exe corriendo. Si un comando falla dos veces con el mismo error sin cambiar codigo, detente y reporta el error textual. No instales nada.
+
+Entrega corta y literal: archivos; comandos con codigo de salida; DPI y escala; total de controles medidos y de marcados por pantalla y estado; la lista de excepciones completa con el archivo que habria que tocar para cada una; cada linea cambiada en las pruebas anteriores con su antes y su despues; si hiciste o no el punto 5 y por que; fallos intermedios y como los resolviste; hora de inicio y de fin, numero de compilaciones y de ejecuciones de cada prueba; limites de lo verificado. No escribas que algo funciona si no lo ejecutaste.
+```
+
+---
+
 ## En cola para I7 (sin redactar)
 
-- **T2** (Gemini): corregir los controles marcados en `qa_visual/touch_audit.txt` y convertir el inventario en aserciones, pantalla por pantalla.
 - **T3** (Gemini, tras decisión del usuario): captura numérica para cantidad y efectivo en Táctil (teclado numérico propio o teclado en pantalla de Windows), sin tapar el campo, el total ni la confirmación.
 - **B8** (Claude, tras aprobar la instalación de la herramienta): compilar el instalador, probar instalar, actualizar y desinstalar conservando los datos.
 - **Fuera de los agentes:** ejecutar la ficha en la PC de caja; icono de la aplicación; prueba del paquete en un equipo limpio.
