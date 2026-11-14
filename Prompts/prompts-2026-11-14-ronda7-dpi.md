@@ -117,3 +117,58 @@ No ejecutes test_i2_integration.py (pendiente conocido del dialogo de impresion 
 
 Entrega corta y literal: archivos; DPI con que corriste; por cada prueba, los umbrales y tolerancias que tocaste con su valor a 100 y a 125; lineas de aserciones cambiadas con su antes y su despues; conclusion del punto 5 con la medida y la captura; comandos con codigo de salida; fallos intermedios y como los resolviste; hora de inicio y de fin, numero de ejecuciones de cada prueba; limites de lo verificado. No escribas que algo funciona si no lo ejecutaste.
 ```
+
+---
+
+## B8 — Claude Code Terminal (`backend/b8`, desde `main`, con plan previo)
+
+Arranque seguro (respaldo antes de migrar y comprobación de integridad), límite de intentos de inicio de sesión y revisión de autorización en todos los servicios. Ninguno depende de decisiones abiertas de la sección 9. Corre en paralelo con D1 y D2: único archivo compartido posible, `src/frontend/main_app.cpp` (B8 solo conecta el arranque; D1 no debería necesitar tocarlo). El bloque del instalador pasa a llamarse **B9**.
+
+```text
+Bloque B8 de backend. Si esta es una sesion nueva, lee primero AGENTS.md completo y docs/coordinacion-agentes.md. Trabaja SOLO en <worktree del backend>, rama backend/b8 (ya creada desde main; incluye B7: paquete, carpeta de datos y --self-check). No hagas commits. No compiles ni corras pruebas antes de editar: la linea base esta verificada (CTest 7/7 en Release; PackageTest omitida en Debug).
+
+Contexto: la aplicacion ya se puede empaquetar y pronto se instalara en la caja. Antes de eso hacen falta tres protecciones que AGENTS.md exige o que el plan de backend tiene pendientes, ninguna depende de decisiones de negocio abiertas.
+
+El otro agente esta trabajando en main sobre el escalado de pantalla: edita todo src/frontend/ y luego tests/*.py. No toques nada de eso, con UNA excepcion: src/frontend/main_app.cpp, solo para conectar el punto 1 en el arranque, con el cambio minimo (una llamada y su mensaje de error). Nada de tamanos, ventanas ni otros archivos de src/frontend/.
+
+Archivos permitidos: include/app/ (contratos solo con cambios aditivos), src/domain/, src/storage/, src/services/, migrations/ (solo archivos nuevos, a partir de 014), tests/test_*.cpp, tests/CMakeLists.txt, CMakeLists.txt (solo bibliotecas y pruebas) y main_app.cpp como se indica arriba. No toques migraciones 001 a 013, src/crypto/ ni tests/*.py.
+
+Presenta primero un plan para revision y espera aprobacion antes de escribir codigo. El plan debe resolver los puntos marcados como DECIDIR, con una recomendacion en cada uno.
+
+1. Arranque seguro de una base existente. AGENTS.md: "Crear respaldo consistente antes de migrar datos existentes". Hoy MigrationRunner aplica las migraciones pendientes sin respaldo previo y nadie comprueba la integridad de la base al arrancar. Al instalar una version nueva en la caja, una migracion fallida a medias seria perdida de ventas.
+   - Si la base ya tiene datos y hay migraciones pendientes: antes de aplicar la primera, respaldo consistente con el mecanismo de instantanea que ya existe (B1), verificado. Si el respaldo falla, no se migra y la aplicacion no arranca, con un mensaje en lenguaje llano que diga donde esta la base y que hacer. Una base nueva (primer inicio) no se respalda.
+   - Si una migracion falla, la base queda como estaba antes de esa migracion (cada una en su transaccion: compruebalo, no lo supongas) y el mensaje indica que existe el respaldo previo y donde.
+   - Comprobacion de integridad al arrancar. DECIDIR: PRAGMA quick_check o integrity_check, midiendo cuanto tarda cada uno en esta PC con una base de prueba de tamano realista (por ejemplo 50 000 ventas) y estimando el costo en un i5 de segunda generacion con disco duro. Si la base esta danada, no se abre para vender: mensaje llano con la ruta y la indicacion de restaurar un respaldo.
+   - DECIDIR: donde se guarda el respaldo previo a migrar y como se distingue de los demas (tipo propio en el registro de respaldos de B6). Ese respaldo no debe borrarlo la limpieza de B6 mientras sea el unico previo a la version actual.
+   - Toda la logica en storage o services, en una funcion sin wxWidgets que se pueda probar en CTest; main_app.cpp solo la llama y muestra el mensaje.
+   - Cuidado con --self-check (B7): usa su propia base temporal vacia y no debe crear respaldos.
+
+2. Limite de intentos de inicio de sesion. Hoy se puede probar contrasenas sin limite.
+   - Tras N intentos fallidos seguidos para un mismo usuario, ese usuario queda bloqueado M minutos; el mensaje dice en lenguaje llano cuanto falta, sin revelar si el usuario existe (mismo mensaje y mismo tiempo de respuesta aproximado para usuario inexistente).
+   - Un inicio correcto reinicia la cuenta de fallos. Persistido en SQLite: cerrar y abrir la aplicacion no lo reinicia. Usa la hora UTC que ya existe (B4) para no depender de cambios de hora local.
+   - Evento de auditoria al bloquear (sin la contrasena intentada, nunca).
+   - DECIDIR y recomendar N y M. DECIDIR que pasa con la ultima cuenta Dueno activa: no puede quedar la cafeteria sin nadie que entre; propone como evitarlo sin crear una puerta trasera ni contrasena maestra.
+   - El primer inicio (alta del Dueno) no cambia.
+
+3. Revision de autorizacion en todos los servicios reales. AGENTS.md: comprobar permisos dentro de cada servicio aunque se invoque sin la pantalla normal. El plan de backend dice desde 2026-09 que catalogo, inventario, carrito y venta omiten controles cuando no hay sesion; puede estar desactualizado.
+   - Primero haz y entrega una tabla con cada metodo publico de cada Sqlite*Service: que permiso exige, si exige sesion, y si cumple. No supongas: leelo.
+   - Corrige lo que no cumpla. No cambies que permiso exige un metodo que ya lo exige: si crees que es el permiso equivocado, reportalo en vez de cambiarlo.
+   - Prueba CTest que recorre todos esos metodos sin sesion y con un rol sin el permiso: todos rechazan y nada se escribe en la base (comprobado por SQL). Si un metodo debe ser publico sin sesion (por ejemplo has_owner o login), lista cuales y por que.
+
+Reglas: migraciones nuevas versionadas, una sola vez, sin efecto al repetir el runner; dinero y cantidades sin float ni double; no relajar pruebas existentes; contratos solo aditivos; no cambiar textos ni comportamiento visibles salvo los mensajes nuevos.
+
+Pruebas CTest nuevas, con TEST_CHECK:
+- arranque: base con datos y migracion pendiente -> respaldo creado y verificado antes de migrar; respaldo imposible -> no migra; migracion que falla a medias (una migracion de prueba rota en una carpeta temporal) -> base intacta y respaldo disponible; base danada (bytes alterados en una copia) -> se detecta y no se abre; base nueva -> sin respaldo; segundo arranque sin pendientes -> sin respaldo nuevo;
+- intentos: bloqueo tras N, persiste tras cerrar y reabrir, se libera tras M (con reloj inyectable, sin esperar minutos reales), usuario inexistente indistinguible, auditoria sin contrasena, caso de la ultima cuenta Dueno;
+- autorizacion: el recorrido del punto 3.
+Las pruebas no dejan archivos en el directorio desde el que se ejecutan.
+
+Verificacion. Antepon al PATH <toolchain>\mingw64\bin y <toolchain>\wxwidgets\lib\gcc1610_x64_dll:
+   cmake --build build_be_debug --parallel 2
+   ctest --test-dir build_be_debug --output-on-failure
+   cmake --build build_be_release --parallel 2
+   ctest --test-dir build_be_release --output-on-failure
+No ejecutes pruebas GUI. No instales nada. Si un comando falla dos veces con el mismo error sin cambiar codigo, detente y reporta el error textual.
+
+Entrega: archivos; comandos con codigo de salida; decisiones tomadas; la tabla del punto 3 con lo que corregiste; tiempos medidos de quick_check e integrity_check; contratos nuevos con una linea de uso; numero de TEST_CHECK nuevos; mensajes nuevos que vera el usuario, textuales; limites de lo verificado. No escribas que algo funciona si no lo ejecutaste.
+```
