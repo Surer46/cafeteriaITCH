@@ -172,3 +172,32 @@ No ejecutes pruebas GUI. No instales nada. Si un comando falla dos veces con el 
 
 Entrega: archivos; comandos con codigo de salida; decisiones tomadas; la tabla del punto 3 con lo que corregiste; tiempos medidos de quick_check e integrity_check; contratos nuevos con una linea de uso; numero de TEST_CHECK nuevos; mensajes nuevos que vera el usuario, textuales; limites de lo verificado. No escribas que algo funciona si no lo ejecutaste.
 ```
+
+---
+
+## B8 — respuesta al plan de Claude Code Terminal (2026-11-14)
+
+Plan aprobado con ajustes. Decisiones del usuario: 5 intentos y 5 minutos de bloqueo; el Dueño sigue la misma regla, sin excepción; el aviso de cuenta desactivada solo con la contraseña correcta.
+
+```text
+Plan de B8 aprobado con ajustes. Decisiones del usuario:
+- N = 5 intentos y M = 5 minutos.
+- La ultima cuenta Dueno sigue la misma regla, sin excepcion ni puerta trasera.
+- Cuenta inactiva: el aviso de cuenta desactivada solo aparece con la contrasena correcta; si no, el mensaje generico.
+Tambien aprobados: quick_check en cada arranque e integrity_check solo con migraciones pendientes; la ruta y el tipo PRE_MIGRATION del respaldo previo; registrarlo despues de migrar; exigir sesion en los metodos de lectura listados conservando sus permisos.
+
+Ajustes:
+a. Migracion fallida: con varias migraciones pendientes, las anteriores a la que falla ya quedaron aplicadas, asi que la base NO queda "como estaba". Que el mensaje y la entrega lo digan con exactitud: version en la que quedo la base, que la aplicacion no arranca, y donde esta el respaldo previo, que es el estado anterior completo. Pruebalo con dos migraciones pendientes donde falla la segunda.
+b. Migracion 014: reconstruir backup_files es delicado. Conserva todas las filas, indices, restricciones y claves foraneas que tenga hoy, y que la prueba lo compruebe sobre una base con filas de B6 (LOCAL y PRE_RESTORE con su tamano y hash), incluido que la limpieza de B6 sigue funcionando igual despues.
+c. Si el respaldo previo se crea pero la migracion falla, el archivo queda sin registrar y B6 nunca lo ve. Esta bien, pero el mensaje al usuario debe dar su ruta exacta.
+d. Espacio en disco: antes de respaldar comprueba que hay espacio libre suficiente (al menos el tamano de la base mas un margen); si no, no migra y lo dice en lenguaje llano. Prueba con un callback de espacio inyectable, sin llenar el disco.
+e. Mensajes al usuario: lenguaje llano, sin nombres de pragmas, tablas ni codigos; con la ruta y lo que debe hacer (llamar a quien instalo el sistema o restaurar un respaldo). Entrega cada mensaje textual.
+f. Tiempos: mide quick_check e integrity_check con 50 000 ventas y tambien con 250 000, y el tiempo total de arranque con y sin migraciones pendientes. La estimacion para un i5 de segunda generacion con disco duro va marcada como estimacion.
+g. Autorizacion: la tabla de la entrega incluye tambien cuentas y respaldos completos, no solo los que cambies. Antes de exigir sesion en get_current_shift, get_station_config y las lecturas de catalogo e inventario, revisa tambien rutas que no sean el arranque: cierre de sesion, cambio de usuario y cualquier llamada desde un destructor o al cerrar la ventana; si alguna llamaria sin sesion, reportalo antes de cambiarlo. El orquestador correra toda la bateria GUI al integrar.
+h. Los metodos auxiliares publicos en C++ que no estan en el contrato (get_or_create_cart_id, touch_cart, generate_next_folio, find_sale_by_idempotency_key): si se pueden llamar desde fuera del servicio, exigen sesion o pasan a privados; si pasan a privados y alguna prueba los usa, dilo antes de tocar la prueba.
+i. Intentos: la poda de filas antiguas y el tope no pueden borrar la fila de un usuario que esta bloqueado ahora. Usuario normalizado igual que login (si login distingue mayusculas, la clave tambien; dilo).
+j. main_app.cpp: solo la llamada y el mensaje. El otro agente esta editando src/frontend/; no toques ninguna otra linea de ese archivo.
+
+Adelante con el codigo. Entrega: archivos; comandos con codigo de salida; decisiones tomadas; la tabla completa de autorizacion con lo que corregiste; tiempos medidos; mensajes nuevos textuales; contratos nuevos con una linea de uso; numero de TEST_CHECK nuevos; limites de lo verificado. No hagas commits.
+```
+
