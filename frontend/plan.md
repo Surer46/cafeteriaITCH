@@ -123,7 +123,7 @@ Estado revisado el 2026-09-29: `[x]` marca avances concretos construidos/compila
 - [x] Mostrar pocas acciones primarias: `Editar cantidad`, `Editar nota`, `Quitar línea` contextuales por selección de fila y secundarios en `Más acciones ▾` (historial/reimpresión). Distinción explícita de `Quitar línea` vs `Cancelar pedido`.
 - [x] Probar ambos perfiles en 1200×720 y ventana estrecha (960×600), importes grandes ($2,900.00 / 116 unidades) sin recortes; validado con suite Win32 nativa `tests/test_fe08_fe09_visual_integration.py` en Release y Debug.
 - [ ] Construir tarjetas amplias y paginadas para catálogo opcional; agrupar formularios largos por secciones/pasos sin sobrecargar la pantalla.
-- [ ] Integrar captura numérica/teclado en pantalla según plataforma confirmada, sin ocultar campo, total o confirmación; conservar teclado físico/escáner y no depender de hover, clic derecho o doble clic.
+- [ ] Integrar captura numérica/teclado en pantalla (decidido 2026-11-14: teclado numérico propio en Táctil, bloque T4), sin ocultar campo, total o confirmación; conservar teclado físico/escáner y no depender de hover, clic derecho o doble clic.
 - [ ] Probar ambos perfiles, cambio de escala, teclado visible, datos largos y toques repetidos; validar legibilidad, precisión y flujo completo en monitor táctil grande real.
 - **Terminado:** vender, editar una línea, cobrar y decidir impresión funciona con distribución táctil clara, sin botones amontonados ni solapamientos, y conserva rendimiento/persistencia; pendiente validación física en monitor táctil real.
 
