@@ -625,9 +625,9 @@ def run_suite(label, exe_path, write_audit=False):
             (h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Listo"),
             None
         )
-        if btn_listo_r is not None:
-            click_button(btn_listo_r)
-            time.sleep(0.2)
+        assert btn_listo_r is not None, "Botón 'Listo' de NumericKeypad no encontrado en Respaldos"
+        click_button(btn_listo_r)
+        time.sleep(0.2)
 
         # --- 7. Ingredientes (inicial/seleccionado + formulario nuevo) ---
         click_sidebar_section(hwnd_main, "Inventario")

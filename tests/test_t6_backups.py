@@ -43,7 +43,67 @@ WM_LBUTTONUP = 0x0202
 BM_CLICK = 0x00F5
 BM_GETCHECK = 0x00F0
 LVM_GETITEMCOUNT = 0x1004
+LVM_GETHEADER = 0x101F
+LVM_GETITEMTEXTW = 0x1073
+HDM_GETITEMCOUNT = 0x1200
+HDM_GETITEMW = 0x120B
+HDI_TEXT = 0x0002
+PROCESS_VM_ALL = 0x0038
+MEM_COMMIT_RESERVE = 0x3000
+MEM_RELEASE = 0x8000
+PAGE_READWRITE = 0x04
 BST_CHECKED = 1
+
+kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+kernel32.OpenProcess.argtypes = [wintypes.DWORD, wintypes.BOOL, wintypes.DWORD]
+kernel32.OpenProcess.restype = wintypes.HANDLE
+kernel32.VirtualAllocEx.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD, wintypes.DWORD]
+kernel32.VirtualAllocEx.restype = ctypes.c_void_p
+kernel32.VirtualFreeEx.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_size_t, wintypes.DWORD]
+kernel32.VirtualFreeEx.restype = wintypes.BOOL
+kernel32.WriteProcessMemory.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+kernel32.WriteProcessMemory.restype = wintypes.BOOL
+kernel32.ReadProcessMemory.argtypes = [wintypes.HANDLE, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_size_t, ctypes.POINTER(ctypes.c_size_t)]
+kernel32.ReadProcessMemory.restype = wintypes.BOOL
+kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+kernel32.CloseHandle.restype = wintypes.BOOL
+
+
+class LVITEMW(ctypes.Structure):
+    _fields_ = [
+        ("mask", wintypes.UINT),
+        ("iItem", ctypes.c_int),
+        ("iSubItem", ctypes.c_int),
+        ("state", wintypes.UINT),
+        ("stateMask", wintypes.UINT),
+        ("pszText", ctypes.c_void_p),
+        ("cchTextMax", ctypes.c_int),
+        ("iImage", ctypes.c_int),
+        ("lParam", wintypes.LPARAM),
+        ("iIndent", ctypes.c_int),
+        ("iGroupId", ctypes.c_int),
+        ("cColumns", wintypes.UINT),
+        ("puColumns", ctypes.c_void_p),
+        ("piColFmt", ctypes.c_void_p),
+        ("iGroup", ctypes.c_int),
+    ]
+
+
+class HDITEMW(ctypes.Structure):
+    _fields_ = [
+        ("mask", wintypes.UINT),
+        ("cxy", ctypes.c_int),
+        ("pszText", ctypes.c_void_p),
+        ("hbm", wintypes.HBITMAP),
+        ("cchTextMax", ctypes.c_int),
+        ("fmt", ctypes.c_int),
+        ("lParam", wintypes.LPARAM),
+        ("iImage", ctypes.c_int),
+        ("iOrder", ctypes.c_int),
+        ("type", wintypes.UINT),
+        ("pvFilter", ctypes.c_void_p),
+        ("state", wintypes.UINT),
+    ]
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
 
@@ -134,6 +194,82 @@ def visible_texts(hwnd):
         if user32.IsWindowVisible(h) and t:
             out.append(t)
     return out
+
+
+def get_listview_headers(pid, hwnd_lv):
+    hwnd_hdr = user32.SendMessageW(hwnd_lv, LVM_GETHEADER, 0, 0)
+    if not hwnd_hdr:
+        return []
+    count = int(user32.SendMessageW(hwnd_hdr, HDM_GETITEMCOUNT, 0, 0))
+    if count <= 0:
+        return []
+    h_proc = kernel32.OpenProcess(PROCESS_VM_ALL, False, pid)
+    assert h_proc, "OpenProcess fallo leyendo encabezados ListView"
+    remote_item = None
+    remote_buf = None
+    try:
+        remote_item = kernel32.VirtualAllocEx(h_proc, None, ctypes.sizeof(HDITEMW), MEM_COMMIT_RESERVE, PAGE_READWRITE)
+        remote_buf = kernel32.VirtualAllocEx(h_proc, None, 1024, MEM_COMMIT_RESERVE, PAGE_READWRITE)
+        assert remote_item and remote_buf
+        headers = []
+        for idx in range(count):
+            hdi = HDITEMW()
+            hdi.mask = HDI_TEXT
+            hdi.pszText = remote_buf
+            hdi.cchTextMax = 512
+            written = ctypes.c_size_t()
+            ok_w = kernel32.WriteProcessMemory(h_proc, remote_item, ctypes.byref(hdi), ctypes.sizeof(hdi), ctypes.byref(written))
+            assert ok_w
+            user32.SendMessageW(hwnd_hdr, HDM_GETITEMW, idx, remote_item)
+            local_buf = ctypes.create_unicode_buffer(512)
+            read_b = ctypes.c_size_t()
+            kernel32.ReadProcessMemory(h_proc, remote_buf, local_buf, 1024, ctypes.byref(read_b))
+            headers.append(local_buf.value)
+        return headers
+    finally:
+        if remote_item:
+            kernel32.VirtualFreeEx(h_proc, remote_item, 0, MEM_RELEASE)
+        if remote_buf:
+            kernel32.VirtualFreeEx(h_proc, remote_buf, 0, MEM_RELEASE)
+        kernel32.CloseHandle(h_proc)
+
+
+def get_listview_cell(pid, hwnd_lv, row, col):
+    h_proc = kernel32.OpenProcess(PROCESS_VM_ALL, False, pid)
+    assert h_proc, "OpenProcess fallo leyendo celda ListView"
+    remote_item = None
+    remote_buf = None
+    try:
+        remote_item = kernel32.VirtualAllocEx(h_proc, None, ctypes.sizeof(LVITEMW), MEM_COMMIT_RESERVE, PAGE_READWRITE)
+        remote_buf = kernel32.VirtualAllocEx(h_proc, None, 2048, MEM_COMMIT_RESERVE, PAGE_READWRITE)
+        assert remote_item and remote_buf
+        lvi = LVITEMW()
+        lvi.iSubItem = col
+        lvi.pszText = remote_buf
+        lvi.cchTextMax = 1024
+        written = ctypes.c_size_t()
+        ok_w = kernel32.WriteProcessMemory(h_proc, remote_item, ctypes.byref(lvi), ctypes.sizeof(lvi), ctypes.byref(written))
+        assert ok_w
+        user32.SendMessageW(hwnd_lv, LVM_GETITEMTEXTW, row, remote_item)
+        local_buf = ctypes.create_unicode_buffer(1024)
+        read_b = ctypes.c_size_t()
+        kernel32.ReadProcessMemory(h_proc, remote_buf, local_buf, 2048, ctypes.byref(read_b))
+        return local_buf.value
+    finally:
+        if remote_item:
+            kernel32.VirtualFreeEx(h_proc, remote_item, 0, MEM_RELEASE)
+        if remote_buf:
+            kernel32.VirtualFreeEx(h_proc, remote_buf, 0, MEM_RELEASE)
+        kernel32.CloseHandle(h_proc)
+
+
+def assert_sqlite_integrity(path):
+    con = sqlite3.connect(path)
+    try:
+        res = con.execute("PRAGMA integrity_check;").fetchone()[0]
+    finally:
+        con.close()
+    assert str(res).lower() == "ok", f"PRAGMA integrity_check fallo en {path}: {res}"
 
 
 def visible_buttons(hwnd):
@@ -302,9 +438,14 @@ def run_suite(build_label, exe_path, sys_scale):
 
         # 1. Estado inicial (is_enabled inicia en 0 segun migracion 008)
         texts_init = visible_texts(hwnd_main)
+        texts_init_norm = [" ".join(t.split()) for t in texts_init]
         assert any("Nunca" in t for t in texts_init), f"Falta 'Nunca' en estado inicial: {texts_init}"
         assert any("Sin respaldos aún" in t for t in texts_init), f"Falta 'Sin respaldos aún': {texts_init}"
         assert any("Desactivado" in t for t in texts_init), f"Falta estado textual 'Desactivado': {texts_init}"
+        assert not any("Nunca borra" in t for t in texts_init_norm), f"Texto falso en limpieza: {texts_init}"
+        assert any("otra carpeta o en una memoria USB" in t for t in texts_init_norm), (
+            f"Falta aclaración real de limpieza (USB/otras carpetas): {texts_init}"
+        )
         assert not any("backup_state" in t or "sqlite" in t.lower() or "err_" in t.lower() for t in texts_init), (
             f"Jerga tecnica visible: {texts_init}"
         )
@@ -348,13 +489,23 @@ def run_suite(build_label, exe_path, sys_scale):
         click_hwnd(toggle_hwnd, settle=0.3)
         assert wait_until(lambda: any(t == "Activado" for t in visible_texts(hwnd_main)), desc="Toggle Reactivado")
 
-        # 2. Respaldo manual #1 -> bkp_before.db
+        # 2. Respaldo manual #1 -> bkp_before.db (probar doble clic rapido -> 1 dialogo, 1 archivo, 1 evento)
         bkp_before = os.path.join(backup_out_dir, "bkp_before.db")
-        click_hwnd(btn_make, settle=0.2)
+        user32.PostMessageW(btn_make, BM_CLICK, 0, 0)
+        user32.PostMessageW(btn_make, BM_CLICK, 0, 0)
         accept_file_dialog(p.pid, "Guardar respaldo", bkp_before, expected_default_prefix="cafeteria-respaldo-")
         msg_b1 = dismiss_messagebox(p.pid, "Respaldo guardado")
         assert bkp_before in msg_b1, f"Confirmación no muestra ruta guardada: {msg_b1}"
+        time.sleep(0.35)
+        assert not find_windows_by_pid(p.pid, "Guardar respaldo"), "Doble clic abrió un segundo diálogo de guardar"
         assert os.path.exists(bkp_before) and os.path.getsize(bkp_before) > 0, "Respaldo manual #1 no existe"
+        assert len([fn for fn in os.listdir(backup_out_dir) if fn.endswith(".db")]) == 1, "Se crearon múltiples archivos tras doble clic"
+        assert_sqlite_integrity(bkp_before)
+
+        con_aud = sqlite3.connect(db_path)
+        aud_bkp_cnt = con_aud.execute("SELECT COUNT(*) FROM audit_events WHERE event_type='BACKUP_LOCAL'").fetchone()[0]
+        con_aud.close()
+        assert aud_bkp_cnt == 1, f"Doble clic generó {aud_bkp_cnt} eventos BACKUP_LOCAL (esperado 1)"
 
         bkp_restore_copy = os.path.join(temp_dir, "copia_para_restaurar.db")
         shutil.copy2(bkp_before, bkp_restore_copy)
@@ -393,6 +544,7 @@ def run_suite(build_label, exe_path, sys_scale):
         accept_file_dialog(p.pid, "Guardar respaldo", bkp_after)
         dismiss_messagebox(p.pid, "Respaldo guardado")
         assert os.path.exists(bkp_after)
+        assert_sqlite_integrity(bkp_after)
 
         # 5. Politica de retencion: validar error (0), teclado numerico Tactil (N=1, D=0), preview y cleanup real
         res_edits = sorted(
@@ -434,6 +586,10 @@ def run_suite(build_label, exe_path, sys_scale):
         lv = next((h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)), None)
         assert lv is not None
         assert wait_until(lambda: user32.SendMessageW(lv, LVM_GETITEMCOUNT, 0, 0) == 1, desc="Vista previa 1 archivo a borrar")
+        lv_headers = get_listview_headers(p.pid, lv)
+        assert lv_headers == ["Archivo", "Carpeta", "Fecha", "Tamaño (MB)"], f"Columnas limpieza inesperadas: {lv_headers}"
+        cell_dir = get_listview_cell(p.pid, lv, 0, 1)
+        assert cell_dir == backup_out_dir, f"Columna Carpeta esperada '{backup_out_dir}', actual '{cell_dir}'"
         assert user32.IsWindowEnabled(btn_del_cl) != 0, "Borrar respaldos antiguos debe habilitarse tras vista previa con >= 1"
 
         # Cambiar N a 2 invalida vista previa y deshabilita Borrar
@@ -447,6 +603,8 @@ def run_suite(build_label, exe_path, sys_scale):
 
         click_hwnd(btn_del_cl, settle=0.25)
         hwnd_cl_dlg, _ = wait_for_window(p.pid, "Confirmar limpieza de respaldos", timeout=8.0)
+        cl_dlg_texts = " ".join(" ".join(visible_texts(hwnd_cl_dlg)).split())
+        assert "no se tocarán" not in cl_dlg_texts.lower(), f"Texto falso en diálogo de limpieza: {cl_dlg_texts}"
         btn_cl_yes = find_button(hwnd_cl_dlg, text_contains="Sí, borrar respaldos")
         assert btn_cl_yes is not None
         click_hwnd(btn_cl_yes, settle=0.3)
@@ -465,6 +623,19 @@ def run_suite(build_label, exe_path, sys_scale):
         err_corr = dismiss_messagebox(p.pid, "Respaldo inválido o dañado")
         assert "no es una base" in err_corr.lower() or "inválido" in err_corr.lower() or "integridad" in err_corr.lower()
 
+        # 6b. Respaldo integro pero sin cuenta Dueno activa -> rechazado en revision antes de confirmaciones
+        no_owner_path = os.path.join(temp_dir, "sin_dueno.db")
+        shutil.copy2(bkp_restore_copy, no_owner_path)
+        con_no = sqlite3.connect(no_owner_path)
+        con_no.execute("UPDATE users SET is_active = 0 WHERE username = 'dueno_t6';")
+        con_no.commit()
+        con_no.close()
+
+        click_hwnd(btn_rest, settle=0.2)
+        accept_file_dialog(p.pid, "Elegir archivo de respaldo", no_owner_path)
+        err_no = dismiss_messagebox(p.pid, "Respaldo inválido o dañado")
+        assert "dueño" in err_no.lower(), f"Rechazo por falta de Dueño inesperado: {err_no}"
+
         # 7. Restaurar version futura -> verifica advertencia + 2a confirmacion y falla sin alterar datos
         future_path = os.path.join(temp_dir, "futuro.db")
         shutil.copy2(bkp_restore_copy, future_path)
@@ -476,8 +647,15 @@ def run_suite(build_label, exe_path, sys_scale):
         click_hwnd(btn_rest, settle=0.2)
         accept_file_dialog(p.pid, "Elegir archivo de respaldo", future_path)
         hwnd_w1, _ = wait_for_window(p.pid, "Revisar respaldo antes de restaurar", timeout=8.0)
-        w1_texts = "\n".join(visible_texts(hwnd_w1))
+        w1_texts = " ".join(" ".join(visible_texts(hwnd_w1)).split())
         assert "reemplazarán todos los datos actuales" in w1_texts
+        assert "se perderá todo lo que se vendió o cambió después de la fecha del respaldo" in w1_texts.lower(), (
+            f"Falta aviso de datos posteriores: {w1_texts}"
+        )
+        assert "carpeta de respaldos de la carpeta de datos" in w1_texts.lower(), (
+            f"Falta ubicación de copia previa: {w1_texts}"
+        )
+        assert "revisión " not in w1_texts.lower(), f"No debe mostrar número de revisión: {w1_texts}"
         assert "cierre" in w1_texts.lower() or "cerrará" in w1_texts.lower()
         btn_cont = find_button(hwnd_w1, text_contains="Continuar con restauración")
         assert btn_cont is not None
@@ -490,6 +668,41 @@ def run_suite(build_label, exe_path, sys_scale):
 
         err_fut = dismiss_messagebox(p.pid, "Restauración no aplicada")
         assert "más nueva" in err_fut and "intactos" in err_fut, f"Error de versión futura inesperado: {err_fut}"
+
+        # 7b. Cancelar en paso 1 y cancelar en paso 2 -> datos sin cambios y sin pre_restore
+        backups_internal_dir = os.path.join(temp_dir, "backups")
+        def _count_pre_restore():
+            if not os.path.isdir(backups_internal_dir):
+                return 0
+            return len([fn for fn in os.listdir(backups_internal_dir) if fn.startswith("pre_restore_") and fn.endswith(".db")])
+
+        assert _count_pre_restore() == 0, "No debería existir pre_restore antes de confirmar"
+
+        click_hwnd(btn_rest, settle=0.2)
+        accept_file_dialog(p.pid, "Elegir archivo de respaldo", bkp_restore_copy)
+        hwnd_c1, _ = wait_for_window(p.pid, "Revisar respaldo antes de restaurar", timeout=8.0)
+        btn_cancel_1 = find_button(hwnd_c1, exact="Cancelar")
+        assert btn_cancel_1 is not None
+        click_hwnd(btn_cancel_1, settle=0.25)
+        wait_until(lambda: not find_windows_by_pid(p.pid, "Revisar respaldo antes de restaurar"), desc="Cerrar paso 1 al cancelar")
+        assert _count_pre_restore() == 0, "Cancelar en paso 1 creó pre_restore"
+        con_chk1 = sqlite3.connect(db_path)
+        assert con_chk1.execute("SELECT COUNT(*) FROM users WHERE username='cajero_temp'").fetchone()[0] == 1
+        con_chk1.close()
+
+        click_hwnd(btn_rest, settle=0.2)
+        accept_file_dialog(p.pid, "Elegir archivo de respaldo", bkp_restore_copy)
+        hwnd_c2_s1, _ = wait_for_window(p.pid, "Revisar respaldo antes de restaurar", timeout=8.0)
+        click_hwnd(find_button(hwnd_c2_s1, text_contains="Continuar con restauración"), settle=0.25)
+        hwnd_c2_s2, _ = wait_for_window(p.pid, "Confirmación final", timeout=8.0)
+        btn_cancel_2 = find_button(hwnd_c2_s2, exact="Cancelar")
+        assert btn_cancel_2 is not None
+        click_hwnd(btn_cancel_2, settle=0.25)
+        wait_until(lambda: not find_windows_by_pid(p.pid, "Confirmación final"), desc="Cerrar paso 2 al cancelar")
+        assert _count_pre_restore() == 0, "Cancelar en paso 2 creó pre_restore"
+        con_chk2 = sqlite3.connect(db_path)
+        assert con_chk2.execute("SELECT COUNT(*) FROM users WHERE username='cajero_temp'").fetchone()[0] == 1
+        con_chk2.close()
 
         # 8. Restauracion valida -> copia previa, cierre de sesion y rollback real
         click_hwnd(btn_rest, settle=0.2)
@@ -528,6 +741,21 @@ def run_suite(build_label, exe_path, sys_scale):
         hwnd_m_p, _ = wait_for_window(p_perm.pid, "Cafetería ITCH II", exclude=("Primer Inicio", "Iniciar Sesión"), timeout=15.0)
 
         open_section_and_subnav(hwnd_m_p, "BackOffice", "Usuarios y cuentas")
+        lv_users = wait_until(
+            lambda: next((h for (h, c, _t) in enum_children(hwnd_m_p) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)), None),
+            desc="Lista de usuarios tras restaurar",
+        )
+        assert wait_until(lambda: user32.SendMessageW(lv_users, LVM_GETITEMCOUNT, 0, 0) >= 1, desc="Usuario Dueño en UI tras restaurar")
+        ui_users = []
+        u_cnt = int(user32.SendMessageW(lv_users, LVM_GETITEMCOUNT, 0, 0))
+        for ri in range(u_cnt):
+            ui_users.append(" ".join(get_listview_cell(p_perm.pid, lv_users, ri, ci) for ci in range(4)))
+        assert any("dueno_t6" in row or "Dueño T6" in row for row in ui_users), (
+            f"Cuenta previa Dueño no visible en UI tras restaurar: {ui_users}"
+        )
+        assert not any("cajero_temp" in row or "Cajero Temporal" in row for row in ui_users), (
+            f"Usuario posterior a respaldo sigue visible en UI tras restaurar: {ui_users}"
+        )
         click_hwnd(wait_until(lambda: find_button(hwnd_m_p, text_contains="Nuevo Usuario"), desc="Nuevo Usuario perm"), settle=0.2)
         hwnd_nu2, _ = wait_for_window(p_perm.pid, "Nuevo Usuario de Sistema", timeout=8.0)
         nu2e = sorted(

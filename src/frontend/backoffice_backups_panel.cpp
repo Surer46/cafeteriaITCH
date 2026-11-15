@@ -224,6 +224,12 @@ void set_wrapped_text(wxStaticText* lbl, const wxString& raw, int max_w) {
     lbl->InvalidateBestSize();
 }
 
+wxString cleanup_description_text() {
+    return wxT("Revisa y borra respaldos antiguos hechos por este programa, ")
+           wxT("incluso los guardados en otra carpeta o en una memoria USB, según las reglas de abajo.\n")
+           wxT("Siempre conserva el respaldo más reciente de cada tipo y nunca borra otros archivos.");
+}
+
 } // namespace
 
 BackofficeBackupsPanel::BusyScope::BusyScope(BackofficeBackupsPanel& owner)
@@ -510,8 +516,7 @@ void BackofficeBackupsPanel::setup_ui() {
     lbl_cleanup_desc_ = new wxStaticText(
         card_cleanup_,
         wxID_ANY,
-        wxT("Solo revisa y borra copias antiguas guardadas en la carpeta interna de respaldos del sistema. ")
-        wxT("Nunca borra tus copias guardadas en una memoria USB ni el respaldo previo a una restauración.")
+        cleanup_description_text()
     );
     lbl_cleanup_desc_->SetFont(Theme::get_font_body());
     lbl_cleanup_desc_->SetForegroundColour(Theme::ColorTextSecondary);
@@ -588,9 +593,10 @@ void BackofficeBackupsPanel::setup_ui() {
     if (Theme::is_touch()) {
         ui::apply_touch_row_height(list_cleanup_);
     }
-    list_cleanup_->InsertColumn(0, wxT("Archivo"), wxLIST_FORMAT_LEFT, FromDIP(240));
-    list_cleanup_->InsertColumn(1, wxT("Fecha"), wxLIST_FORMAT_LEFT, FromDIP(165));
-    list_cleanup_->InsertColumn(2, wxT("Tamaño (MB)"), wxLIST_FORMAT_RIGHT, FromDIP(120));
+    list_cleanup_->InsertColumn(0, wxT("Archivo"), wxLIST_FORMAT_LEFT, FromDIP(185));
+    list_cleanup_->InsertColumn(1, wxT("Carpeta"), wxLIST_FORMAT_LEFT, FromDIP(210));
+    list_cleanup_->InsertColumn(2, wxT("Fecha"), wxLIST_FORMAT_LEFT, FromDIP(155));
+    list_cleanup_->InsertColumn(3, wxT("Tamaño (MB)"), wxLIST_FORMAT_RIGHT, FromDIP(110));
     list_cleanup_->SetMinSize(wxSize(-1, FromDIP(Theme::is_touch() ? 180 : 140)));
     list_cleanup_->Bind(wxEVT_SIZE, [this](wxSizeEvent& ev) {
         ev.Skip();
@@ -699,8 +705,7 @@ void BackofficeBackupsPanel::update_scroll_layout() {
         );
         set_wrapped_text(
             lbl_cleanup_desc_,
-            wxT("Solo revisa y borra copias antiguas guardadas en la carpeta interna de respaldos del sistema. ")
-            wxT("Nunca borra tus copias guardadas en una memoria USB ni el respaldo previo a una restauración."),
+            cleanup_description_text(),
             wrap_w
         );
         if (!cleanup_summary_text_.empty()) {
@@ -815,27 +820,33 @@ void BackofficeBackupsPanel::reset_cleanup_preview() {
 }
 
 void BackofficeBackupsPanel::auto_size_cleanup_columns() {
-    if (!list_cleanup_ || list_cleanup_->GetColumnCount() < 3) {
+    if (!list_cleanup_ || list_cleanup_->GetColumnCount() < 4) {
         return;
     }
     int w_file = list_cleanup_->GetTextExtent(wxT("cafeteria-respaldo-2026-11-14-2359.db")).GetWidth();
+    int w_dir = list_cleanup_->GetTextExtent(wxT("C:\\Respaldos\\Cafeteria")).GetWidth();
     int w_date = list_cleanup_->GetTextExtent(wxT("14/11/2026 23:59:59")).GetWidth();
     int w_size = list_cleanup_->GetTextExtent(wxT("999.99 MB")).GetWidth();
+
+    const int header_dir = list_cleanup_->GetTextExtent(wxT("Carpeta")).GetWidth();
+    w_dir = std::max(w_dir, header_dir);
 
     const int n = list_cleanup_->GetItemCount();
     for (int i = 0; i < n; ++i) {
         w_file = std::max(w_file, list_cleanup_->GetTextExtent(list_cleanup_->GetItemText(i, 0)).GetWidth());
-        w_date = std::max(w_date, list_cleanup_->GetTextExtent(list_cleanup_->GetItemText(i, 1)).GetWidth());
-        w_size = std::max(w_size, list_cleanup_->GetTextExtent(list_cleanup_->GetItemText(i, 2)).GetWidth());
+        w_dir = std::max(w_dir, list_cleanup_->GetTextExtent(list_cleanup_->GetItemText(i, 1)).GetWidth());
+        w_date = std::max(w_date, list_cleanup_->GetTextExtent(list_cleanup_->GetItemText(i, 2)).GetWidth());
+        w_size = std::max(w_size, list_cleanup_->GetTextExtent(list_cleanup_->GetItemText(i, 3)).GetWidth());
     }
 
     const int touch_extra = Theme::is_touch() ? 10 : 0;
     const std::vector<ui::ColumnSpec> specs = {
         {wxT("Archivo"), w_file, list_cleanup_->GetTextExtent(wxT("archivo.db")).GetWidth(), 16, touch_extra},
+        {wxT("Carpeta"), w_dir, header_dir, 16, touch_extra},
         {wxT("Fecha"), w_date, w_date, 16, touch_extra},
         {wxT("Tamaño (MB)"), w_size, w_size, 16, touch_extra},
     };
-    ui::distribute_list_columns(list_cleanup_, specs, 0);
+    ui::distribute_list_columns(list_cleanup_, specs, 1);
 }
 
 void BackofficeBackupsPanel::sync_action_states() {
@@ -911,55 +922,54 @@ void BackofficeBackupsPanel::on_backup_now(wxCommandEvent&) {
         keypad_->hide_keypad(false);
     }
 
-    wxString default_dir = last_backup_dir_;
-    if (default_dir.empty() || !wxDirExists(default_dir)) {
-        default_dir = wxStandardPaths::Get().GetDocumentsDir();
-    }
-    const wxString proposed_name = wxDateTime::Now().Format(wxT("cafeteria-respaldo-%Y-%m-%d-%H%M.db"));
-
-    wxFileDialog save_dlg(
-        this,
-        wxT("Guardar respaldo de la cafetería"),
-        default_dir,
-        proposed_name,
-        wxT("Respaldo de base de datos (*.db)|*.db"),
-        wxFD_SAVE | wxFD_OVERWRITE_PROMPT
-    );
-    if (save_dlg.ShowModal() != wxID_OK) {
-        return;
-    }
-
-    last_backup_dir_ = save_dlg.GetDirectory();
-    wxString dest_path = save_dlg.GetPath();
-    if (wxFileName(dest_path).GetExt().empty()) {
-        dest_path += wxT(".db");
-    }
-
-    show_feedback(FeedbackKind::Info, wxT("Guardando copia de respaldo, espere un momento..."));
-
-    auto res = [&]() {
+    {
         BusyScope busy(*this);
-        return services_.backup_service->trigger_local_backup(std::string(dest_path.ToUTF8().data()));
-    }();
+        wxString default_dir = last_backup_dir_;
+        if (default_dir.empty() || !wxDirExists(default_dir)) {
+            default_dir = wxStandardPaths::Get().GetDocumentsDir();
+        }
+        const wxString proposed_name = wxDateTime::Now().Format(wxT("cafeteria-respaldo-%Y-%m-%d-%H%M.db"));
 
-    refresh_status();
-
-    if (res.is_success()) {
-        const wxString ok_msg = wxString::Format(
-            wxT("El respaldo se guardó correctamente en:\n\n%s"),
-            dest_path
-        );
-        show_feedback(FeedbackKind::Success, wxT("Respaldo guardado en: ") + dest_path);
-        show_notice_dialog(this, wxT("Respaldo guardado"), ok_msg, false);
-    } else {
-        const wxString err_text = wxString::FromUTF8(res.error_message().c_str());
-        show_feedback(FeedbackKind::Error, wxT("No se pudo guardar el respaldo: ") + err_text);
-        show_notice_dialog(
+        wxFileDialog save_dlg(
             this,
-            wxT("No se pudo hacer el respaldo"),
-            wxT("No se pudo guardar el respaldo.\n\n") + err_text,
-            true
+            wxT("Guardar respaldo de la cafetería"),
+            default_dir,
+            proposed_name,
+            wxT("Respaldo de base de datos (*.db)|*.db"),
+            wxFD_SAVE | wxFD_OVERWRITE_PROMPT
         );
+        if (save_dlg.ShowModal() != wxID_OK) {
+            return;
+        }
+
+        last_backup_dir_ = save_dlg.GetDirectory();
+        wxString dest_path = save_dlg.GetPath();
+        if (wxFileName(dest_path).GetExt().empty()) {
+            dest_path += wxT(".db");
+        }
+
+        show_feedback(FeedbackKind::Info, wxT("Guardando copia de respaldo, espere un momento..."));
+        const auto res = services_.backup_service->trigger_local_backup(std::string(dest_path.ToUTF8().data()));
+
+        refresh_status();
+
+        if (res.is_success()) {
+            const wxString ok_msg = wxString::Format(
+                wxT("El respaldo se guardó correctamente en:\n\n%s"),
+                dest_path
+            );
+            show_feedback(FeedbackKind::Success, wxT("Respaldo guardado en: ") + dest_path);
+            show_notice_dialog(this, wxT("Respaldo guardado"), ok_msg, false);
+        } else {
+            const wxString err_text = wxString::FromUTF8(res.error_message().c_str());
+            show_feedback(FeedbackKind::Error, wxT("No se pudo guardar el respaldo: ") + err_text);
+            show_notice_dialog(
+                this,
+                wxT("No se pudo hacer el respaldo"),
+                wxT("No se pudo guardar el respaldo.\n\n") + err_text,
+                true
+            );
+        }
     }
     if (btn_backup_now_) {
         btn_backup_now_->SetFocus();
@@ -977,140 +987,142 @@ void BackofficeBackupsPanel::on_restore_backup(wxCommandEvent&) {
         keypad_->hide_keypad(false);
     }
 
-    wxString default_dir = last_backup_dir_;
-    if (default_dir.empty() || !wxDirExists(default_dir)) {
-        default_dir = wxStandardPaths::Get().GetDocumentsDir();
-    }
-
-    wxFileDialog open_dlg(
-        this,
-        wxT("Elegir archivo de respaldo"),
-        default_dir,
-        wxEmptyString,
-        wxT("Respaldo de base de datos (*.db)|*.db"),
-        wxFD_OPEN | wxFD_FILE_MUST_EXIST
-    );
-    if (open_dlg.ShowModal() != wxID_OK) {
-        return;
-    }
-
-    last_backup_dir_ = open_dlg.GetDirectory();
-    const wxString src_path = open_dlg.GetPath();
-    const std::string src_utf8(src_path.ToUTF8().data());
-
-    auto verify_res = [&]() {
+    bool do_relogin = false;
+    {
         BusyScope busy(*this);
+        wxString default_dir = last_backup_dir_;
+        if (default_dir.empty() || !wxDirExists(default_dir)) {
+            default_dir = wxStandardPaths::Get().GetDocumentsDir();
+        }
+
+        wxFileDialog open_dlg(
+            this,
+            wxT("Elegir archivo de respaldo"),
+            default_dir,
+            wxEmptyString,
+            wxT("Respaldo de base de datos (*.db)|*.db"),
+            wxFD_OPEN | wxFD_FILE_MUST_EXIST
+        );
+        if (open_dlg.ShowModal() != wxID_OK) {
+            return;
+        }
+
+        last_backup_dir_ = open_dlg.GetDirectory();
+        const wxString src_path = open_dlg.GetPath();
+        const std::string src_utf8(src_path.ToUTF8().data());
+
         show_feedback(FeedbackKind::Info, wxT("Revisando archivo de respaldo..."));
-        return services_.backup_service->verify_backup(src_utf8);
-    }();
+        const auto verify_res = services_.backup_service->verify_backup(src_utf8);
 
-    if (!verify_res.is_success()) {
-        const wxString err = wxString::FromUTF8(verify_res.error_message().c_str());
-        show_feedback(FeedbackKind::Error, err);
-        show_notice_dialog(
+        if (!verify_res.is_success()) {
+            const wxString err = wxString::FromUTF8(verify_res.error_message().c_str());
+            show_feedback(FeedbackKind::Error, err);
+            show_notice_dialog(
+                this,
+                wxT("Archivo no válido"),
+                wxT("No se pudo revisar el archivo seleccionado.\n\n") + err,
+                true
+            );
+            return;
+        }
+
+        const auto& info = verify_res.value();
+        if (!info.integrity_ok || !info.detail.empty()) {
+            const wxString detail = info.detail.empty()
+                ? wxT("El archivo elegido no es un respaldo válido o está dañado.")
+                : wxString::FromUTF8(info.detail.c_str());
+            show_feedback(FeedbackKind::Error, detail);
+            show_notice_dialog(
+                this,
+                wxT("Respaldo inválido o dañado"),
+                wxT("Este archivo no se puede usar para restaurar.\n\n") + detail,
+                true
+            );
+            return;
+        }
+
+        const wxString file_date = info.file_modified_at.empty()
+            ? wxT("No disponible")
+            : format_human_datetime(info.file_modified_at);
+
+        const wxString info_body = wxString::Format(
+            wxT("Archivo: %s\nFecha del respaldo: %s\nEstado: Archivo íntegro y verificable"),
+            wxFileName(src_path).GetFullName(),
+            file_date
+        );
+
+        const wxString warning_text = wxString::Format(
+            wxT("Al restaurar este respaldo se reemplazarán todos los datos actuales ")
+            wxT("(ventas, inventario, turnos y usuarios).\n")
+            wxT("Se perderá todo lo que se vendió o cambió después de la fecha del respaldo (%s).\n")
+            wxT("Antes de aplicar el cambio se guardará una copia de seguridad de los datos actuales ")
+            wxT("en la carpeta de respaldos de la carpeta de datos.\n")
+            wxT("Al terminar, la aplicación se cerrará para que vuelvas a iniciar sesión."),
+            file_date
+        );
+
+        ConfirmActionDialog step1_dlg(
             this,
-            wxT("Archivo no válido"),
-            wxT("No se pudo revisar el archivo seleccionado.\n\n") + err,
+            wxT("Revisar respaldo antes de restaurar"),
+            wxT("Respaldo verificado"),
+            wxEmptyString,
+            wxT("Cancelar"),
+            wxT("Continuar con restauración"),
+            false,
+            wxT("Datos del archivo seleccionado"),
+            info_body,
+            warning_text
+        );
+        if (step1_dlg.ShowModal() != wxID_OK) {
+            hide_feedback();
+            return;
+        }
+
+        // Segunda confirmación explícita (botón rojo) sin requerir teclado alfabético
+        ConfirmActionDialog step2_dlg(
+            this,
+            wxT("Confirmación final"),
+            wxT("¿Reemplazar los datos actuales?"),
+            wxT("Esta acción reemplazará toda la información de la cafetería con el respaldo elegido ")
+            wxT("y cerrará el programa al terminar para iniciar sesión nuevamente."),
+            wxT("Cancelar"),
+            wxT("Sí, reemplazar y restaurar"),
             true
         );
-        return;
-    }
+        if (step2_dlg.ShowModal() != wxID_OK) {
+            hide_feedback();
+            return;
+        }
 
-    const auto& info = verify_res.value();
-    if (!info.integrity_ok) {
-        const wxString detail = info.detail.empty()
-            ? wxT("El archivo elegido no es un respaldo válido o está dañado.")
-            : wxString::FromUTF8(info.detail.c_str());
-        show_feedback(FeedbackKind::Error, detail);
-        show_notice_dialog(
-            this,
-            wxT("Respaldo inválido o dañado"),
-            wxT("Este archivo no se puede usar para restaurar.\n\n") + detail,
-            true
-        );
-        return;
-    }
-
-    const wxString file_date = info.file_modified_at.empty()
-        ? wxT("No disponible")
-        : format_human_datetime(info.file_modified_at);
-
-    const wxString info_body = wxString::Format(
-        wxT("Archivo: %s\nFecha del respaldo: %s\nEstado: Archivo íntegro y verificable (revisión %d)"),
-        wxFileName(src_path).GetFullName(),
-        file_date,
-        info.schema_version
-    );
-
-    const wxString warning_text =
-        wxT("Al restaurar este respaldo se reemplazarán todos los datos actuales ")
-        wxT("(ventas, inventario, turnos y usuarios).\n")
-        wxT("Antes de aplicar el cambio se guardará una copia de seguridad de los datos actuales.\n")
-        wxT("Al terminar, la aplicación se cerrará para que vuelvas a iniciar sesión.");
-
-    ConfirmActionDialog step1_dlg(
-        this,
-        wxT("Revisar respaldo antes de restaurar"),
-        wxT("Respaldo verificado"),
-        wxEmptyString,
-        wxT("Cancelar"),
-        wxT("Continuar con restauración"),
-        false,
-        wxT("Datos del archivo seleccionado"),
-        info_body,
-        warning_text
-    );
-    if (step1_dlg.ShowModal() != wxID_OK) {
-        hide_feedback();
-        return;
-    }
-
-    // Segunda confirmación explícita (botón rojo) sin requerir teclado alfabético
-    ConfirmActionDialog step2_dlg(
-        this,
-        wxT("Confirmación final"),
-        wxT("¿Reemplazar los datos actuales?"),
-        wxT("Esta acción reemplazará toda la información de la cafetería con el respaldo elegido ")
-        wxT("y cerrará el programa al terminar para iniciar sesión nuevamente."),
-        wxT("Cancelar"),
-        wxT("Sí, reemplazar y restaurar"),
-        true
-    );
-    if (step2_dlg.ShowModal() != wxID_OK) {
-        hide_feedback();
-        return;
-    }
-
-    auto restore_res = [&]() {
-        BusyScope busy(*this);
         show_feedback(FeedbackKind::Info, wxT("Restaurando respaldo, por favor espere..."));
-        return services_.backup_service->restore_from_backup(src_utf8);
-    }();
+        const auto restore_res = services_.backup_service->restore_from_backup(src_utf8);
 
-    if (!restore_res.is_success()) {
-        const wxString err = wxString::FromUTF8(restore_res.error_message().c_str());
-        show_feedback(FeedbackKind::Error, err);
-        show_notice_dialog(
-            this,
-            wxT("Restauración no aplicada"),
-            wxT("No se pudo restaurar el respaldo.\n\n") + err +
-            wxT("\n\nLos datos actuales siguen intactos."),
-            true
+        if (!restore_res.is_success()) {
+            const wxString err = wxString::FromUTF8(restore_res.error_message().c_str());
+            show_feedback(FeedbackKind::Error, err);
+            show_notice_dialog(
+                this,
+                wxT("Restauración no aplicada"),
+                wxT("No se pudo restaurar el respaldo.\n\n") + err +
+                wxT("\n\nLos datos actuales siguen intactos."),
+                true
+            );
+            return;
+        }
+
+        const auto& dto = restore_res.value();
+        const wxString pre_path = wxString::FromUTF8(dto.pre_restore_backup_path.c_str());
+        const wxString done_msg = wxString::Format(
+            wxT("La restauración se completó correctamente.\n\n")
+            wxT("Se guardó una copia de seguridad de los datos anteriores en:\n%s\n\n")
+            wxT("La aplicación se cerrará ahora para que vuelvas a iniciar sesión."),
+            pre_path
         );
-        return;
+        show_notice_dialog(this, wxT("Restauración completada"), done_msg, false);
+        do_relogin = dto.requires_relogin;
     }
 
-    const auto& dto = restore_res.value();
-    const wxString pre_path = wxString::FromUTF8(dto.pre_restore_backup_path.c_str());
-    const wxString done_msg = wxString::Format(
-        wxT("La restauración se completó correctamente.\n\n")
-        wxT("Se guardó una copia de seguridad de los datos anteriores en:\n%s\n\n")
-        wxT("La aplicación se cerrará ahora para que vuelvas a iniciar sesión."),
-        pre_path
-    );
-    show_notice_dialog(this, wxT("Restauración completada"), done_msg, false);
-
-    if (dto.requires_relogin) {
+    if (do_relogin) {
         if (wxWindow* top = wxGetTopLevelParent(this)) {
             top->Close(true);
         }
@@ -1188,10 +1200,12 @@ void BackofficeBackupsPanel::on_preview_cleanup(wxCommandEvent&) {
     for (std::size_t i = 0; i < dto.to_delete.size(); ++i) {
         const auto& item = dto.to_delete[i];
         const wxFileName fn(wxString::FromUTF8(item.path.c_str()));
+        const wxString dir_label = fn.GetPath().empty() ? wxT("(carpeta actual)") : fn.GetPath();
         const long idx = list_cleanup_->InsertItem(static_cast<long>(i), fn.GetFullName());
-        list_cleanup_->SetItem(idx, 1, format_human_datetime(item.created_at));
+        list_cleanup_->SetItem(idx, 1, dir_label);
+        list_cleanup_->SetItem(idx, 2, format_human_datetime(item.created_at));
         const auto sz_u64 = item.size_bytes > 0 ? static_cast<std::uint64_t>(item.size_bytes) : 0ULL;
-        list_cleanup_->SetItem(idx, 2, format_megabytes(sz_u64));
+        list_cleanup_->SetItem(idx, 3, format_megabytes(sz_u64));
     }
 
     preview_ready_ = true;
@@ -1230,9 +1244,10 @@ void BackofficeBackupsPanel::on_execute_cleanup(wxCommandEvent&) {
         keypad_->hide_keypad(false);
     }
 
+    BusyScope busy(*this);
     const wxString confirm_body = wxString::Format(
-        wxT("Se borrarán %zu respaldo(s) antiguo(s) de la carpeta interna del sistema y se liberarán %s.\n\n")
-        wxT("Tus copias en memoria USB u otras carpetas no se tocarán. Esta acción no se puede deshacer."),
+        wxT("Se borrarán %zu respaldo(s) antiguo(s) registrados por el programa (incluidos los guardados en otras carpetas o USB si aparecen en la lista) y se liberarán %s.\n\n")
+        wxT("Siempre se conserva el respaldo más reciente de cada tipo. Esta acción no se puede deshacer."),
         preview_delete_count_,
         format_megabytes(preview_bytes_freed_)
     );
@@ -1250,10 +1265,7 @@ void BackofficeBackupsPanel::on_execute_cleanup(wxCommandEvent&) {
         return;
     }
 
-    auto res = [&]() {
-        BusyScope busy(*this);
-        return services_.backup_service->cleanup_old_backups();
-    }();
+    const auto res = services_.backup_service->cleanup_old_backups();
 
     if (!res.is_success()) {
         const wxString err = wxString::FromUTF8(res.error_message().c_str());
