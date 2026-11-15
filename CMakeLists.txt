@@ -189,6 +189,8 @@ if(wxWidgets_FOUND)
         src/frontend/backoffice_users_panel.hpp
         src/frontend/ui_helpers.cpp
         src/frontend/ui_helpers.hpp
+        src/frontend/numeric_keypad.cpp
+        src/frontend/numeric_keypad.hpp
         src/frontend/toggle_switch.cpp
         src/frontend/toggle_switch.hpp
         src/frontend/backoffice_roles_panel.cpp

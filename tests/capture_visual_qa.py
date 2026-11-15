@@ -639,11 +639,57 @@ def main():
         # CAPTURA 14: BackOffice > Configuración (Estándar)
         capture_window(hwnd_main, os.path.join(out_dir, "14_settings_standard.png"))
 
-        # Dejar Táctil para capturar Login y Primer Inicio en Táctil
+        # Dejar Táctil para capturar teclado numérico, Login y Primer Inicio en Táctil
         btn_touch_cfg = _t1_bottommost_btn("Táctil")
         assert btn_touch_cfg is not None, "Opción Táctil en Configuración no encontrada"
         _f7_click_btn(btn_touch_cfg)
         time.sleep(0.6)
+
+        # CAPTURA 18 y 19: Teclado numérico integrado en POS (Touch) y Cobro (Touch)
+        btn_pos_k = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Punto de Venta" in t), None)
+        assert btn_pos_k is not None, "Botón Punto de Venta no encontrado para capturas 18-19"
+        _f7_click_btn(btn_pos_k)
+        time.sleep(0.5)
+        btn_add_k = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Agregar al Carrito" in t), None)
+        if btn_add_k is not None:
+            _f7_click_btn(btn_add_k)
+            time.sleep(0.35)
+        pos_edits_k = []
+        buf_cls_k = ctypes.create_unicode_buffer(128)
+        enum_proc_k = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+        def _cb_edits_k(ch, _lp):
+            if user32.IsWindowVisible(ch):
+                user32.GetClassNameW(ch, buf_cls_k, 128)
+                if buf_cls_k.value.lower() == "edit":
+                    rk = wintypes.RECT()
+                    user32.GetWindowRect(ch, ctypes.byref(rk))
+                    pos_edits_k.append((ch, rk.right - rk.left))
+            return True
+        cb_edits_ref = enum_proc_k(_cb_edits_k)
+        user32.EnumChildWindows(wintypes.HWND(hwnd_main), cb_edits_ref, wintypes.LPARAM(0))
+        assert len(pos_edits_k) >= 2, "Campo Cantidad en POS no encontrado para captura 18"
+        txt_qty_k = min(pos_edits_k, key=lambda it: it[1])[0]
+        user32.PostMessageW(txt_qty_k, 0x0201, 1, 0x00080008)
+        time.sleep(0.05)
+        user32.PostMessageW(txt_qty_k, 0x0202, 0, 0x00080008)
+        time.sleep(0.35)
+        capture_window(hwnd_main, os.path.join(out_dir, "18_keypad_pos_touch.png"))
+
+        btn_cobrar_k = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Cobrar" in t), None)
+        assert btn_cobrar_k is not None and user32.IsWindowEnabled(btn_cobrar_k), "Botón Cobrar no disponible para captura 19"
+        user32.PostMessageW(btn_cobrar_k, BM_CLICK, 0, 0)
+        hwnd_chk_k = None
+        for _ in range(30):
+            wins_chk = find_windows_by_pid(proc.pid, "Cobro de Venta")
+            if wins_chk:
+                hwnd_chk_k = wins_chk[0][0]
+                break
+            time.sleep(0.2)
+        assert hwnd_chk_k is not None, "Ventana Cobro de Venta no apareció para captura 19"
+        time.sleep(0.4)
+        capture_window(hwnd_chk_k, os.path.join(out_dir, "19_keypad_checkout_touch.png"))
+        user32.PostMessageW(hwnd_chk_k, WM_CLOSE, 0, 0)
+        time.sleep(0.35)
 
         user32.PostMessageW(hwnd_main, WM_CLOSE, 0, 0)
         proc.wait(timeout=5)

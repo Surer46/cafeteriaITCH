@@ -7,6 +7,7 @@
 #include "app/services/mock_services.hpp"
 
 #include "src/frontend/theme.hpp"
+#include "src/frontend/numeric_keypad.hpp"
 
 namespace app::frontend {
 
@@ -42,6 +43,7 @@ private:
     wxBoxSizer* close_box_{nullptr};
     wxTextCtrl* txt_final_cash_{nullptr};
     wxButton* btn_close_shift_{nullptr};
+    ui::NumericKeypad* keypad_{nullptr};
 };
 
 } // namespace app::frontend

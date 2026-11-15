@@ -3,6 +3,7 @@
 #include "src/frontend/ticket_print_dialog.hpp"
 #include "src/frontend/ticket_history_dialog.hpp"
 #include "src/frontend/theme.hpp"
+#include "src/frontend/ui_helpers.hpp"
 #include <wx/statline.h>
 #include <wx/imaglist.h>
 #include <wx/dcclient.h>
@@ -66,7 +67,8 @@ void PosPanel::setup_ui() {
     qty_box_sizer->Add(txt_qty_, 0, wxEXPAND);
     qty_box_sizer->AddStretchSpacer(1);
     qty_box->SetSizer(qty_box_sizer);
-    qty_box->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent&) {
+    qty_box->Bind(wxEVT_LEFT_DOWN, [this](wxMouseEvent& evt) {
+        evt.Skip();
         txt_qty_->SetFocus();
         txt_qty_->SelectAll();
     });
@@ -391,6 +393,32 @@ void PosPanel::setup_ui() {
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { wxCommandEvent d; on_cancel_order(d); }, 1002);
 
     update_contextual_actions();
+
+    if (touch) {
+        keypad_ = new ui::NumericKeypad(this);
+        keypad_->bind_field(
+            txt_qty_,
+            qty_box,
+            false,
+            search_card,
+            [this, search_card, account_card]() {
+                std::vector<wxRect> rects;
+                auto add_rect = [&](wxWindow* w) {
+                    if (!w || !w->IsShownOnScreen()) return;
+                    rects.emplace_back(ScreenToClient(w->GetScreenPosition()), w->GetSize());
+                };
+                add_rect(search_card);
+                add_rect(lbl_total_val_);
+                add_rect(btn_checkout_);
+                add_rect(btn_cancel_order_);
+                // Evita invadir los controles de la columna de cuenta si hay holgura suficiente.
+                if (GetClientSize().GetWidth() >= FromDIP(800)) {
+                    add_rect(account_card);
+                }
+                return rects;
+            }
+        );
+    }
 }
 
 void PosPanel::update_contextual_actions() {
@@ -605,17 +633,62 @@ void PosPanel::on_edit_quantity(wxCommandEvent&) {
     }
 
     const auto& item = current_cart_items_[sel];
-    wxTextEntryDialog dlg(
-        this,
-        wxString::Format(wxT("Ingrese la nueva cantidad para '%s':"), wxString::FromUTF8(item.name.c_str())),
-        wxT("Editar Cantidad"),
-        wxString::Format(wxT("%lld"), item.quantity)
-    );
+    const wxString prompt_msg = wxString::Format(
+        wxT("Ingrese la nueva cantidad para '%s':"), wxString::FromUTF8(item.name.c_str()));
+    const wxString initial_val = wxString::Format(wxT("%lld"), item.quantity);
 
-    if (dlg.ShowModal() != wxID_OK) return;
+    wxString entered_val;
+    if (Theme::is_touch()) {
+        wxDialog dlg(this, wxID_ANY, wxT("Editar Cantidad"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE);
+        dlg.SetBackgroundColour(Theme::ColorBackground);
+        auto* root = new wxBoxSizer(wxVERTICAL);
+
+        auto* lbl_msg = new wxStaticText(&dlg, wxID_ANY, prompt_msg);
+        lbl_msg->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
+        lbl_msg->SetForegroundColour(Theme::ColorText);
+        lbl_msg->Wrap(dlg.FromDIP(340));
+        root->Add(lbl_msg, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, dlg.FromDIP(16));
+
+        wxTextCtrl* txt_edit_qty = nullptr;
+        auto* field_box = ui::make_text_field(
+            &dlg, txt_edit_qty, 48, -1, Theme::get_font_body(), wxTE_CENTRE | wxTE_PROCESS_ENTER);
+        txt_edit_qty->ChangeValue(initial_val);
+        txt_edit_qty->SelectAll();
+        root->Add(field_box, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, dlg.FromDIP(12));
+
+        auto* kpad = new ui::NumericKeypad(&dlg, false, false);
+        kpad->set_target_field(txt_edit_qty, false);
+        root->Add(kpad, 0, wxALIGN_CENTER_HORIZONTAL | wxLEFT | wxRIGHT | wxTOP, dlg.FromDIP(14));
+
+        auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
+        const int btn_h = 56;
+        auto* btn_cancel = new wxButton(&dlg, wxID_CANCEL, wxT("Cancelar"));
+        Theme::style_button_secondary(btn_cancel, btn_h);
+        Theme::ensure_button_min_size(btn_cancel, 130, btn_h);
+
+        auto* btn_ok = new wxButton(&dlg, wxID_OK, wxT("Aceptar"));
+        Theme::style_button_primary(btn_ok, btn_h);
+        Theme::ensure_button_min_size(btn_ok, 140, btn_h);
+
+        btn_row->Add(btn_cancel, 1, wxRIGHT, dlg.FromDIP(10));
+        btn_row->Add(btn_ok, 1);
+        root->Add(btn_row, 0, wxEXPAND | wxALL, dlg.FromDIP(16));
+
+        dlg.SetSizerAndFit(root);
+        dlg.Centre();
+        txt_edit_qty->SetFocus();
+        txt_edit_qty->Bind(wxEVT_TEXT_ENTER, [&dlg](wxCommandEvent&) { dlg.EndModal(wxID_OK); });
+
+        if (dlg.ShowModal() != wxID_OK) return;
+        entered_val = txt_edit_qty->GetValue();
+    } else {
+        wxTextEntryDialog dlg(this, prompt_msg, wxT("Editar Cantidad"), initial_val);
+        if (dlg.ShowModal() != wxID_OK) return;
+        entered_val = dlg.GetValue();
+    }
 
     long new_qty = 0;
-    if (!dlg.GetValue().ToLong(&new_qty) || new_qty < 0) {
+    if (!entered_val.ToLong(&new_qty) || new_qty < 0) {
         wxMessageBox(wxT("La cantidad debe ser un número entero mayor o igual a 0."), wxT("Valor Inválido"), wxOK | wxICON_WARNING, this);
         return;
     }

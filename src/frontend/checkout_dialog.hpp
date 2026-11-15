@@ -6,6 +6,7 @@
 #include <string>
 #include "app/contracts/sale_service.hpp"
 #include "app/contracts/money.hpp"
+#include "src/frontend/numeric_keypad.hpp"
 
 namespace app::frontend {
 
@@ -39,6 +40,7 @@ private:
     wxStaticText* lbl_total_val_{nullptr};
     wxBoxSizer* cash_details_sizer_{nullptr};
     wxButton* btn_confirm_{nullptr};
+    ui::NumericKeypad* keypad_{nullptr};
 };
 
 } // namespace app::frontend
