@@ -6,7 +6,7 @@ La especificación completa está en [`docs/specs.md`](docs/specs.md); las regla
 
 ## Avance
 
-**Al 2026-11-14: cerca del 52 % hacia la versión 1.0 y del 66 % hacia un piloto en caja.**
+**Al 2026-11-14: cerca del 54 % hacia la versión 1.0 y del 68 % hacia un piloto en caja.**
 
 Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cierra con pruebas del ejecutable real y, donde aplica, revisión humana y hardware.
 
@@ -18,7 +18,7 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 | **I4** Corte de turno y reportes | 35 % | Listos: resumen diario real, pantalla de Caja y turnos, Bitácora. Faltan la conciliación del corte y la pantalla de Reportes. |
 | **I5** Respaldos y restauración | 55 % | Respaldo consistente, restauración y limpieza de respaldos antiguos (bajo petición, con vista previa), con pruebas. Configuración del servidor persistida. Faltan su pantalla y el servidor externo opcional. |
 | **I6** Usuarios, roles y permisos | 95 % | Pantallas de Usuarios y de Roles. Los permisos se muestran con título, descripción e interruptores, agrupados por sección. Falta dar más alto a la lista de permisos y la revisión humana. |
-| **I7** Perfil táctil, instalador y entrega | 35 % | Perfil Táctil elegible en Configuración y en el encabezado; acceso, subsecciones, campos de efectivo y listas desplegables a medida táctil, vigilado por una prueba (quedan 35 controles pequeños en Usuarios, interruptores de Roles, cobro e historial). Paquete portable en ZIP con autocomprobación (`--self-check`), regla de carpeta de datos sin cambios silenciosos (por equipo al instalar, junto al programa en la copia portable) y ficha de la PC de caja (`tools/ficha_pc.cmd`). Guion de instalador escrito, sin compilar. Faltan: datos de la PC de caja, instalador probado, prueba en otro Windows y con escalado de 125 % o más, licencias de terceros, icono y captura numérica táctil. |
+| **I7** Perfil táctil, instalador y entrega | 45 % | Perfil Táctil elegible en Configuración y en el encabezado; todas las pantallas reales y los diálogos de acceso, usuario, cobro e historial con controles de al menos 48 y filas de 40, vigilado por una prueba sin excepciones, al 100 y al 125 % de escalado. Paquete portable en ZIP con autocomprobación (`--self-check`), carpeta de datos sin cambios silenciosos, ficha de la PC de caja, respaldo antes de actualizar y comprobación de integridad al arrancar. Guion de instalador escrito, sin compilar. Faltan: datos de la PC de caja, instalador probado, prueba en otro Windows, monitor táctil real, licencias de terceros, icono y captura numérica táctil. |
 
 ### Pantallas reales hoy
 
@@ -57,7 +57,7 @@ ctest --test-dir build_release --output-on-failure
 Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
 
 - **CTest (11):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`, `DataDirPolicyTest`, `PackageTest` (solo en Release; en Debug queda omitida), `StartupTest`, `LoginLockoutTest`, `AuthorizationTest` y `StartupTimingSmokeTest`.
-- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`, `test_t2_touch_targets.py`. Válidas con Windows al 100 y al 125 % (módulo común `tests/gui_dpi.py`); con otro escalado se detienen. A 125 %, `test_f7_ingredients_panel.py` falla en Touch a 960x600 por 3 px de columnas (defecto del programa, pendiente). `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
+- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`, `test_t2_touch_targets.py`. Válidas con Windows al 100 y al 125 % (módulo común `tests/gui_dpi.py`); con otro escalado se detienen. `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
 - **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
 
 Generar el paquete portable (solo desde Release):
