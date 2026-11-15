@@ -2,6 +2,7 @@ Avisos de licencias de terceros - Cafeteria ITCH
 =================================================
 
 Este archivo solo indica donde esta el texto de cada licencia. No es un texto de licencia.
+Los textos de esta carpeta son copias tal cual de los archivos oficiales de cada proyecto.
 
 SQLite
   Dominio publico. Aviso: licencias\SQLite-aviso.txt (encabezado original del codigo fuente).
@@ -12,14 +13,13 @@ Roboto (fuentes)
 Iconos
   Texto: assets\icons\LICENSE.txt
 
-wxWidgets
-  PENDIENTE: falta incluir el texto oficial de su licencia.
+wxWidgets 3.3.3
+  Licencia: licencias\wxWidgets-licence.txt
+  Licencia publica general menor de GNU, a la que remite la anterior: licencias\wxWidgets-lgpl.txt
 
-Runtime de GCC (libgcc, libstdc++)
-  PENDIENTE: falta incluir el texto oficial de su licencia.
+Runtime de GCC 16.1.0 (libgcc_s_seh-1.dll, libstdc++-6.dll)
+  Excepcion de runtime de GCC: licencias\GCC-COPYING.RUNTIME.txt
+  Licencia publica general de GNU, version 3: licencias\GCC-COPYING3.txt
 
-winpthreads (libwinpthread)
-  PENDIENTE: falta incluir el texto oficial de su licencia.
-
-Los textos marcados PENDIENTE deben agregarse a esta carpeta (licencias\) antes de entregar el
-paquete a un tercero. Al agregarlos, actualizar este archivo.
+winpthreads (libwinpthread-1.dll, de mingw-w64)
+  Texto: licencias\winpthreads-COPYING.txt

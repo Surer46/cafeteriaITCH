@@ -24,6 +24,7 @@ Desde cualquiera de las dos copias de trabajo, el toolchain está en `..\toolcha
 |---|---|---|
 | GCC (MinGW-w64, x86_64, posix, seh, msvcrt) | 16.1.0 | WinLibs: `github.com/brechtsanders/winlibs_mingw`, release `16.1.0posix-14.0.0-msvcrt-r4`, archivo `winlibs-x86_64-posix-seh-gcc-16.1.0-mingw-w64msvcrt-14.0.0-r4.zip`. Incluye CMake y Ninja. |
 | wxWidgets (binarios para ese GCC) | 3.3.3 | `github.com/wxWidgets/wxWidgets`, release `v3.3.3`: `wxMSW-3.3.3_gcc1610_x64_Dev.7z` y `wxWidgets-3.3.3-headers.7z`. |
+| Inno Setup | 7.1.1 | Solo para generar el instalador. `jrsoftware.org/isdl.php`; se instala para el usuario actual en `..\toolchain\innosetup` (debe quedar `ISCC.exe` y `Languages\Spanish.isl`). Los textos de licencia de terceros que lleva el paquete viven en `packaging\licencias\`. |
 | Python | 3.13 | Solo para las pruebas GUI (`tests/*.py`) y las capturas. |
 | Git | cualquiera reciente | — |
 
@@ -60,6 +61,16 @@ No se modifica el `PATH` del sistema ni ninguna configuración global: cada term
    ```
 
    y lo mismo en Debug. Si falla en una PC nueva sin haber cambiado código, es un problema del entorno: repórtalo, no adaptes el código ni relajes pruebas.
+
+## Compilar el instalador
+
+Con Inno Setup en `..\toolchain\innosetup` (o en `CAFETERIA_TOOLCHAIN\innosetup`) y una compilación **Release** hecha:
+
+```powershell
+cmake --build build_be_release --target installer
+```
+
+Instala el componente `app` (sin `portable.flag`) en `build_be_release\installer_stage\CafeteriaITCH` y llama a `ISCC.exe` con la versión de `project(VERSION)`. El instalador queda en `build_be_release\installer_out\CafeteriaITCH-<versión>-instalador-win64.exe`. Falla si ISCC emite advertencias. Instalación silenciosa (la usará la actualización automática): `CafeteriaITCH-<versión>-instalador-win64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART [/REABRIR]`.
 
 ## Escalado de pantalla
 
