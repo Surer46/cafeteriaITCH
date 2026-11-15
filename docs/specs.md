@@ -65,6 +65,10 @@ La maqueta contiene detalles que deben corregirse al implementar: “Chocolalech
 
 Adoptar composición inspirada en Cupertino con superficies claras, tarjetas y controles redondeados, separadores discretos y subsecciones segmentadas; conservar identidad rojo/amarillo del SVG, Roboto y Material Symbols Outlined. El contrato visual completo de colores, tamaños, estados, recursos locales y QA está en `frontend/design-system.md`. Mantener cuatro secciones, cuenta/cobro arriba a la derecha y perfil táctil reorganizado. Implementación nativa C++17/wxWidgets; el entorno de desarrollo más potente no elimina la restricción del i5/4–6 GB de RAM ni los pendientes de integridad. Este diseño queda especificado, todavía no implementado ni aceptado visualmente.
 
+### Pantalla completa
+
+- **Decidido 2026-11-14:** la ventana principal puede ocupar toda la pantalla, sin barra de título ni barra de tareas, para que la caja trabaje solo en el programa. Se activa y se quita con F11 y desde BackOffice → Configuración (para pantallas táctiles sin teclado); se recuerda por equipo. No se bloquean Alt+Tab ni la tecla Windows: si hiciera falta un modo quiosco cerrado, se configura en Windows al instalar. Bloque T5.
+
 ### Modo táctil para monitores grandes
 
 - Ofrecer dos perfiles de interfaz: **Estándar** y **Táctil**. El modo táctil reorganiza el espacio, la densidad y los formularios; no se limita a escalar botones. Permitir seleccionarlo en **BackOffice → Configuración**, conservar la preferencia del puesto al reiniciar y cambiar de perfil sin perder el carrito. La presencia de una pantalla grande no implica que sea táctil: el perfil se elige explícitamente.

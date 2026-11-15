@@ -127,6 +127,10 @@ Estado revisado el 2026-09-29: `[x]` marca avances concretos construidos/compila
 - [ ] Probar ambos perfiles, cambio de escala, teclado visible, datos largos y toques repetidos; validar legibilidad, precisión y flujo completo en monitor táctil grande real.
 - **Terminado:** vender, editar una línea, cobrar y decidir impresión funciona con distribución táctil clara, sin botones amontonados ni solapamientos, y conserva rendimiento/persistencia; pendiente validación física en monitor táctil real.
 
+### FE-10 — Pantalla completa
+
+- [ ] F11 y opción en BackOffice → Configuración; preferencia por equipo; sin bloquear Alt+Tab ni la tecla Windows (decisión del usuario, 2026-11-14). Bloque T5.
+
 ### FE-09 — Sistema visual Cupertino y Material
 
 - [x] Documentar dirección visual, paleta del SVG, geometría, Roboto, iconos y reglas nativas en `design-system.md` (2026-09-30).
