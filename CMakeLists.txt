@@ -1,5 +1,12 @@
 cmake_minimum_required(VERSION 3.16)
-project(CafeteriaITCH VERSION 0.1.0 LANGUAGES C CXX RC)
+# Fuente unica de la version: project(VERSION). CAFETERIA_VERSION_OVERRIDE existe solo para probar la
+# actualizacion del instalador con una compilacion temporal de otra version; vacio en cualquier uso normal.
+set(CAFETERIA_VERSION_OVERRIDE "" CACHE STRING "Solo pruebas de actualizacion: version distinta a la de project()")
+if(CAFETERIA_VERSION_OVERRIDE)
+    project(CafeteriaITCH VERSION ${CAFETERIA_VERSION_OVERRIDE} LANGUAGES C CXX RC)
+else()
+    project(CafeteriaITCH VERSION 0.1.0 LANGUAGES C CXX RC)
+endif()
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -340,6 +347,28 @@ if(TARGET app_desktop AND WIN32)
     set(CPACK_ARCHIVE_COMPONENT_INSTALL OFF)
     set(CPACK_PACKAGE_DIRECTORY ${CMAKE_BINARY_DIR})
     include(CPack)
+
+    # Instalador de Windows (Inno Setup). El toolchain se resuelve como en docs/entorno.md:
+    # CAFETERIA_TOOLCHAIN o la carpeta hermana ..	oolchain. Nada de rutas absolutas versionadas.
+    if(DEFINED ENV{CAFETERIA_TOOLCHAIN})
+        set(CAFETERIA_TOOLCHAIN_DIR "$ENV{CAFETERIA_TOOLCHAIN}")
+    else()
+        get_filename_component(CAFETERIA_TOOLCHAIN_DIR "${CMAKE_SOURCE_DIR}/../toolchain" ABSOLUTE)
+    endif()
+    set(CAFETERIA_ISCC "")
+    if(EXISTS "${CAFETERIA_TOOLCHAIN_DIR}/innosetup/ISCC.exe")
+        set(CAFETERIA_ISCC "${CAFETERIA_TOOLCHAIN_DIR}/innosetup/ISCC.exe")
+    endif()
+    add_custom_target(installer
+        COMMAND ${CMAKE_COMMAND}
+            -DBUILD_DIR=${CMAKE_BINARY_DIR}
+            -DISCC=${CAFETERIA_TOOLCHAIN_DIR}/innosetup/ISCC.exe
+            -DISS=${CMAKE_CURRENT_SOURCE_DIR}/packaging/cafeteria.iss
+            -DAPP_VERSION=${PROJECT_VERSION}
+            -P ${CMAKE_CURRENT_SOURCE_DIR}/cmake/build_installer.cmake
+        DEPENDS app_desktop
+        COMMENT "Instalador de Windows (solo Release): cmake --install del componente app + ISCC"
+        VERBATIM)
 endif()
 
 # 8. Pruebas unitarias y de integración (CTest)

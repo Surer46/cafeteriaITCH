@@ -191,3 +191,26 @@ add_test(NAME StartupTimingSmokeTest COMMAND test_startup_timing 1500)
 target_link_libraries(test_hash_memory PRIVATE psapi)
 add_test(NAME Sha256Test COMMAND test_sha256)
 add_test(NAME HashMemorySmokeTest COMMAND test_hash_memory)
+
+# Test B10: compila el instalador de Windows (Inno Setup) sin instalarlo. Solo Release con ISCC.exe disponible;
+# si no, termina con 77 (OMITIDA).
+if(WIN32)
+    add_executable(test_installer test_installer.cpp)
+    set(INSTALLER_TEST_ENABLED 0)
+    if(TARGET app_desktop AND CAFETERIA_ISCC AND CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT CAFETERIA_TEST_HOOKS)
+        set(INSTALLER_TEST_ENABLED 1)
+        add_dependencies(test_installer app_desktop)
+    endif()
+    target_compile_definitions(test_installer PRIVATE
+        INSTALLER_TEST_ENABLED=${INSTALLER_TEST_ENABLED}
+        CMAKE_COMMAND_PATH="${CMAKE_COMMAND}"
+        BUILD_DIR_PATH="${CMAKE_BINARY_DIR}"
+        ISCC_PATH="${CAFETERIA_ISCC}"
+        ISS_PATH="${CMAKE_SOURCE_DIR}/packaging/cafeteria.iss"
+        SCRIPT_PATH="${CMAKE_SOURCE_DIR}/cmake/build_installer.cmake"
+        PACKAGE_VERSION="${PROJECT_VERSION}"
+    )
+    target_link_libraries(test_installer PRIVATE version)
+    add_test(NAME InstallerTest COMMAND test_installer)
+    set_tests_properties(InstallerTest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+endif()
