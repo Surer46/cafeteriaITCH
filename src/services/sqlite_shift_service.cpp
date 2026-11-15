@@ -309,6 +309,18 @@ contracts::OperationResult SqliteShiftService::close_shift(contracts::Money fina
         return contracts::OperationResult::fail(tx_commit.error_code(), "Error al confirmar transacción de cierre: " + tx_commit.error_message());
     }
 
+    // El cierre ya está confirmado. Lo que haga el gancho (p. ej. iniciar el respaldo automático) nunca
+    // lo revierte ni lo bloquea: se llama dentro de un try y su resultado se ignora.
+    if (after_close_hook_) {
+        try {
+            std::string user_id;
+            auto user = account_service_->current_user();
+            if (user.is_success()) user_id = user.value().id;
+            after_close_hook_(cur_shift.value().id, user_id);
+        } catch (...) {
+        }
+    }
+
     return contracts::OperationResult::ok();
 }
 

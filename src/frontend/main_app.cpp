@@ -141,6 +141,11 @@ private:
 
 class CafeteriaApp : public wxApp {
 public:
+    CafeteriaApp() {
+        Bind(wxEVT_QUERY_END_SESSION, &CafeteriaApp::OnQueryEndSession, this);
+        Bind(wxEVT_END_SESSION, &CafeteriaApp::OnEndSession, this);
+    }
+
     void OnInitCmdLine(wxCmdLineParser& parser) override {
         wxApp::OnInitCmdLine(parser);
         parser.AddOption(wxEmptyString, "data-dir", "Directorio de datos locales",
@@ -286,7 +291,9 @@ public:
             if (p.percent >= 0) text += wxString::Format(wxT(" %d %%"), p.percent);
             progress_window->set_phase(text, p.percent);
         };
+        in_startup_ = true;
         const auto startup_res = services::open_and_migrate_database(db_, startup);
+        in_startup_ = false;
         // La ventana se destruye antes de cualquier mensaje de error y antes del inicio de sesión.
         if (progress_window) {
             progress_window->allow_close_and_finish();
@@ -342,6 +349,24 @@ public:
         return true;
     }
 
+    // Apagado o cierre forzado por Windows (apagar/reiniciar, Restart Manager del instalador).
+    // wxWidgets, por omisión, cierra la ventana principal (y su veto podría BLOQUEAR el apagado) y en
+    // WM_ENDSESSION borra todas las ventanas de nivel superior con `delete`: los diálogos de OnInit viven
+    // en la pila, y ese `delete` corrompía el heap (0xC0000374). Aquí no se veta nunca y no se borra nada.
+    // (En wxWidgets estos dos manejadores no son virtuales: se enlazan con Bind, que se procesa antes que la
+    // tabla de eventos de wxApp y, al no llamar a Skip, impide que corra el manejador por omisión.)
+    void OnQueryEndSession(wxCloseEvent& event) {
+        event.Veto(false);
+    }
+
+    void OnEndSession(wxCloseEvent&) {
+        // Sin mensajes ni diálogos. La base se cierra de forma ordenada (checkpoint del WAL); lo confirmado
+        // ya está en el WAL. Durante la actualización de la base no se cierra: este aviso llegaría dentro
+        // del callback de progreso de la propia conexión, y la migración se revierte sola al reabrir.
+        if (!in_startup_ && db_.is_open()) db_.close();
+        ::ExitProcess(0);
+    }
+
     int OnExit() override {
         Theme::cleanup();
         db_.close();
@@ -351,6 +376,7 @@ public:
 private:
     wxString command_data_dir_;
     storage::SqliteDatabase db_;
+    bool in_startup_{false};  // true mientras open_and_migrate_database usa la conexión
 };
 
 } // namespace app::frontend

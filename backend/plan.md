@@ -116,9 +116,12 @@ Estado revisado el 2026-09-29: `[x]` señala un avance concreto implementado y c
 ### BE-07 — Respaldo local y remoto opcional
 
 - [x] Crear instantánea SQLite consistente con `sqlite3_backup_*` y comprobar integridad del archivo resultante en prueba de almacenamiento.
-- [ ] Agregar metadatos de versión, flujo completo de copia local desde UI y restauración guiada con respaldo previo.
-- [ ] Cifrado del archivo de copia y transferencia HTTPS al servidor externo opcional, autenticación, reintentos, estado y retención; el servidor no recibe consultas operativas.
-- [ ] Dueño puede activar/desactivar, ejecutar y consultar copias; solo identidad técnica de Desarrollador cambia dirección, credenciales, certificados y retención.
+- [x] Copia local verificada, verificación de archivos, restauración con copia previa, registro y limpieza con política de retención (B1, B6) y respaldo previo a migrar (B8).
+- [x] **B12 (2026-11-15):** respaldo automático al cerrar turno (hilo con conexión propia; el cierre nunca se bloquea ni se revierte), segunda carpeta o USB persistida y validada, lista de respaldos con estado de cada archivo, tipo `AUTO` por destino en la limpieza (con limpieza automática solo de `AUTO`), activación única por migración 016 y `get_auto_backup_status`. Las copias locales no se cifran por decisión del usuario.
+- [x] B12: cierre por Windows (`WM_QUERYENDSESSION`/`WM_ENDSESSION`) sin caída del programa ni bloqueo del apagado; prueba `EndSessionTest` con el ejecutable real.
+- [ ] Pantalla BackOffice → Respaldos (T6/T6b) conectada a los métodos nuevos; sondeo de `get_auto_backup_status`.
+- [ ] Cifrado del archivo de copia y transferencia HTTPS al servidor externo opcional, autenticación, reintentos, estado y retención; el servidor no recibe consultas operativas. **Pendiente: el servidor remoto queda fuera de B12.**
+- [x] Dueño puede activar/desactivar, ejecutar y consultar copias (contratos y servicios listos; falta la pantalla); solo identidad técnica de Desarrollador cambia dirección, credenciales, certificados y retención.
 - [ ] Exponer esas operaciones técnicas únicamente al servicio de la subsección **BackOffice → Servidor de respaldos**; una cuenta Dueño o un rol configurable no puede invocarlas aunque intente omitir la interfaz.
 - [ ] Trabajo en segundo plano sin bloquear venta; fallo remoto deja base local y POS funcionando. Restauración siempre termina en la base local tras comprobar compatibilidad.
 - **Terminado:** copia local y remota restauran datos de prueba; apagar la red durante el envío no afecta una venta ni corrompe la base.

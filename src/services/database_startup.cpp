@@ -237,6 +237,29 @@ bool register_pre_migration_backup(storage::SqliteDatabase& db, const fs::path& 
     return step.is_success();
 }
 
+// Activación única del respaldo automático (B12): al pasar por la migración 016 se activa si nadie lo apagó
+// nunca (ningún evento BACKUP_DISABLED en la bitácora); si el Dueño lo apagó alguna vez se respeta su decisión.
+// El evento de bitácora se escribe solo cuando lo activa. Un fallo aquí no impide arrancar.
+void activate_auto_backup_once(storage::SqliteDatabase& db) {
+    if (!db.begin_transaction().is_success()) return;
+    const bool ok =
+        db.execute(
+            "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
+            "SELECT 'audit-' || lower(hex(randomblob(16))), 'BACKUP_AUTO_ACTIVADO', NULL, "
+            "'El respaldo automático al cerrar turno se activó con la actualización del programa', "
+            "datetime('now', 'localtime'), strftime('%Y-%m-%dT%H:%M:%fZ', 'now') "
+            "WHERE EXISTS (SELECT 1 FROM backup_state WHERE id = 1 AND is_enabled = 0) "
+            "AND NOT EXISTS (SELECT 1 FROM audit_events WHERE event_type = 'BACKUP_DISABLED');").is_success() &&
+        db.execute(
+            "UPDATE backup_state SET is_enabled = 1 WHERE id = 1 AND is_enabled = 0 "
+            "AND NOT EXISTS (SELECT 1 FROM audit_events WHERE event_type = 'BACKUP_DISABLED');").is_success();
+    if (ok) {
+        db.commit_transaction();
+    } else {
+        db.rollback_transaction();
+    }
+}
+
 } // namespace
 
 StartupResult open_and_migrate_database(storage::SqliteDatabase& db, const StartupOptions& opt) {
@@ -403,6 +426,11 @@ StartupResult open_and_migrate_database(storage::SqliteDatabase& db, const Start
                    "\n\nLlame a quien instaló el sistema.";
         }
         return finish(fail(r, StartupError::MigrationFailed, msg));
+    }
+
+    // Migración correcta: la 016 (respaldo automático) activa el respaldo una sola vez.
+    if (r.schema_version_before < 16 && r.schema_version_after >= 16) {
+        activate_auto_backup_once(db);
     }
 
     // Migración correcta: ahora sí se puede registrar el respaldo previo.
