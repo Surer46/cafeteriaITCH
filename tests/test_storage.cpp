@@ -346,17 +346,20 @@ void test_owner_persistence_and_auth() {
         TEST_CHECK(!dev_cfg.is_success(), "El servicio de respaldos debe rechazar al Dueño para dev_config");
         TEST_CHECK(dev_cfg.error_code() == ErrorCode::Forbidden, "Debe retornar Forbidden");
 
-        // Ahora probamos con identidad Desarrollador
-        UserDto dev_user;
-        dev_user.id = "user-dev";
-        dev_user.username = "desarrollador";
-        dev_user.display_name = "Desarrollador de Sistema";
-        dev_user.role_id = "role-dev";
-        dev_user.role_name = "Desarrollador";
-        dev_user.is_active = true;
-        dev_user.is_owner = false;
-
-        account_service2->set_current_user_for_testing(dev_user);
+        // Ahora probamos con identidad Desarrollador REAL (B9): fila "user-dev" insertada por SQL solo en la
+        // prueba (el Dueño no puede crear cuentas de ese rol) e inicio de sesión de verdad.
+        const std::string dev_password = generate_random_secret(18);
+        {
+            auto dev_ins = db2.prepare(
+                "INSERT INTO users (id, username, display_name, password_hash, role_id, is_active, created_at) "
+                "VALUES ('user-dev', 'desarrollador', 'Desarrollador de Sistema', ?, 'role-dev', 1, '2026-01-01 00:00:00');");
+            TEST_CHECK(dev_ins.is_success(), "Debe preparar la fila del Desarrollador");
+            auto dev_stmt = std::move(dev_ins.value());
+            dev_stmt.bind_text(1, app::crypto::PasswordHasher::hash_password(dev_password));
+            TEST_CHECK(dev_stmt.step().is_success(), "Debe insertar la fila del Desarrollador");
+        }
+        auto dev_login = account_service2->login("desarrollador", dev_password);
+        TEST_CHECK(dev_login.is_success(), "El Desarrollador debe iniciar sesión: " + dev_login.error_message());
         TEST_CHECK(account_service2->has_permission("backup.dev_config"),
                    "La identidad Desarrollador sí debe tener backup.dev_config");
 
@@ -378,7 +381,10 @@ void test_owner_persistence_and_auth() {
         TEST_CHECK(!fs::exists(backup_file), "No debe crearse archivo cuando se niega el permiso");
 
         // El Dueño sí tiene backup.manage
-        account_service2->set_current_user_for_testing(user);
+        // Se vuelve al Dueño con un inicio de sesión real y se retira la fila del Desarrollador, para que el
+        // respaldo siga conteniendo exactamente el usuario Dueño (la comprobación posterior no cambia).
+        TEST_CHECK(db2.execute("DELETE FROM users WHERE id = 'user-dev';").is_success(), "Retirar la fila del Desarrollador");
+        TEST_CHECK(account_service2->login("dueno_itch", owner_password).is_success(), "El Dueño vuelve a iniciar sesión");
         auto bkp_res = backup_service.trigger_local_backup(backup_file);
         TEST_CHECK(bkp_res.is_success(), "Respaldo local debe ser exitoso: " + bkp_res.error_message());
         TEST_CHECK(fs::exists(backup_file), "El archivo de respaldo snapshot debe existir en disco");
