@@ -4,7 +4,7 @@
 
 - Leer `docs/specs.md`, `frontend/plan.md` y `backend/plan.md` antes de implementar. Mantenerlos coherentes cuando cambie una decisión técnica o un flujo.
 - La aplicación es **de escritorio nativa**: C++17, wxWidgets y SQLite embebido en un solo proceso. No introducir navegador, Electron, servidor HTTP local, MySQL o PostgreSQL para la operación diaria.
-- La base SQLite local es la única fuente de datos operativa. El servidor externo es opcional y solo almacena respaldos; una falla de red nunca debe bloquear ventas.
+- La base SQLite local es la única fuente de datos operativa. El servidor externo es opcional y solo almacena respaldos; una falla de red nunca debe bloquear ventas. Desde el 2026-11-14 (decisión del usuario) el programa también consulta GitHub Releases para actualizarse: solo HTTPS, en segundo plano, con manifiesto firmado; sin red no pasa nada visible.
 - No asumir el sistema operativo de la PC de caja. El entorno de desarrollo actual puede ser distinto; comprobar plataforma, arquitectura y periféricos de destino antes de fijar empaquetado o rutas.
 
 ## Límites entre capas

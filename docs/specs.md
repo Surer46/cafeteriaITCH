@@ -65,6 +65,10 @@ La maqueta contiene detalles que deben corregirse al implementar: “Chocolalech
 
 Adoptar composición inspirada en Cupertino con superficies claras, tarjetas y controles redondeados, separadores discretos y subsecciones segmentadas; conservar identidad rojo/amarillo del SVG, Roboto y Material Symbols Outlined. El contrato visual completo de colores, tamaños, estados, recursos locales y QA está en `frontend/design-system.md`. Mantener cuatro secciones, cuenta/cobro arriba a la derecha y perfil táctil reorganizado. Implementación nativa C++17/wxWidgets; el entorno de desarrollo más potente no elimina la restricción del i5/4–6 GB de RAM ni los pendientes de integridad. Este diseño queda especificado, todavía no implementado ni aceptado visualmente.
 
+### Actualizaciones del programa
+
+- **Decidido 2026-11-14:** la copia instalada se actualiza sola desde las versiones publicadas en GitHub Releases. Al abrir revisa en segundo plano; si hay versión nueva avisa al Dueño con lo que cambia y él decide; la instalación ocurre al cerrar el programa, con el instalador en modo silencioso, que conserva los datos. También se puede actualizar con el instalador copiado en una USB. Cada versión lleva un manifiesto firmado con una clave privada que no está en el repositorio ni en la caja; el programa rechaza lo que no verifique y nunca baja de versión. La caja tiene internet solo a veces: sin red no pasa nada visible y una falla de red nunca bloquea una venta. La copia portable solo avisa. Bloques B11 (servicio) y T6 (pantallas).
+
 ### Pantalla completa
 
 - **Decidido 2026-11-14:** la ventana principal puede ocupar toda la pantalla, sin barra de título ni barra de tareas, para que la caja trabaje solo en el programa. Se activa y se quita con F11 y desde BackOffice → Configuración (para pantallas táctiles sin teclado); se recuerda por equipo. No se bloquean Alt+Tab ni la tecla Windows: si hiciera falta un modo quiosco cerrado, se configura en Windows al instalar. Bloque T5.
