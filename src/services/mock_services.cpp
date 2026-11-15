@@ -1115,9 +1115,16 @@ ServiceRegistry ServiceRegistry::create_sqlite_registry(storage::SqliteDatabase&
     reg.sale_service = sale_svc;
     // Tras restaurar, el estado en memoria derivado de la base se invalida.
     std::weak_ptr<SqliteSaleService> weak_sale = sale_svc;
-    reg.backup_service = std::make_shared<SqliteBackupService>(
+    auto backup_svc = std::make_shared<SqliteBackupService>(
         db, account_svc, config_dir, migrations_dir,
         [weak_sale]() { if (auto s = weak_sale.lock()) s->invalidate_session_state(); });
+    reg.backup_service = backup_svc;
+    // Respaldo automático: tras confirmar un cierre de turno (acción del sistema, sin backup.manage).
+    // Nunca bloquea ni revierte el cierre: el servicio solo arranca su hilo y vuelve.
+    std::weak_ptr<SqliteBackupService> weak_backup = backup_svc;
+    shift_svc->set_after_close_hook([weak_backup](const std::string& shift_id, const std::string& user_id) {
+        if (auto b = weak_backup.lock()) b->on_shift_closed(shift_id, user_id);
+    });
     reg.report_service = std::make_shared<SqliteReportService>(db, account_svc);
     reg.print_config_service = std::make_shared<SqlitePrintConfigService>(db, account_svc, config_dir);
     return reg;

@@ -37,9 +37,10 @@ struct BackupRetentionPolicyDto {
 
 struct BackupCleanupItemDto {
     std::string path;        // ruta exacta registrada
-    std::string kind;        // "LOCAL" o "PRE_RESTORE"
+    std::string kind;        // "LOCAL", "PRE_RESTORE" o "AUTO"
     std::string created_at;  // hora local de creación
     std::int64_t size_bytes{0};
+    std::string destination{"DATA"};  // "DATA" o "SECONDARY" (segunda carpeta o USB)
 };
 
 // Resultado de la vista previa o de la limpieza. En la vista previa, `to_delete` es lo que SE BORRARÍA;
@@ -79,6 +80,30 @@ public:
     // Borra los respaldos antiguos según la política. Nunca borra el último respaldo verificado de
     // cada tipo, ni archivos no registrados, ni archivos que cambiaron desde que se registraron.
     virtual Result<BackupCleanupResultDto> cleanup_old_backups() = 0;
+
+    // --- B12: respaldo automático al cerrar turno, segunda carpeta y lista ---
+    // Los métodos siguientes tienen cuerpo por omisión (error) para no romper a quien ya implementa la interfaz.
+
+    // Resultado del último respaldo automático. Requiere sesión.
+    virtual Result<AutoBackupStatusDto> get_auto_backup_status() {
+        return Result<AutoBackupStatusDto>::fail(ErrorCode::InvalidState, "No disponible en este servicio");
+    }
+    // Segunda carpeta (normalmente una USB). Las tres requieren backup.manage. La ruta se guarda en la base.
+    // set valida que existe y que se puede escribir (crea y borra un archivo de prueba).
+    virtual Result<std::string> get_secondary_backup_dir() {
+        return Result<std::string>::fail(ErrorCode::InvalidState, "No disponible en este servicio");
+    }
+    virtual OperationResult set_secondary_backup_dir(const std::string&) {
+        return OperationResult::fail(ErrorCode::InvalidState, "No disponible en este servicio");
+    }
+    virtual OperationResult clear_secondary_backup_dir() {
+        return OperationResult::fail(ErrorCode::InvalidState, "No disponible en este servicio");
+    }
+    // Respaldos registrados, más recientes primero, con límite y desplazamiento.
+    // Requiere backup.manage o backup.restore.
+    virtual Result<std::vector<BackupListItemDto>> list_backups(const BackupListFilterDto&) {
+        return Result<std::vector<BackupListItemDto>>::fail(ErrorCode::InvalidState, "No disponible en este servicio");
+    }
 };
 
 } // namespace app::contracts

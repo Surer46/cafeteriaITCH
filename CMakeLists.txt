@@ -351,7 +351,7 @@ if(TARGET app_desktop AND WIN32)
     include(CPack)
 
     # Instalador de Windows (Inno Setup). El toolchain se resuelve como en docs/entorno.md:
-    # CAFETERIA_TOOLCHAIN o la carpeta hermana ..	oolchain. Nada de rutas absolutas versionadas.
+    # CAFETERIA_TOOLCHAIN o la carpeta hermana ..\toolchain. Nada de rutas absolutas versionadas.
     if(DEFINED ENV{CAFETERIA_TOOLCHAIN})
         set(CAFETERIA_TOOLCHAIN_DIR "$ENV{CAFETERIA_TOOLCHAIN}")
     else()

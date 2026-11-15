@@ -318,6 +318,47 @@ struct BackupStatusDto {
     std::string last_error;
 };
 
+// Resultado del ÚLTIMO respaldo automático al cerrar turno (B12).
+//   state: "IDLE" (nunca hubo uno), "WAITING" (espera a que termine otra operación de respaldo),
+//          "RUNNING", "DONE" (la copia local se hizo), "FAILED" (la copia local falló) o
+//          "NOT_DONE" (el programa se cerró mientras esperaba o copiaba).
+//   secondary_status: "NONE" (no hay segunda carpeta configurada), "OK", "UNAVAILABLE" (la carpeta
+//          no existe o no hay permiso) o "FAILED" (la copia a la segunda carpeta falló).
+// Las horas son locales ("YYYY-MM-DD HH:MM:SS"); vacías si no aplican. `error` explica en lenguaje
+// llano el motivo de un fallo de la copia local o de la segunda carpeta.
+struct AutoBackupStatusDto {
+    bool is_enabled{false};
+    std::string state{"IDLE"};
+    std::string started_at;
+    std::string finished_at;
+    std::string shift_id;
+    bool local_ok{false};
+    std::string local_file_name;   // solo el nombre del archivo, sin carpeta
+    std::string secondary_status{"NONE"};
+    bool secondary_configured{false};
+    std::string error;
+};
+
+// Un respaldo registrado por la aplicación (tipo "LOCAL", "PRE_RESTORE", "PRE_MIGRATION" o "AUTO").
+// destination: "DATA" (carpeta de datos del programa) o "SECONDARY" (segunda carpeta o USB).
+// file_exists / unchanged se comprueban sin recalcular el hash (existe y mantiene el tamaño
+// registrado); la verificación completa es verify_backup.
+struct BackupListItemDto {
+    std::string id;
+    std::string kind;
+    std::string destination;
+    std::string path;
+    std::string created_at;  // hora local de creación
+    std::int64_t size_bytes{0};
+    bool file_exists{false};
+    bool unchanged{false};
+};
+
+struct BackupListFilterDto {
+    int limit{50};   // 1..500
+    int offset{0};
+};
+
 } // namespace app::contracts
 
 #endif // APP_CONTRACTS_DTO_HPP

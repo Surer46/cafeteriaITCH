@@ -214,3 +214,28 @@ if(WIN32)
     add_test(NAME InstallerTest COMMAND test_installer)
     set_tests_properties(InstallerTest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
 endif()
+
+# Tests B12: respaldo automático al cerrar turno y cierre por Windows (WM_ENDSESSION) del ejecutable real.
+add_executable(test_auto_backup test_auto_backup.cpp)
+target_link_libraries(test_auto_backup PRIVATE app_services app_storage app_contracts app_crypto sqlite3)
+target_compile_definitions(test_auto_backup PRIVATE SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations")
+add_test(NAME AutoBackupTest COMMAND test_auto_backup)
+set_tests_properties(AutoBackupTest PROPERTIES TIMEOUT 900)
+
+if(WIN32)
+    add_executable(test_endsession test_endsession.cpp)
+    target_link_libraries(test_endsession PRIVATE app_services app_storage app_contracts app_crypto sqlite3)
+    set(ENDSESSION_TEST_ENABLED 0)
+    if(TARGET app_desktop AND CMAKE_BUILD_TYPE STREQUAL "Release" AND NOT CAFETERIA_TEST_HOOKS)
+        set(ENDSESSION_TEST_ENABLED 1)
+        add_dependencies(test_endsession app_desktop)
+        target_compile_definitions(test_endsession PRIVATE APP_EXE_PATH="$<TARGET_FILE:app_desktop>")
+    else()
+        target_compile_definitions(test_endsession PRIVATE APP_EXE_PATH="")
+    endif()
+    target_compile_definitions(test_endsession PRIVATE
+        ENDSESSION_TEST_ENABLED=${ENDSESSION_TEST_ENABLED}
+        SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations")
+    add_test(NAME EndSessionTest COMMAND test_endsession)
+    set_tests_properties(EndSessionTest PROPERTIES SKIP_RETURN_CODE 77 TIMEOUT 900)
+endif()

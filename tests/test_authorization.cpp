@@ -247,6 +247,12 @@ int main() {
     add("backup.set_retention_policy", Kind::Permission, [&] { return out(backup->set_retention_policy(BackupRetentionPolicyDto{30, 90})); });
     add("backup.preview_backup_cleanup", Kind::Permission, [&] { return out(backup->preview_backup_cleanup()); });
     add("backup.cleanup_old_backups", Kind::Permission, [&] { return out(backup->cleanup_old_backups()); });
+    // B12
+    add("backup.get_auto_backup_status", Kind::SessionOnly, [&] { return out(backup->get_auto_backup_status()); });
+    add("backup.get_secondary_backup_dir", Kind::Permission, [&] { return out(backup->get_secondary_backup_dir()); });
+    add("backup.set_secondary_backup_dir", Kind::Permission, [&] { return out(backup->set_secondary_backup_dir((g_root / "no-existe").u8string())); });
+    add("backup.clear_secondary_backup_dir", Kind::Permission, [&] { return out(backup->clear_secondary_backup_dir()); });
+    add("backup.list_backups", Kind::Permission, [&] { return out(backup->list_backups(BackupListFilterDto{})); });
 
     TEST_CHECK(cases.size() >= 60, "La tabla debe cubrir todos los métodos de los contratos");
 
