@@ -646,15 +646,110 @@ def main():
         time.sleep(0.6)
 
         # CAPTURA 20: BackOffice > Configuración con opción Pantalla completa activada
-        btn_fs_cfg = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Pantalla completa"), None)
-        assert btn_fs_cfg is not None, "Botón 'Pantalla completa' no encontrado en Configuración"
+        btn_fs_cfg = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Usar pantalla completa"), None)
+        assert btn_fs_cfg is not None, "Botón 'Usar pantalla completa' no encontrado en Configuración"
         _f7_click_btn(btn_fs_cfg)
         time.sleep(0.55)
         capture_window(hwnd_main, os.path.join(out_dir, "20_settings_fullscreen_option.png"))
-        btn_fs_off = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Pantalla completa (Activa)" in t), None)
-        assert btn_fs_off is not None, "Botón 'Pantalla completa (Activa)' no encontrado para restaurar ventana"
+        btn_fs_off = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Salir de pantalla completa" in t), None)
+        assert btn_fs_off is not None, "Botón 'Salir de pantalla completa' no encontrado para restaurar ventana"
         _f7_click_btn(btn_fs_off)
         time.sleep(0.45)
+
+        # CAPTURA 21 y 22: BackOffice > Respaldos (Touch) y Diálogo de advertencia de restauración
+        def _t6_wait_window(title_sub, exclude=(), timeout_s=8.0):
+            deadline = time.time() + timeout_s
+            while time.time() < deadline:
+                wins = [
+                    (h, t) for (h, t) in find_windows_by_pid(proc.pid)
+                    if title_sub in t and not any(ex in t for ex in exclude)
+                ]
+                if wins:
+                    return wins[0][0]
+                time.sleep(0.15)
+            return None
+
+        def _t6_enum_children_all(parent_h):
+            items = []
+            cls_buf = ctypes.create_unicode_buffer(128)
+            txt_buf = ctypes.create_unicode_buffer(512)
+            def _cb(ch, _lp):
+                user32.GetClassNameW(ch, cls_buf, 128)
+                user32.GetWindowTextW(ch, txt_buf, 512)
+                items.append((ch, cls_buf.value, txt_buf.value))
+                return True
+            cb_ref = WNDENUMPROC(_cb)
+            user32.EnumChildWindows(wintypes.HWND(parent_h), cb_ref, wintypes.LPARAM(0))
+            return items
+
+        def _t6_accept_file_dialog(dlg_title_sub, target_path):
+            hwnd_fd = _t6_wait_window(dlg_title_sub, timeout_s=8.0)
+            assert hwnd_fd is not None, f"Diálogo de archivos '{dlg_title_sub}' no apareció"
+            time.sleep(0.45)
+            children_fd = _t6_enum_children_all(hwnd_fd)
+            edits_fd = [
+                h for (h, c, _t) in children_fd
+                if c.lower() == "edit" and user32.IsWindowVisible(h)
+            ]
+            assert edits_fd, "Campo Edit en diálogo de archivos no encontrado"
+            def _parent_cls(hw):
+                ph = user32.GetParent(hw)
+                if not ph:
+                    return ""
+                pb = ctypes.create_unicode_buffer(128)
+                user32.GetClassNameW(ph, pb, 128)
+                return pb.value.lower()
+            def _rect_top(hw):
+                rr = wintypes.RECT()
+                user32.GetWindowRect(hw, ctypes.byref(rr))
+                return rr.top
+            edit_name = next((h for h in edits_fd if "combobox" in _parent_cls(h)), None)
+            if edit_name is None:
+                edit_name = max(edits_fd, key=_rect_top)
+            set_text(edit_name, target_path)
+            time.sleep(0.15)
+            btn_ok_fd = user32.GetDlgItem(hwnd_fd, 1)
+            if not btn_ok_fd:
+                btn_ok_fd = next(
+                    (h for (h, c, t) in children_fd if c.lower() == "button" and user32.IsWindowVisible(h) and ("Guardar" in t or "Abrir" in t)),
+                    None,
+                )
+            assert btn_ok_fd, "Botón Aceptar/Guardar/Abrir en diálogo de archivos no encontrado"
+            user32.PostMessageW(btn_ok_fd, BM_CLICK, 0, 0)
+            time.sleep(0.5)
+
+        btn_respaldos = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Respaldos"), None)
+        assert btn_respaldos is not None, "Subsección Respaldos no encontrada"
+        _f7_click_btn(btn_respaldos)
+        time.sleep(0.45)
+
+        qa_backup_path = os.path.join(temp_dir, "cafeteria-qa-respaldo.db")
+        btn_make_bkp = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Hacer un respaldo ahora" in t), None)
+        assert btn_make_bkp is not None, "Botón 'Hacer un respaldo ahora' no encontrado"
+        user32.PostMessageW(btn_make_bkp, BM_CLICK, 0, 0)
+        _t6_accept_file_dialog("Guardar respaldo", qa_backup_path)
+        hwnd_bkp_ok = _t6_wait_window("Respaldo guardado", timeout_s=8.0)
+        assert hwnd_bkp_ok is not None, "Confirmación 'Respaldo guardado' no apareció"
+        btn_ok_msg = next((h for (h, t) in _f7_list_buttons(hwnd_bkp_ok) if "Aceptar" in t), None)
+        if not btn_ok_msg:
+            btn_ok_msg = next((h for (h, _t) in _f7_list_buttons(hwnd_bkp_ok)), None)
+        assert btn_ok_msg is not None, "Botón Aceptar en 'Respaldo guardado' no encontrado"
+        _f7_click_btn(btn_ok_msg)
+        time.sleep(0.4)
+        capture_window(hwnd_main, os.path.join(out_dir, "21_backups_panel.png"))
+
+        btn_rest_bkp = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Restaurar desde un respaldo" in t), None)
+        assert btn_rest_bkp is not None, "Botón 'Restaurar desde un respaldo' no encontrado"
+        user32.PostMessageW(btn_rest_bkp, BM_CLICK, 0, 0)
+        _t6_accept_file_dialog("Elegir archivo de respaldo", qa_backup_path)
+        hwnd_warn_r = _t6_wait_window("Revisar respaldo antes de restaurar", timeout_s=8.0)
+        assert hwnd_warn_r is not None, "Diálogo de advertencia de restauración no apareció"
+        time.sleep(0.35)
+        capture_window(hwnd_warn_r, os.path.join(out_dir, "22_backups_restore_warning.png"))
+        btn_cancel_r = next((h for (h, _c, t) in _t6_enum_children_all(hwnd_warn_r) if _c.lower() == "button" and "Cancelar" in t), None)
+        assert btn_cancel_r is not None, "Botón Cancelar en advertencia de restauración no encontrado"
+        _f7_click_btn(btn_cancel_r)
+        time.sleep(0.35)
 
         # CAPTURA 18 y 19: Teclado numérico integrado en POS (Touch) y Cobro (Touch)
         btn_pos_k = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Punto de Venta" in t), None)

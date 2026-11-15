@@ -195,6 +195,8 @@ if(wxWidgets_FOUND)
         src/frontend/toggle_switch.hpp
         src/frontend/backoffice_roles_panel.cpp
         src/frontend/backoffice_roles_panel.hpp
+        src/frontend/backoffice_backups_panel.cpp
+        src/frontend/backoffice_backups_panel.hpp
         src/frontend/backoffice_print_config_panel.cpp
         src/frontend/backoffice_print_config_panel.hpp
         src/frontend/backoffice_settings_panel.cpp

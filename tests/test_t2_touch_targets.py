@@ -309,11 +309,26 @@ def audit_combo_dropdown(pid, hwnd_main, hwnd_combo, combo_label, expected_items
 
     item_h_log = round(client_h_log / visible_rows, 1)
 
-    # Cerrar popup limpiamente con ESC
-    focus_h = user32.GetFocus() or target
-    user32.PostMessageW(focus_h, WM_KEYDOWN, VK_ESCAPE, 0)
-    user32.PostMessageW(focus_h, WM_KEYUP, VK_ESCAPE, 0)
-    time.sleep(0.2)
+    # Cerrar popup limpiamente con ESC y verificar que desaparece antes del siguiente desplegable
+    for _esc_try in range(2):
+        user32.PostMessageW(target, WM_KEYDOWN, VK_ESCAPE, 0)
+        user32.PostMessageW(target, WM_KEYUP, VK_ESCAPE, 0)
+        user32.PostMessageW(popup_hwnd, WM_KEYDOWN, VK_ESCAPE, 0)
+        user32.PostMessageW(popup_hwnd, WM_KEYUP, VK_ESCAPE, 0)
+        deadline_close = time.time() + 0.6
+        still_open = True
+        while time.time() < deadline_close:
+            if not user32.IsWindow(popup_hwnd) or not user32.IsWindowVisible(popup_hwnd):
+                still_open = False
+                break
+            time.sleep(0.05)
+        if not still_open:
+            break
+        # Fallback: clic nuevamente en el botón del combo para cerrarlo
+        user32.PostMessageW(hwnd_combo, WM_LBUTTONDOWN, 1, lp)
+        time.sleep(0.05)
+        user32.PostMessageW(hwnd_combo, WM_LBUTTONUP, 0, lp)
+        time.sleep(0.15)
 
     return {
         "label": combo_label,
@@ -589,6 +604,30 @@ def run_suite(label, exe_path, write_audit=False):
         pop_paper = audit_combo_dropdown(p2.pid, hwnd_main, cfg_combos[1], "Configuracion:PerfilPapel", 2, scale)
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Configuración", scale)
         record_audit("Configuración", items, overlaps, lrows, [pop_printer, pop_paper])
+
+        # --- 6b. Respaldos (inicial + teclado numerico en politica de retencion) ---
+        click_subnav(hwnd_main, "Respaldos")
+        time.sleep(0.4)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Respaldos", scale)
+        record_audit("Respaldos", items, overlaps, lrows)
+
+        res_edits = sorted(
+            [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda h: get_rect(h)[0]
+        )
+        assert res_edits, "Campos de regla de conservación no encontrados en Respaldos"
+        click_control_at(res_edits[0])
+        time.sleep(0.3)
+        items_rk, overlaps_rk, lrows_rk = audit_window_touch_targets(hwnd_main, "Respaldos (teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items_rk), "Teclado numérico no visible en Respaldos"
+        record_audit("Respaldos (teclado)", items_rk, overlaps_rk, lrows_rk)
+        btn_listo_r = next(
+            (h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Listo"),
+            None
+        )
+        if btn_listo_r is not None:
+            click_button(btn_listo_r)
+            time.sleep(0.2)
 
         # --- 7. Ingredientes (inicial/seleccionado + formulario nuevo) ---
         click_sidebar_section(hwnd_main, "Inventario")

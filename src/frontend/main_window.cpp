@@ -1,4 +1,5 @@
 #include "src/frontend/main_window.hpp"
+#include "src/frontend/backoffice_backups_panel.hpp"
 #include "src/frontend/backoffice_users_panel.hpp"
 #include "src/frontend/backoffice_roles_panel.hpp"
 #include "src/frontend/backoffice_print_config_panel.hpp"
@@ -288,6 +289,8 @@ void MainWindow::update_content_view() {
             }
         );
         current_view_ = settings_panel_;
+    } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Respaldos") {
+        current_view_ = new BackofficeBackupsPanel(content_container_, services_);
     } else {
         std::string section_label;
         switch (current_section_) {

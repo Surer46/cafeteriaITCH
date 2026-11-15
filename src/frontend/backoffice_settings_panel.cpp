@@ -109,7 +109,7 @@ void BackofficeSettingsPanel::setup_ui() {
     auto* fs_tile_sizer = new wxBoxSizer(wxVERTICAL);
 
     auto* fs_top_row = new wxBoxSizer(wxHORIZONTAL);
-    btn_fullscreen_ = new wxButton(card_fullscreen_, wxID_ANY, wxT("Pantalla completa"));
+    btn_fullscreen_ = new wxButton(card_fullscreen_, wxID_ANY, wxT("Usar pantalla completa"));
     btn_fullscreen_->SetMinSize(wxSize(-1, btn_h));
     btn_fullscreen_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
         on_toggle_fullscreen();
@@ -212,11 +212,11 @@ void BackofficeSettingsPanel::sync_fullscreen_selection() {
     }
     if (btn_fullscreen_) {
         if (full) {
-            btn_fullscreen_->SetLabel(wxT("Pantalla completa (Activa)"));
+            btn_fullscreen_->SetLabel(wxT("Salir de pantalla completa"));
             Theme::style_button_primary(btn_fullscreen_, btn_h_logical);
             Theme::setup_button_icon(btn_fullscreen_, "check_circle", wxSize(20, 20), Theme::ColorSurface);
         } else {
-            btn_fullscreen_->SetLabel(wxT("Pantalla completa"));
+            btn_fullscreen_->SetLabel(wxT("Usar pantalla completa"));
             Theme::style_button_secondary(btn_fullscreen_, btn_h_logical);
             btn_fullscreen_->SetBitmap(wxNullBitmap);
         }

@@ -467,16 +467,16 @@ def run_t5_suite(exe_path, build_label):
                 f"Falta texto explicativo de pantalla completa en Configuración: {texts_cfg}"
             )
             assert any("Desactivada (ventana normal)" in t for t in texts_cfg), "Falta estado inicial no dependiente de color"
-            btn_fs = next((h for (h, c, t) in vis_cfg if c.lower() == "button" and t == "Pantalla completa"), None)
-            assert btn_fs is not None, "Botón 'Pantalla completa' no encontrado en Configuración"
+            btn_fs = next((h for (h, c, t) in vis_cfg if c.lower() == "button" and t == "Usar pantalla completa"), None)
+            assert btn_fs is not None, "Botón 'Usar pantalla completa' no encontrado en Configuración"
 
             # Activar desde Configuración
             click_button(btn_fs, settle=0.4)
             wait_until(lambda: not has_caption(hwnd_main), desc="Config activar pantalla completa")
             assert_fullscreen_state(hwnd_main, cfg_fs_path, expect_full=True, context=f"{build_label} Botón Configuración")
             vis_cfg2 = [(h, c, t) for (h, c, t) in enum_children(hwnd_main) if user32.IsWindowVisible(h)]
-            assert any(c.lower() == "button" and t == "Pantalla completa (Activa)" for (_h, c, t) in vis_cfg2), (
-                "Botón no actualizó texto a 'Pantalla completa (Activa)'"
+            assert any(c.lower() == "button" and t == "Salir de pantalla completa" for (_h, c, t) in vis_cfg2), (
+                "Botón no actualizó texto a 'Salir de pantalla completa'"
             )
             assert any("Opción activa ahora" in t for (_h, c, t) in vis_cfg2 if t), "Falta estado textual activo"
 
@@ -490,22 +490,22 @@ def run_t5_suite(exe_path, build_label):
             assert_nav_bars_fit(hwnd_main, dpi, scale, is_touch=True, context=f"{build_label} Fullscreen Táctil")
 
             vis_cfg_t = [(h, c, t) for (h, c, t) in enum_children(hwnd_main) if user32.IsWindowVisible(h)]
-            btn_fs_t = next((h for (h, c, t) in vis_cfg_t if c.lower() == "button" and "Pantalla completa" in t), None)
-            assert btn_fs_t is not None, "Botón 'Pantalla completa' perdido en Táctil"
+            btn_fs_t = next((h for (h, c, t) in vis_cfg_t if c.lower() == "button" and "Salir de pantalla completa" in t), None)
+            assert btn_fs_t is not None, "Botón 'Salir de pantalla completa' perdido en Táctil"
             fs_h = get_rect(btn_fs_t)[3] - get_rect(btn_fs_t)[1]
-            assert fs_h >= min_px(48, scale), f"Botón Pantalla completa en Táctil < 48 log: {fs_h}px ({px_to_logical(fs_h, scale):.1f} log)"
+            assert fs_h >= min_px(48, scale), f"Botón pantalla completa en Táctil < 48 log: {fs_h}px ({px_to_logical(fs_h, scale):.1f} log)"
 
             # F11 en Configuración sale de pantalla completa y sincroniza el botón/estado
             send_vk(hwnd_main, VK_F11)
             wait_until(lambda: has_caption(hwnd_main), desc="F11 sincroniza botón Configuración")
             vis_cfg3 = [(h, c, t) for (h, c, t) in enum_children(hwnd_main) if user32.IsWindowVisible(h)]
-            assert any(c.lower() == "button" and t == "Pantalla completa" for (_h, c, t) in vis_cfg3), (
+            assert any(c.lower() == "button" and t == "Usar pantalla completa" for (_h, c, t) in vis_cfg3), (
                 f"F11 no sincronizó botón en Configuración: {[t for _, c, t in vis_cfg3 if c.lower() == 'button']}"
             )
             assert any("Desactivada (ventana normal)" in t for (_h, c, t) in vis_cfg3 if t), "F11 no sincronizó etiqueta de estado"
 
             # Volver a activar pantalla completa antes de cerrar para probar persistencia al reabrir
-            btn_fs_on2 = next(h for (h, c, t) in vis_cfg3 if c.lower() == "button" and t == "Pantalla completa")
+            btn_fs_on2 = next(h for (h, c, t) in vis_cfg3 if c.lower() == "button" and t == "Usar pantalla completa")
             click_button(btn_fs_on2, settle=0.4)
             assert_fullscreen_state(hwnd_main, cfg_fs_path, expect_full=True, context=f"{build_label} Antes de cerrar")
 

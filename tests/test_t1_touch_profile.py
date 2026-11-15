@@ -350,7 +350,17 @@ def run_suite(label, exe_path):
         btn_touch_opt = find_settings_profile_button(hwnd_main, "Táctil")
 
         post_click_button(btn_touch_opt)
-        time.sleep(0.6)
+        t_dead = time.time() + 5.0
+        touch_active_seen = False
+        while time.time() < t_dead:
+            for h, c, t in enum_children(hwnd_main):
+                if c.lower() == "button" and user32.IsWindowVisible(h) and "Táctil" in t and "Activa" in t:
+                    touch_active_seen = True
+                    break
+            if touch_active_seen:
+                break
+            time.sleep(0.1)
+        assert touch_active_seen, "Botón 'Táctil (Activa)' no apareció dentro de 5 s tras cambiar perfil"
 
         assert os.path.exists(cfg_path), "station_profile.cfg no fue escrito al elegir Táctil"
         with open(cfg_path, "r", encoding="utf-8") as f:
