@@ -91,6 +91,23 @@ NumericKeypad::NumericKeypad(wxWindow* parent, bool allow_decimal, bool compact)
     SetMinSize(sz);
     SetSize(sz);
     Bind(wxEVT_PAINT, &NumericKeypad::on_paint, this);
+    Bind(wxEVT_SHOW, [this](wxShowEvent& evt) {
+        evt.Skip();
+        if (evt.IsShown() && embedded_ && active_field_) {
+            wxTextCtrl* target = active_field_;
+            CallAfter([this, target]() {
+                if (embedded_ && active_field_ == target && active_field_->IsEnabled()
+                    && active_field_->IsShownOnScreen()) {
+                    if (!active_field_->HasFocus()) {
+                        suppress_reopen_on_focus_ = true;
+                        active_field_->SetFocus();
+                        suppress_reopen_on_focus_ = false;
+                    }
+                    select_all_target();
+                }
+            });
+        }
+    });
 }
 
 NumericKeypad::~NumericKeypad() {
@@ -270,10 +287,93 @@ void NumericKeypad::set_compact(bool compact) {
     apply_layout();
 }
 
+void NumericKeypad::select_all_target() {
+    if (!active_field_ || !active_field_->IsEnabled()) return;
+    const long len = static_cast<long>(active_field_->GetLastPosition());
+    active_field_->SetSelection(0, len);
+    last_caret_from_ = 0;
+    last_caret_to_ = len;
+}
+
+void NumericKeypad::schedule_select_all(wxTextCtrl* field) {
+    if (!field || !field->IsEnabled()) return;
+    const wxString snapshot = field->GetValue();
+    CallAfter([this, field, snapshot]() {
+        if (active_field_ == field && active_field_->IsEnabled()
+            && active_field_->IsShownOnScreen() && active_field_->GetValue() == snapshot) {
+            select_all_target();
+        }
+    });
+}
+
 void NumericKeypad::set_target_field(wxTextCtrl* field, bool hide_on_done) {
     active_field_ = field;
     active_hit_box_ = field ? field->GetParent() : nullptr;
     hide_on_done_ = hide_on_done;
+    if (!field) {
+        last_caret_from_ = 0;
+        last_caret_to_ = 0;
+        return;
+    }
+
+    if (embedded_ && bound_embedded_field_ != field) {
+        bound_embedded_field_ = field;
+        field->Bind(wxEVT_SET_FOCUS, [this, field](wxFocusEvent& evt) {
+            evt.Skip();
+            if (suppress_reopen_on_focus_) {
+                suppress_reopen_on_focus_ = false;
+                return;
+            }
+            if (active_field_ == field && field->IsEnabled() && field->IsShownOnScreen()) {
+                select_all_target();
+                schedule_select_all(field);
+            }
+        });
+        field->Bind(wxEVT_LEFT_DOWN, [this, field](wxMouseEvent& evt) {
+            evt.Skip();
+            if (active_field_ == field && field->IsEnabled() && field->IsShownOnScreen()) {
+                select_all_target();
+                schedule_select_all(field);
+            }
+        });
+        if (active_hit_box_ && active_hit_box_ != field) {
+            wxWindow* hb = active_hit_box_;
+            hb->Bind(wxEVT_LEFT_DOWN, [this, field](wxMouseEvent& evt) {
+                evt.Skip();
+                if (active_field_ == field && field->IsEnabled() && field->IsShownOnScreen()) {
+                    if (!field->HasFocus()) {
+                        suppress_reopen_on_focus_ = true;
+                        field->SetFocus();
+                        suppress_reopen_on_focus_ = false;
+                    }
+                    select_all_target();
+                    schedule_select_all(field);
+                }
+            });
+        }
+        field->Bind(wxEVT_KILL_FOCUS, [this, field](wxFocusEvent& evt) {
+            evt.Skip();
+            if (active_field_ == field) {
+                field->GetSelection(&last_caret_from_, &last_caret_to_);
+            }
+        });
+    }
+
+    select_all_target();
+    if (embedded_) {
+        wxTextCtrl* target = field;
+        CallAfter([this, target]() {
+            if (embedded_ && active_field_ == target && active_field_->IsEnabled()
+                && active_field_->IsShownOnScreen()) {
+                if (!active_field_->HasFocus()) {
+                    suppress_reopen_on_focus_ = true;
+                    active_field_->SetFocus();
+                    suppress_reopen_on_focus_ = false;
+                }
+                select_all_target();
+            }
+        });
+    }
 }
 
 const NumericKeypad::BoundField* NumericKeypad::find_binding(const wxTextCtrl* field) const {
@@ -355,7 +455,13 @@ void NumericKeypad::show_for_field(wxTextCtrl* field) {
 
     active_field_ = b->field;
     active_hit_box_ = b->hit_box;
-    field->GetSelection(&last_caret_from_, &last_caret_to_);
+    if (!active_field_->HasFocus()) {
+        suppress_reopen_on_focus_ = true;
+        active_field_->SetFocus();
+        suppress_reopen_on_focus_ = false;
+    }
+    select_all_target();
+    schedule_select_all(active_field_);
     if (!btn_done_) {
         create_controls();
         allow_decimal_ = b->allow_decimal;

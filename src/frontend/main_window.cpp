@@ -15,10 +15,38 @@ namespace app::frontend {
 MainWindow::MainWindow(const services::ServiceRegistry& services)
     : wxFrame(nullptr, wxID_ANY, wxT("Cafetería ITCH II"),
               wxDefaultPosition, wxDefaultSize),
-      services_(services) {
+      services_(services),
+      key_filter_(std::make_unique<FullscreenKeyFilter>(this)) {
     SetClientSize(FromDIP(wxSize(1200, 720)));
     SetMinClientSize(FromDIP(wxSize(960, 600)));
     setup_ui();
+}
+
+MainWindow::~MainWindow() {
+    if (key_filter_installed_ && key_filter_) {
+        wxEvtHandler::RemoveFilter(key_filter_.get());
+        key_filter_installed_ = false;
+    }
+}
+
+int MainWindow::FullscreenKeyFilter::FilterEvent(wxEvent& event) {
+    if (!owner_) return Event_Skip;
+    const wxEventType type = event.GetEventType();
+    if (type != wxEVT_CHAR_HOOK && type != wxEVT_KEY_DOWN) {
+        return Event_Skip;
+    }
+    auto* key_evt = wxDynamicCast(&event, wxKeyEvent);
+    wxWindow* ev_win = wxDynamicCast(event.GetEventObject(), wxWindow);
+    if (!key_evt || !ev_win) {
+        return Event_Skip;
+    }
+    if (ev_win != owner_ && wxGetTopLevelParent(ev_win) != owner_) {
+        return Event_Skip;
+    }
+    if (owner_->handle_fullscreen_key(*key_evt)) {
+        return Event_Processed;
+    }
+    return Event_Skip;
 }
 
 void MainWindow::update_header_status() {
@@ -94,6 +122,93 @@ void MainWindow::setup_ui() {
             current_view_->GetEventHandler()->ProcessEvent(e);
         }
     }, 1001);
+
+    saved_window_rect_ = GetRect();
+    if (!key_filter_installed_ && key_filter_) {
+        wxEvtHandler::AddFilter(key_filter_.get());
+        key_filter_installed_ = true;
+    }
+    if (Theme::get_fullscreen()) {
+        set_fullscreen_mode(true);
+    }
+}
+
+bool MainWindow::has_open_modal_dialog() const {
+#ifdef __WXMSW__
+    HWND hwnd = static_cast<HWND>(GetHWND());
+    if (hwnd && !::IsWindowEnabled(hwnd)) {
+        return true;
+    }
+#endif
+    for (wxWindow* w : wxTopLevelWindows) {
+        if (!w || w == this || !w->IsShown()) continue;
+        if (auto* dlg = wxDynamicCast(w, wxDialog)) {
+            if (dlg->IsModal()) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+bool MainWindow::handle_fullscreen_key(wxKeyEvent& evt) {
+    if (evt.GetKeyCode() == WXK_F11 && !evt.HasAnyModifiers() && !evt.IsAutoRepeat()) {
+        if (!has_open_modal_dialog()) {
+            toggle_fullscreen();
+        }
+        return true;
+    }
+    return false;
+}
+
+void MainWindow::toggle_fullscreen() {
+    set_fullscreen_mode(!IsFullScreen());
+}
+
+void MainWindow::set_fullscreen_mode(bool fullscreen) {
+    if (fullscreen == IsFullScreen()) {
+        Theme::save_station_fullscreen(fullscreen);
+        sync_fullscreen_ui();
+        return;
+    }
+
+    if (fullscreen) {
+        saved_was_maximized_ = IsMaximized();
+        if (!saved_was_maximized_) {
+            saved_window_rect_ = GetRect();
+        }
+        ShowFullScreen(true, wxFULLSCREEN_ALL);
+    } else {
+        ShowFullScreen(false);
+        if (saved_was_maximized_) {
+            if (!IsMaximized()) {
+                Maximize(true);
+            }
+        } else if (!saved_window_rect_.IsEmpty()) {
+            if (IsMaximized()) {
+                Maximize(false);
+            }
+            if (GetRect() != saved_window_rect_) {
+                SetSize(saved_window_rect_);
+            }
+        }
+    }
+
+    Theme::save_station_fullscreen(fullscreen);
+    Layout();
+    if (content_container_) {
+        content_container_->Layout();
+    }
+    if (current_view_) {
+        current_view_->Layout();
+    }
+    sync_fullscreen_ui();
+}
+
+void MainWindow::sync_fullscreen_ui() {
+    if (settings_panel_) {
+        settings_panel_->sync_fullscreen_selection();
+    }
 }
 
 void MainWindow::apply_profile_refresh() {
@@ -127,6 +242,7 @@ void MainWindow::on_subsection_changed(const std::string& sub_name) {
 }
 
 void MainWindow::update_content_view() {
+    settings_panel_ = nullptr;
     content_sizer_->Clear(true);
     current_view_ = nullptr;
 
@@ -161,9 +277,17 @@ void MainWindow::update_content_view() {
     } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Roles y permisos") {
         current_view_ = new BackofficeRolesPanel(content_container_, services_.account_service);
     } else if (current_section_ == SectionId::BackOffice && (current_subsection_ == "Configuración" || current_subsection_ == "Impresión")) {
-        current_view_ = new BackofficeSettingsPanel(content_container_, services_, [this](UiProfile) {
-            schedule_profile_refresh();
-        });
+        settings_panel_ = new BackofficeSettingsPanel(
+            content_container_,
+            services_,
+            [this](UiProfile) {
+                schedule_profile_refresh();
+            },
+            [this](bool full) {
+                set_fullscreen_mode(full);
+            }
+        );
+        current_view_ = settings_panel_;
     } else {
         std::string section_label;
         switch (current_section_) {

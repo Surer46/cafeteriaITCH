@@ -53,6 +53,12 @@ public:
     static void load_station_profile();
     static void save_station_profile(UiProfile profile);
 
+    // Persistencia de pantalla completa por puesto (T5)
+    static bool get_fullscreen();
+    static void set_fullscreen(bool fullscreen);
+    static void load_station_fullscreen();
+    static void save_station_fullscreen(bool fullscreen);
+
     // Métricas dinámicas por perfil (en píxeles escalados para `win` usando su FromDIP)
     static int get_spacing_xs(const wxWindow* win);
     static int get_spacing_sm(const wxWindow* win);
@@ -96,6 +102,7 @@ private:
     static std::string assets_dir_;
     static std::string data_dir_;
     static UiProfile current_profile_;
+    static bool current_fullscreen_;
     static bool fonts_registered_;
     static std::vector<std::string> registered_font_paths_;
 

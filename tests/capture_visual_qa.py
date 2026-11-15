@@ -645,6 +645,17 @@ def main():
         _f7_click_btn(btn_touch_cfg)
         time.sleep(0.6)
 
+        # CAPTURA 20: BackOffice > Configuración con opción Pantalla completa activada
+        btn_fs_cfg = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Pantalla completa"), None)
+        assert btn_fs_cfg is not None, "Botón 'Pantalla completa' no encontrado en Configuración"
+        _f7_click_btn(btn_fs_cfg)
+        time.sleep(0.55)
+        capture_window(hwnd_main, os.path.join(out_dir, "20_settings_fullscreen_option.png"))
+        btn_fs_off = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Pantalla completa (Activa)" in t), None)
+        assert btn_fs_off is not None, "Botón 'Pantalla completa (Activa)' no encontrado para restaurar ventana"
+        _f7_click_btn(btn_fs_off)
+        time.sleep(0.45)
+
         # CAPTURA 18 y 19: Teclado numérico integrado en POS (Touch) y Cobro (Touch)
         btn_pos_k = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Punto de Venta" in t), None)
         assert btn_pos_k is not None, "Botón Punto de Venta no encontrado para capturas 18-19"

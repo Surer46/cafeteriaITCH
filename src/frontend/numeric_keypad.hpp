@@ -40,6 +40,9 @@ public:
     /// En modo integrado, asigna el campo destino.
     void set_target_field(wxTextCtrl* field, bool hide_on_done = false);
 
+    /// Selecciona todo el texto del campo activo para comportamiento tipo calculadora.
+    void select_all_target();
+
     void set_allow_decimal(bool allow);
     void set_compact(bool compact);
     bool is_compact() const { return compact_; }
@@ -83,6 +86,7 @@ private:
     void on_key_clear();
     void on_key_done();
     void restore_target_focus(long new_pos = -1);
+    void schedule_select_all(wxTextCtrl* field);
     void install_filter();
     void uninstall_filter();
     void raise_over_siblings();
@@ -100,6 +104,7 @@ private:
     wxWindow* host_{nullptr};
     wxTextCtrl* active_field_{nullptr};
     wxWindow* active_hit_box_{nullptr};
+    wxTextCtrl* bound_embedded_field_{nullptr};
     long last_caret_from_{0};
     long last_caret_to_{0};
 

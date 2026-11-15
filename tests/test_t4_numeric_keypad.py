@@ -429,6 +429,12 @@ def run_t4_suite(exe_path, build_label):
                 VALUES ('prod-t4-01', 'T4-01', '750100009944', 'Cafe Americano T4', 'Bebidas', 1000, 0, 1, '2026-11-14 10:00:00')
                 """
             )
+            con.execute(
+                """
+                INSERT INTO products (id, sku, barcode, name, category, price_cents, is_prepared, is_active, created_at)
+                VALUES ('prod-t4-65', 'ZZ-65', '750100009965', 'ZZ Combo 65 T4', 'Alimentos', 6500, 0, 1, '2026-11-14 10:00:00')
+                """
+            )
             con.commit()
             con.close()
 
@@ -531,7 +537,11 @@ def run_t4_suite(exe_path, build_label):
             time.sleep(0.25)
             cash_edits = [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)]
             btn_open_shift = next(h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and "Abrir Turno" in t)
+            assert get_edit_text(cash_edits[0]) == "300.00", f"Fondo inicial esperado '300.00', obtenido '{get_edit_text(cash_edits[0])}'"
             real_mouse_click_ctrl(cash_edits[0], hwnd_main)
+            # Requisito T5-0 (calculadora): sin Limpiar, 300.00 + tocar 5, 0, 0 = 500
+            enter_number_via_keypad(hwnd_main, hwnd_main, ["5", "0", "0"])
+            assert get_edit_text(cash_edits[0]) == "500", f"Calculadora fondo inicial: esperado '500', obtenido '{get_edit_text(cash_edits[0])}'"
             enter_number_via_keypad(hwnd_main, hwnd_main, ["Limpiar", "2", "5", "0", ".", "0", "0"])
             # Pulsar Abrir Turno directamente (1 solo clic con teclado abierto - Ajuste c)
             real_mouse_click_ctrl(btn_open_shift, hwnd_main, settle=0.2)
@@ -556,6 +566,13 @@ def run_t4_suite(exe_path, build_label):
                 hwnd_main, hwnd_main, pos["txt_qty"], forbidden_pos,
                 scale, allow_decimal=False, context=f"{build_label} POS 1200x720"
             )
+            # Requisito T5-0 (calculadora): sin Limpiar, cantidad 1 + tocar 3 = 3; teclado fisico igual
+            enter_number_via_keypad(hwnd_main, hwnd_main, ["3"])
+            assert get_edit_text(pos["txt_qty"]) == "3", f"Calculadora POS sin Limpiar: esperado '3', obtenido '{get_edit_text(pos['txt_qty'])}'"
+            real_mouse_click_ctrl(pos["txt_qty"], hwnd_main)
+            post_key_char(hwnd_main, ord("7"))
+            post_key_char(hwnd_main, ord("8"))
+            assert get_edit_text(pos["txt_qty"]) == "78", f"Calculadora POS teclado fisico: esperado '78', obtenido '{get_edit_text(pos['txt_qty'])}'"
             enter_number_via_keypad(hwnd_main, hwnd_main, ["Limpiar", "3", "5", "Borrar"])
             assert get_edit_text(pos["txt_qty"]) == "3", f"Cantidad esperada '3', obtenida '{get_edit_text(pos['txt_qty'])}'"
             assert get_gui_focus(hwnd_main) == pos["txt_qty"], "Foco debe seguir en txt_qty_ tras pulsar botones"
@@ -732,6 +749,45 @@ def run_t4_suite(exe_path, build_label):
             real_mouse_click_ctrl(btn_chk_confirm, hwnd_chk, settle=0.25)
             dismiss_messagebox(proc.pid, "Venta Registrada", btn_text_pref="Cerrar")
             print(f"[OK] {build_label} Cobro verificado: tamaño estable {chk_w_log:.0f}x{chk_h_log:.0f}, cambio $25.50, Tarjeta/Transferencia sin cambio de rect.")
+
+            # Requisito T5-0 (calculadora en cobro): total $65.00 + tocar 7, 0 = 70 SIN pulsar Limpiar
+            pos_65 = locate_pos_controls(hwnd_main)
+            set_edit_text(pos_65["txt_search"], "ZZ-65")
+            btn_search_65 = next(
+                h for (h, c, t) in enum_children(hwnd_main)
+                if c.lower() == "button" and user32.IsWindowVisible(h) and t.strip() == "Buscar"
+            )
+            click_button(btn_search_65)
+            time.sleep(0.25)
+            click_button(pos_65["btn_add"])
+            time.sleep(0.3)
+            post_click_button(pos_65["btn_checkout"])
+            hwnd_chk65, _ = wait_for_window(proc.pid, "Cobro de Venta", timeout=6.0)
+            time.sleep(0.25)
+            chk65_edits = [h for (h, c, _t) in enum_children(hwnd_chk65) if c.lower() == "edit" and user32.IsWindowVisible(h)]
+            assert get_edit_text(chk65_edits[0]) == "$65.00", f"Cobro inicial esperado '$65.00', obtenido '{get_edit_text(chk65_edits[0])}'"
+            enter_number_via_keypad(hwnd_chk65, hwnd_chk65, ["7", "0"])
+            assert get_edit_text(chk65_edits[0]) == "70", f"Calculadora cobro $65.00 sin Limpiar: esperado '70', obtenido '{get_edit_text(chk65_edits[0])}'"
+            # Re-tocar campo -> selecciona todo -> teclado fisico reemplaza "70" por "85"
+            real_mouse_click_ctrl(chk65_edits[0], hwnd_chk65)
+            post_key_char(hwnd_chk65, ord("8"))
+            post_key_char(hwnd_chk65, ord("5"))
+            assert get_edit_text(chk65_edits[0]) == "85", f"Calculadora cobro teclado fisico: esperado '85', obtenido '{get_edit_text(chk65_edits[0])}'"
+            user32.PostMessageW(hwnd_chk65, WM_CLOSE, 0, 0)
+            time.sleep(0.25)
+            if pos_65["btn_cancel"]:
+                post_click_button(pos_65["btn_cancel"])
+                dismiss_messagebox(proc.pid, "Cancelar", btn_text_pref="Sí")
+            else:
+                pos_lists_65 = [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)]
+                if pos_lists_65:
+                    select_list_row(pos_lists_65[0], 0)
+                post_click_button(pos_65["btn_remove"])
+                time.sleep(0.25)
+            # Restaurar catalogo completo antes del resto del flujo
+            set_edit_text(pos_65["txt_search"], "")
+            click_button(btn_search_65)
+            time.sleep(0.2)
 
             # Restaurar 1200x720
             set_window_logical_size(hwnd_main, 1200, 720)
