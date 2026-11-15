@@ -43,7 +43,7 @@ ToggleSwitch::ToggleSwitch(
 }
 
 wxSize ToggleSwitch::DoGetBestSize() const {
-    const wxSize base = Theme::is_touch() ? wxSize(60, 32) : wxSize(44, 24);
+    const wxSize base = Theme::is_touch() ? wxSize(60, 48) : wxSize(44, 24);
     return FromDIP(base);
 }
 
@@ -157,18 +157,21 @@ void ToggleSwitch::on_paint(wxPaintEvent&) {
     }
 
     const double pad = static_cast<double>(FromDIP(2));
+    const double track_box_h = std::min(static_cast<double>(sz.GetHeight()),
+                                        static_cast<double>(FromDIP(Theme::is_touch() ? 32 : 24)));
+    const double top_offset = (static_cast<double>(sz.GetHeight()) - track_box_h) / 2.0;
     const double tx = pad;
-    const double ty = pad;
+    const double ty = top_offset + pad;
     const double tw = static_cast<double>(sz.GetWidth()) - 2.0 * pad;
-    const double th = static_cast<double>(sz.GetHeight()) - 2.0 * pad;
+    const double th = track_box_h - 2.0 * pad;
     const double track_radius = th / 2.0;
 
     if (enabled && HasFocus()) {
         const double focus_w = std::max(1.5, static_cast<double>(FromDIP(2)));
         const double fx = pad / 2.0;
-        const double fy = pad / 2.0;
+        const double fy = top_offset + pad / 2.0;
         const double fw = static_cast<double>(sz.GetWidth()) - pad;
-        const double fh = static_cast<double>(sz.GetHeight()) - pad;
+        const double fh = track_box_h - pad;
         gc->SetBrush(*wxTRANSPARENT_BRUSH);
         gc->SetPen(wxPen(Theme::ColorFocus, static_cast<int>(std::lround(focus_w))));
         gc->DrawRoundedRectangle(fx, fy, fw, fh, fh / 2.0);

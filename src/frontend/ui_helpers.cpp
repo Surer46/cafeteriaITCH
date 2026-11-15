@@ -80,7 +80,7 @@ void distribute_list_columns(wxListCtrl* list, const std::vector<ColumnSpec>& co
     const bool needs_vbar = client.GetHeight() > 0 && rows_h > client.GetHeight();
     const int budget = full_w - (needs_vbar ? sb_w : 0) - std::max(2, list->FromDIP(2));
 
-    const int hpad = list->FromDIP(20);
+    const int hpad = list->FromDIP(16);
     const std::size_t n = columns.size();
     std::vector<int> want(n), floor_w(n);
     for (std::size_t i = 0; i < n; ++i) {
@@ -129,11 +129,11 @@ void apply_touch_row_height(wxListCtrl* list) {
     list->AssignImageList(new wxImageList(1, list->FromDIP(42)), wxIMAGE_LIST_SMALL);
 }
 
-wxWindow* make_text_field(wxWindow* parent, wxTextCtrl*& out, int fixed_height, int fixed_width, const wxFont& font) {
+wxWindow* make_text_field(wxWindow* parent, wxTextCtrl*& out, int fixed_height, int fixed_width, const wxFont& font, long style) {
     const wxFont use_font = font.IsOk() ? font : Theme::get_font_body();
     const int phys_w = (fixed_width > 0) ? parent->FromDIP(fixed_width) : -1;
     if (fixed_height <= 0) {
-        out = new wxTextCtrl(parent, wxID_ANY);
+        out = new wxTextCtrl(parent, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, style);
         out->SetFont(use_font);
         if (phys_w > 0) {
             out->SetMinSize(wxSize(phys_w, -1));
@@ -146,7 +146,7 @@ wxWindow* make_text_field(wxWindow* parent, wxTextCtrl*& out, int fixed_height, 
     box->SetName(kFieldBoxName);
     box->SetBackgroundColour(Theme::ColorSurface);
 
-    out = new wxTextCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE);
+    out = new wxTextCtrl(box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE | style);
     out->SetFont(use_font);
     out->SetBackgroundColour(Theme::ColorSurface);
 
@@ -179,6 +179,24 @@ void set_text_field_enabled(wxTextCtrl* edit, bool enabled) {
     parent->SetBackgroundColour(bg);
     edit->Refresh();
     parent->Refresh();
+}
+
+TouchComboBox::TouchComboBox(wxWindow* parent, wxWindowID id, const wxSize& size, const wxArrayString& choices)
+    : wxOwnerDrawnComboBox(parent, id, wxEmptyString, wxDefaultPosition, size, choices, wxCB_READONLY) {}
+
+wxCoord TouchComboBox::OnMeasureItem(size_t) const {
+    return Theme::is_touch() ? FromDIP(44) : -1;
+}
+
+void TouchComboBox::OnDrawItem(wxDC& dc, const wxRect& rect, int item, int flags) const {
+    if (item == wxNOT_FOUND) return;
+    const wxString text = GetString(static_cast<unsigned int>(item));
+    wxCoord tw = 0;
+    wxCoord th = 0;
+    dc.GetTextExtent(text.empty() ? wxString(wxT("Ag")) : text, &tw, &th);
+    const int y = rect.y + std::max(0, (rect.height - th) / 2);
+    const int x = rect.x + ((flags & wxODCB_PAINTING_CONTROL) ? FromDIP(8) : FromDIP(10));
+    dc.DrawText(text, x, y);
 }
 
 } // namespace app::frontend::ui

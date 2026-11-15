@@ -1,6 +1,7 @@
 #include "src/frontend/backoffice_users_panel.hpp"
 #include "src/frontend/theme.hpp"
-#include <wx/filepicker.h>
+#include "src/frontend/ui_helpers.hpp"
+#include <wx/filedlg.h>
 #include <wx/mstream.h>
 #include <wx/image.h>
 #include <fstream>
@@ -16,60 +17,77 @@ public:
                    wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE),
           account_service_(std::move(account_service)) {
 
-        SetBackgroundColour(wxColour(250, 250, 252));
+        SetBackgroundColour(Theme::ColorBackground);
+        const bool touch = Theme::is_touch();
+        const int ctrl_h_logical = touch ? 48 : 34;
+        const int field_h_logical = touch ? 48 : 0;
+        const int btn_h_logical = touch ? 48 : 36;
+
         auto* root = new wxBoxSizer(wxVERTICAL);
 
         auto* title = new wxStaticText(this, wxID_ANY, wxT("Registrar Cuenta de Usuario"));
-        wxFont tf = title->GetFont();
-        tf.SetPointSize(11);
-        tf.SetWeight(wxFONTWEIGHT_BOLD);
-        title->SetFont(tf);
-        title->SetForegroundColour(wxColour(138, 3, 3));
+        title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
+        title->SetForegroundColour(Theme::ColorBrandDeep);
         root->Add(title, 0, wxALL | wxALIGN_CENTER, FromDIP(12));
 
-        auto* form = new wxFlexGridSizer(6, 2, FromDIP(10), FromDIP(12));
+        auto* form = new wxFlexGridSizer(6, 2, FromDIP(12), FromDIP(12));
         form->AddGrowableCol(1, 1);
 
-        form->Add(new wxStaticText(this, wxID_ANY, wxT("Nombre completo:")), 0, wxALIGN_CENTER_VERTICAL);
-        txt_display_name_ = new wxTextCtrl(this, wxID_ANY);
-        form->Add(txt_display_name_, 1, wxEXPAND);
+        auto add_label = [&](const wxString& text) {
+            auto* lbl = new wxStaticText(this, wxID_ANY, text);
+            lbl->SetFont(Theme::get_font_body());
+            lbl->SetForegroundColour(Theme::ColorText);
+            form->Add(lbl, 0, wxALIGN_CENTER_VERTICAL);
+        };
 
-        form->Add(new wxStaticText(this, wxID_ANY, wxT("Usuario:")), 0, wxALIGN_CENTER_VERTICAL);
-        txt_username_ = new wxTextCtrl(this, wxID_ANY);
-        form->Add(txt_username_, 1, wxEXPAND);
+        add_label(wxT("Nombre completo:"));
+        form->Add(ui::make_text_field(this, txt_display_name_, field_h_logical, -1, Theme::get_font_body()), 1, wxEXPAND);
 
-        form->Add(new wxStaticText(this, wxID_ANY, wxT("Correo electrónico:")), 0, wxALIGN_CENTER_VERTICAL);
-        txt_email_ = new wxTextCtrl(this, wxID_ANY);
-        form->Add(txt_email_, 1, wxEXPAND);
+        add_label(wxT("Usuario:"));
+        form->Add(ui::make_text_field(this, txt_username_, field_h_logical, -1, Theme::get_font_body()), 1, wxEXPAND);
 
-        form->Add(new wxStaticText(this, wxID_ANY, wxT("Contraseña:")), 0, wxALIGN_CENTER_VERTICAL);
-        txt_password_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxTE_PASSWORD);
-        form->Add(txt_password_, 1, wxEXPAND);
+        add_label(wxT("Correo electrónico:"));
+        form->Add(ui::make_text_field(this, txt_email_, field_h_logical, -1, Theme::get_font_body()), 1, wxEXPAND);
 
-        form->Add(new wxStaticText(this, wxID_ANY, wxT("Rol:")), 0, wxALIGN_CENTER_VERTICAL);
-        choice_role_ = new wxChoice(this, wxID_ANY);
+        add_label(wxT("Contraseña:"));
+        form->Add(ui::make_text_field(this, txt_password_, field_h_logical, -1, Theme::get_font_body(), wxTE_PASSWORD), 1, wxEXPAND);
+
+        add_label(wxT("Rol:"));
+        choice_role_ = new ui::TouchComboBox(this, wxID_ANY, FromDIP(wxSize(-1, ctrl_h_logical)));
+        choice_role_->SetFont(Theme::get_font_body());
+        choice_role_->SetMinSize(FromDIP(wxSize(-1, ctrl_h_logical)));
         populate_roles();
         form->Add(choice_role_, 1, wxEXPAND);
 
-        form->Add(new wxStaticText(this, wxID_ANY, wxT("Avatar (opcional):")), 0, wxALIGN_CENTER_VERTICAL);
-        file_picker_avatar_ = new wxFilePickerCtrl(
-            this, wxID_ANY, wxEmptyString, wxT("Seleccionar imagen de avatar"),
-            wxT("Imágenes (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp"),
-            wxDefaultPosition, wxDefaultSize, wxFLP_OPEN | wxFLP_FILE_MUST_EXIST
-        );
-        form->Add(file_picker_avatar_, 1, wxEXPAND);
+        add_label(wxT("Foto de perfil (opcional):"));
+        auto* avatar_row = new wxBoxSizer(wxHORIZONTAL);
+        auto* btn_choose_avatar = new wxButton(this, wxID_ANY, wxT("Elegir foto..."));
+        Theme::style_button_secondary(btn_choose_avatar, btn_h_logical);
+        Theme::ensure_button_min_size(btn_choose_avatar, 140, btn_h_logical);
+        lbl_avatar_file_ = new wxStaticText(this, wxID_ANY, wxT("Ningún archivo elegido"),
+                                            wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_MIDDLE);
+        lbl_avatar_file_->SetFont(Theme::get_font_small());
+        lbl_avatar_file_->SetForegroundColour(Theme::ColorTextSecondary);
+        btn_choose_avatar->Bind(wxEVT_BUTTON, &CreateUserDialog::on_choose_avatar, this);
+        avatar_row->Add(btn_choose_avatar, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+        avatar_row->Add(lbl_avatar_file_, 1, wxALIGN_CENTER_VERTICAL);
+        form->Add(avatar_row, 1, wxEXPAND);
 
         root->Add(form, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
 
         lbl_error_ = new wxStaticText(this, wxID_ANY, wxEmptyString);
-        lbl_error_->SetForegroundColour(wxColour(200, 0, 0));
+        lbl_error_->SetFont(Theme::get_font_small());
+        lbl_error_->SetForegroundColour(Theme::ColorError);
         root->Add(lbl_error_, 0, wxALL | wxALIGN_CENTER, FromDIP(8));
 
         auto* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
         auto* btn_cancel = new wxButton(this, wxID_CANCEL, wxT("Cancelar"));
+        Theme::style_button_secondary(btn_cancel, btn_h_logical);
+        Theme::ensure_button_min_size(btn_cancel, 110, btn_h_logical);
+
         auto* btn_save = new wxButton(this, wxID_OK, wxT("Guardar Usuario"));
-        btn_save->SetBackgroundColour(wxColour(180, 20, 30));
-        btn_save->SetForegroundColour(wxColour(255, 255, 255));
+        Theme::style_button_primary(btn_save, btn_h_logical);
+        Theme::ensure_button_min_size(btn_save, 160, btn_h_logical);
 
         btn_save->Bind(wxEVT_BUTTON, &CreateUserDialog::on_save, this);
 
@@ -77,8 +95,8 @@ public:
         btn_sizer->Add(btn_save, 0);
         root->Add(btn_sizer, 0, wxALIGN_RIGHT | wxALL, FromDIP(16));
 
-        SetSizer(root);
-        SetSize(FromDIP(wxSize(480, 520)));
+        root->SetMinSize(FromDIP(wxSize(touch ? 560 : 480, -1)));
+        SetSizerAndFit(root);
         Centre();
     }
 
@@ -130,7 +148,7 @@ private:
         dto.raw_password = password;
         dto.role_id = role_id;
 
-        wxString avatar_path = file_picker_avatar_->GetPath();
+        wxString avatar_path = avatar_path_;
         if (!avatar_path.empty()) {
             std::ifstream file(avatar_path.ToStdString(), std::ios::binary);
             if (file.is_open()) {
@@ -152,13 +170,27 @@ private:
         EndModal(wxID_OK);
     }
 
+    void on_choose_avatar(wxCommandEvent&) {
+        wxFileDialog dlg(
+            this, wxT("Seleccionar foto de perfil"), wxEmptyString, wxEmptyString,
+            wxT("Imágenes (*.png;*.jpg;*.jpeg;*.webp)|*.png;*.jpg;*.jpeg;*.webp"),
+            wxFD_OPEN | wxFD_FILE_MUST_EXIST
+        );
+        if (dlg.ShowModal() == wxID_OK) {
+            avatar_path_ = dlg.GetPath();
+            lbl_avatar_file_->SetLabel(dlg.GetFilename());
+            Layout();
+        }
+    }
+
     std::shared_ptr<contracts::IAccountService> account_service_;
     wxTextCtrl* txt_display_name_{nullptr};
     wxTextCtrl* txt_username_{nullptr};
     wxTextCtrl* txt_email_{nullptr};
     wxTextCtrl* txt_password_{nullptr};
-    wxChoice* choice_role_{nullptr};
-    wxFilePickerCtrl* file_picker_avatar_{nullptr};
+    ui::TouchComboBox* choice_role_{nullptr};
+    wxStaticText* lbl_avatar_file_{nullptr};
+    wxString avatar_path_;
     wxStaticText* lbl_error_{nullptr};
 };
 
@@ -293,6 +325,9 @@ void BackofficeUsersPanel::setup_ui() {
     // Tabla de usuarios
     list_ctrl_ = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
     list_ctrl_->SetFont(Theme::get_font_body());
+    if (Theme::is_touch()) {
+        ui::apply_touch_row_height(list_ctrl_);
+    }
     list_ctrl_->InsertColumn(0, wxT("Nombre Completo"), wxLIST_FORMAT_LEFT, FromDIP(200));
     list_ctrl_->InsertColumn(1, wxT("Usuario"), wxLIST_FORMAT_LEFT, FromDIP(130));
     list_ctrl_->InsertColumn(2, wxT("Correo Electrónico"), wxLIST_FORMAT_LEFT, FromDIP(220));

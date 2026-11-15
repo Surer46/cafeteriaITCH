@@ -2,6 +2,7 @@
 #define APP_FRONTEND_CHECKOUT_DIALOG_HPP
 
 #include <wx/wx.h>
+#include <wx/odcombo.h>
 #include <string>
 #include "app/contracts/sale_service.hpp"
 #include "app/contracts/money.hpp"
@@ -32,7 +33,7 @@ private:
     contracts::Money change_{contracts::Money::zero()};
     bool cash_is_valid_{false};
 
-    wxChoice* choice_method_{nullptr};
+    wxOwnerDrawnComboBox* choice_method_{nullptr};
     wxTextCtrl* txt_cash_received_{nullptr};
     wxStaticText* lbl_change_val_{nullptr};
     wxStaticText* lbl_total_val_{nullptr};

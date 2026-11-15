@@ -259,7 +259,7 @@ void InventoryIngredientsPanel::build_ui() {
     left_sizer->Add(list_, 1, wxEXPAND | wxALL, FromDIP(4));
 
     left_card_->SetSizer(left_sizer);
-    body->Add(left_card_, 14, wxEXPAND | wxRIGHT, FromDIP(6));
+    body->Add(left_card_, 16, wxEXPAND | wxRIGHT, FromDIP(6));
 
     // 3. Tarjeta de detalle derecha
     right_card_ = new CardPanel(this);
@@ -697,7 +697,7 @@ void InventoryIngredientsPanel::update_list_column_widths() {
         }
     }
 
-    const int pad = 12;
+    const int pad = 10;
     std::vector<ui::ColumnSpec> specs;
     specs.push_back({wxString::FromUTF8("Nombre"), max_name, 0, pad, 0});
     specs.push_back({wxString::FromUTF8("Existencia"), max_stock, max_stock, pad, 0});

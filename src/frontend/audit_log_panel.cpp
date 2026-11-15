@@ -6,32 +6,6 @@
 
 namespace app::frontend {
 
-namespace {
-
-class AuditComboBox : public wxOwnerDrawnComboBox {
-public:
-    AuditComboBox(wxWindow* parent, wxWindowID id, const wxSize& size)
-        : wxOwnerDrawnComboBox(parent, id, wxEmptyString, wxDefaultPosition, size, 0, nullptr, wxCB_READONLY) {}
-
-protected:
-    wxCoord OnMeasureItem(size_t) const override {
-        return Theme::is_touch() ? FromDIP(44) : -1;
-    }
-
-    void OnDrawItem(wxDC& dc, const wxRect& rect, int item, int flags) const override {
-        if (item == wxNOT_FOUND) return;
-        const wxString text = GetString(static_cast<unsigned int>(item));
-        wxCoord tw = 0;
-        wxCoord th = 0;
-        dc.GetTextExtent(text.empty() ? wxString(wxT("Ag")) : text, &tw, &th);
-        const int y = rect.y + std::max(0, (rect.height - th) / 2);
-        const int x = rect.x + ((flags & wxODCB_PAINTING_CONTROL) ? FromDIP(8) : FromDIP(10));
-        dc.DrawText(text, x, y);
-    }
-};
-
-} // namespace
-
 AuditLogPanel::AuditLogPanel(wxWindow* parent, std::shared_ptr<contracts::IAccountService> account_service)
     : wxPanel(parent, wxID_ANY),
       account_service_(std::move(account_service)) {
@@ -90,7 +64,7 @@ void AuditLogPanel::setup_ui() {
     lbl_ev->SetForegroundColour(Theme::ColorText);
     row1_sizer->Add(lbl_ev, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 
-    choice_event_type_ = new AuditComboBox(main_card_, wxID_ANY, wxSize(FromDIP(160), ctrl_h));
+    choice_event_type_ = new ui::TouchComboBox(main_card_, wxID_ANY, wxSize(FromDIP(160), ctrl_h));
     choice_event_type_->SetFont(Theme::get_font_body());
     choice_event_type_->Append(wxT("Todos"));
     choice_event_type_->SetSelection(0);

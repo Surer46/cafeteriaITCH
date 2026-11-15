@@ -5,6 +5,7 @@
 #include <vector>
 #include <wx/wx.h>
 #include <wx/listctrl.h>
+#include <wx/odcombo.h>
 
 // Utilidades de interfaz compartidas por los paneles: reparto de anchos de columnas en listas
 // y campos de texto con el texto centrado verticalmente. Solo dependen de wxWidgets.
@@ -30,7 +31,7 @@ struct ColumnSpec {
 };
 
 // Reparte los anchos de columna de la lista:
-//  - el encabezado (fuente real del encabezado + 20 px escalados) cabe completo en TODAS las columnas;
+//  - el encabezado (fuente real del encabezado + 16 px escalados) cabe completo en TODAS las columnas;
 //  - el ancho útil excluye la barra vertical, tanto si ya está visible como si va a aparecer con las filas
 //    actuales, de modo que nunca surge barra horizontal;
 //  - la columna flexible toma todo el espacio restante (su contenido puede ir con puntos suspensivos);
@@ -49,10 +50,22 @@ void apply_touch_row_height(wxListCtrl* list);
 //    fixed_width < 0 deja el ancho libre. Un clic en el contenedor da foco al campo.
 // Habilite/deshabilite siempre con set_text_field_enabled para que el contenedor siga al campo.
 wxWindow* make_text_field(wxWindow* parent, wxTextCtrl*& out, int fixed_height, int fixed_width = -1,
-                          const wxFont& font = wxNullFont);
+                          const wxFont& font = wxNullFont, long style = 0);
 
 // Habilita o deshabilita el campo; el fondo del contenedor (si lo hay) sigue al del campo.
 void set_text_field_enabled(wxTextCtrl* edit, bool enabled);
+
+// Lista desplegable de solo lectura con filas táctiles en perfil Touch.
+class TouchComboBox : public wxOwnerDrawnComboBox {
+public:
+    TouchComboBox(wxWindow* parent, wxWindowID id = wxID_ANY,
+                  const wxSize& size = wxDefaultSize,
+                  const wxArrayString& choices = wxArrayString());
+
+protected:
+    wxCoord OnMeasureItem(size_t item) const override;
+    void OnDrawItem(wxDC& dc, const wxRect& rect, int item, int flags) const override;
+};
 
 } // namespace app::frontend::ui
 

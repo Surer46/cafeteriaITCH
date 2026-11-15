@@ -1,5 +1,6 @@
 #include "src/frontend/checkout_dialog.hpp"
 #include "src/frontend/theme.hpp"
+#include "src/frontend/ui_helpers.hpp"
 #include <wx/statline.h>
 #include <cctype>
 
@@ -55,8 +56,10 @@ CheckoutDialog::CheckoutDialog(
     methods.Add(wxT("Efectivo"));
     methods.Add(wxT("Tarjeta"));
     methods.Add(wxT("Transferencia"));
-    choice_method_ = new wxChoice(payment_card, wxID_ANY, wxDefaultPosition, wxDefaultSize, methods);
+    const int combo_h_logical = Theme::is_touch() ? 48 : 34;
+    choice_method_ = new ui::TouchComboBox(payment_card, wxID_ANY, FromDIP(wxSize(-1, combo_h_logical)), methods);
     choice_method_->SetFont(Theme::get_font_body());
+    choice_method_->SetMinSize(FromDIP(wxSize(-1, combo_h_logical)));
     choice_method_->SetSelection(0);
     pay_card_sizer->Add(choice_method_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
 
@@ -68,10 +71,10 @@ CheckoutDialog::CheckoutDialog(
     lbl_received->SetForegroundColour(Theme::ColorTextSecondary);
     cash_details_sizer_->Add(lbl_received, 0, wxBOTTOM, FromDIP(4));
 
-    txt_cash_received_ = new wxTextCtrl(payment_card, wxID_ANY, wxString::FromUTF8(total_.to_string().c_str()),
-                                        wxDefaultPosition, FromDIP(wxSize(-1, Theme::is_touch() ? 44 : 36)));
-    txt_cash_received_->SetFont(Theme::get_font_body());
-    cash_details_sizer_->Add(txt_cash_received_, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
+    auto* cash_field = ui::make_text_field(
+        payment_card, txt_cash_received_, Theme::is_touch() ? 48 : 36, -1, Theme::get_font_body());
+    txt_cash_received_->ChangeValue(wxString::FromUTF8(total_.to_string().c_str()));
+    cash_details_sizer_->Add(cash_field, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
 
     auto* change_row = new wxBoxSizer(wxHORIZONTAL);
     auto* lbl_change_caption = new wxStaticText(payment_card, wxID_ANY, wxT("Cambio a devolver:"));
@@ -109,12 +112,12 @@ CheckoutDialog::CheckoutDialog(
     btn_sizer->Add(btn_confirm_, 1);
     main_sizer->Add(btn_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
-    SetSizer(main_sizer);
-    SetSize(FromDIP(wxSize(440, 520)));
+    main_sizer->SetMinSize(FromDIP(wxSize(Theme::is_touch() ? 460 : 440, Theme::is_touch() ? 550 : 520)));
+    SetSizerAndFit(main_sizer);
     Center();
 
     // Eventos
-    choice_method_->Bind(wxEVT_CHOICE, &CheckoutDialog::on_payment_method_changed, this);
+    choice_method_->Bind(wxEVT_COMBOBOX, &CheckoutDialog::on_payment_method_changed, this);
     txt_cash_received_->Bind(wxEVT_TEXT, &CheckoutDialog::on_cash_received_text_changed, this);
     btn_confirm_->Bind(wxEVT_BUTTON, &CheckoutDialog::on_confirm, this);
 

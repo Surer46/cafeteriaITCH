@@ -1,5 +1,6 @@
 #include "src/frontend/backoffice_print_config_panel.hpp"
 #include "src/frontend/theme.hpp"
+#include "src/frontend/ui_helpers.hpp"
 #include "app/contracts/sale_service.hpp"
 
 #ifdef _WIN32
@@ -14,28 +15,6 @@
 namespace app::frontend {
 
 namespace {
-
-class PrintComboBox : public wxOwnerDrawnComboBox {
-public:
-    PrintComboBox(wxWindow* parent, wxWindowID id, const wxSize& size, const wxArrayString& choices)
-        : wxOwnerDrawnComboBox(parent, id, wxEmptyString, wxDefaultPosition, size, choices, wxCB_READONLY) {}
-
-protected:
-    wxCoord OnMeasureItem(size_t) const override {
-        return Theme::is_touch() ? FromDIP(44) : -1;
-    }
-
-    void OnDrawItem(wxDC& dc, const wxRect& rect, int item, int flags) const override {
-        if (item == wxNOT_FOUND) return;
-        const wxString text = GetString(static_cast<unsigned int>(item));
-        wxCoord tw = 0;
-        wxCoord th = 0;
-        dc.GetTextExtent(text.empty() ? wxString(wxT("Ag")) : text, &tw, &th);
-        const int y = rect.y + std::max(0, (rect.height - th) / 2);
-        const int x = rect.x + ((flags & wxODCB_PAINTING_CONTROL) ? FromDIP(8) : FromDIP(10));
-        dc.DrawText(text, x, y);
-    }
-};
 
 /// Obtiene la lista de impresoras instaladas (UTF-8). Vacía si no hay ninguna.
 std::vector<std::string> enumerate_installed_printers() {
@@ -126,7 +105,7 @@ void BackofficePrintConfigPanel::setup_ui() {
     }
     const int combo_w = FromDIP(380);
     const int combo_h = FromDIP(Theme::is_touch() ? 48 : 36);
-    choice_printer_ = new PrintComboBox(card, wxID_ANY, wxSize(combo_w, combo_h), printer_choices);
+    choice_printer_ = new ui::TouchComboBox(card, wxID_ANY, wxSize(combo_w, combo_h), printer_choices);
     choice_printer_->SetFont(Theme::get_font_body());
     choice_printer_->SetMinSize(wxSize(combo_w, combo_h));
     choice_printer_->SetSelection(0);
@@ -148,7 +127,7 @@ void BackofficePrintConfigPanel::setup_ui() {
     wxArrayString profiles;
     profiles.Add(wxT("Perfil 80 mm (Estándar de mostrador — ~42 columnas nominales)"));
     profiles.Add(wxT("Perfil 55 mm (Térmica compacta — ~28 columnas nominales)"));
-    choice_profile_ = new PrintComboBox(card, wxID_ANY, wxSize(combo_w, combo_h), profiles);
+    choice_profile_ = new ui::TouchComboBox(card, wxID_ANY, wxSize(combo_w, combo_h), profiles);
     choice_profile_->SetFont(Theme::get_font_body());
     choice_profile_->SetMinSize(wxSize(combo_w, combo_h));
     choice_profile_->SetSelection(0);

@@ -1,6 +1,7 @@
 #include "src/frontend/ticket_history_dialog.hpp"
 #include "src/frontend/ticket_print_dialog.hpp"
 #include "src/frontend/theme.hpp"
+#include "src/frontend/ui_helpers.hpp"
 #include <wx/statline.h>
 
 namespace app::frontend {
@@ -30,10 +31,10 @@ void TicketHistoryDialog::setup_ui() {
     lbl_prompt->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_prompt->SetForegroundColour(Theme::ColorTextSecondary);
 
-    const int search_h_logical = Theme::is_touch() ? 44 : 34;
+    const int search_h_logical = Theme::is_touch() ? 48 : 34;
 
-    txt_search_folio_ = new wxTextCtrl(this, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(220, search_h_logical)), wxTE_PROCESS_ENTER);
-    txt_search_folio_->SetFont(Theme::get_font_body());
+    auto* search_field = ui::make_text_field(
+        this, txt_search_folio_, search_h_logical, 220, Theme::get_font_body(), wxTE_PROCESS_ENTER);
 
     btn_search_ = new wxButton(this, wxID_ANY, wxT("Buscar"));
     Theme::style_button_secondary(btn_search_, search_h_logical);
@@ -41,13 +42,16 @@ void TicketHistoryDialog::setup_ui() {
     Theme::ensure_button_min_size(btn_search_, 100, search_h_logical);
 
     search_row->Add(lbl_prompt, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
-    search_row->Add(txt_search_folio_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+    search_row->Add(search_field, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
     search_row->Add(btn_search_, 0, wxALIGN_CENTER_VERTICAL);
     main_sizer->Add(search_row, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
 
     // Tabla de Tickets
     list_tickets_ = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
     list_tickets_->SetFont(Theme::get_font_body());
+    if (Theme::is_touch()) {
+        ui::apply_touch_row_height(list_tickets_);
+    }
     list_tickets_->InsertColumn(0, wxT("Folio"), wxLIST_FORMAT_LEFT, FromDIP(140));
     list_tickets_->InsertColumn(1, wxT("Fecha y Hora"), wxLIST_FORMAT_LEFT, FromDIP(160));
     list_tickets_->InsertColumn(2, wxT("Total"), wxLIST_FORMAT_RIGHT, FromDIP(100));
