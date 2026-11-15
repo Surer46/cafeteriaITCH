@@ -101,7 +101,7 @@ Estado revisado el 2026-09-29: `[x]` marca avances concretos construidos/compila
 - [ ] Construir Roles y permisos; el servicio ya existe pero su pantalla sigue preparatoria.
 - [ ] Gestión de cuentas por Dueño: crear con nombre de usuario, nombre visible, correo obligatorio, contraseña con confirmación y rol asignado; editar, desactivar, restablecer acceso y consultar estado. Ofrecer avatar opcional con vista previa, sustitución, eliminación e iniciales como alternativa; cargar miniaturas solo cuando se muestran. Gestionar roles configurables con permisos por acción/módulo y vista previa del efecto antes de guardar.
 - [ ] Configuración operativa del negocio bajo BackOffice, sin mezclarla con la configuración técnica del destino remoto.
-- [ ] Pantalla de respaldos para Dueño: activar/desactivar remoto, iniciar copia manual, ver progreso, fecha, estado y error; restauración guiada con advertencia.
+- [ ] Pantalla de respaldos para Dueño: activar/desactivar remoto, iniciar copia manual, ver progreso, fecha, estado y error; restauración guiada con advertencia. **Local en T6 (2026-11-14)**: estado, respaldo manual, restauración guiada y limpieza; lista, USB y automático en un bloque posterior tras B12; remoto aplazado.
 - [ ] Pantalla **BackOffice → Servidor de respaldos** para Desarrollador: destino remoto, credenciales/certificados, retención y prueba de conexión, accesible solo tras autenticación técnica gestionada por servicio.
 - **Terminado:** el Dueño administra la operación de copias pero no puede modificar destino ni secretos técnicos; las fallas remotas no bloquean el POS.
 
