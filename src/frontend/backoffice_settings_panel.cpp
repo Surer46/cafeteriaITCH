@@ -7,10 +7,12 @@ namespace app::frontend {
 BackofficeSettingsPanel::BackofficeSettingsPanel(
     wxWindow* parent,
     services::ServiceRegistry services,
-    OnProfileSelectedCallback on_profile_changed
+    OnProfileSelectedCallback on_profile_changed,
+    OnFullscreenChangedCallback on_fullscreen_changed
 ) : wxPanel(parent, wxID_ANY),
     services_(std::move(services)),
-    on_profile_changed_(std::move(on_profile_changed)) {
+    on_profile_changed_(std::move(on_profile_changed)),
+    on_fullscreen_changed_(std::move(on_fullscreen_changed)) {
     SetBackgroundColour(Theme::ColorBackground);
     setup_ui();
     sync_profile_selection();
@@ -102,6 +104,35 @@ void BackofficeSettingsPanel::setup_ui() {
 
     card_sizer->Add(options_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
 
+    // Opción "Pantalla completa" debajo de Estándar / Táctil
+    card_fullscreen_ = new CardPanel(screen_card);
+    auto* fs_tile_sizer = new wxBoxSizer(wxVERTICAL);
+
+    auto* fs_top_row = new wxBoxSizer(wxHORIZONTAL);
+    btn_fullscreen_ = new wxButton(card_fullscreen_, wxID_ANY, wxT("Pantalla completa"));
+    btn_fullscreen_->SetMinSize(wxSize(-1, btn_h));
+    btn_fullscreen_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) {
+        on_toggle_fullscreen();
+    });
+    fs_top_row->Add(btn_fullscreen_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(14));
+
+    lbl_fullscreen_status_ = new wxStaticText(card_fullscreen_, wxID_ANY, wxEmptyString);
+    lbl_fullscreen_status_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    fs_top_row->Add(lbl_fullscreen_status_, 1, wxALIGN_CENTER_VERTICAL);
+    fs_tile_sizer->Add(fs_top_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
+
+    lbl_fullscreen_desc_ = new wxStaticText(
+        card_fullscreen_,
+        wxID_ANY,
+        wxT("Ocupa toda la pantalla y oculta la barra de Windows. También con la tecla F11.")
+    );
+    lbl_fullscreen_desc_->SetFont(Theme::get_font_body());
+    lbl_fullscreen_desc_->SetForegroundColour(Theme::ColorTextSecondary);
+    fs_tile_sizer->Add(lbl_fullscreen_desc_, 0, wxALL | wxEXPAND, FromDIP(14));
+
+    card_fullscreen_->SetSizer(fs_tile_sizer);
+    card_sizer->Add(card_fullscreen_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
+
     lbl_note_ = new wxStaticText(
         screen_card,
         wxID_ANY,
@@ -167,6 +198,35 @@ void BackofficeSettingsPanel::sync_profile_selection() {
     apply_tile(card_standard_, btn_standard_, lbl_standard_status_, wxT("Estándar"), "manage_accounts", !touch);
     apply_tile(card_touch_, btn_touch_, lbl_touch_status_, wxT("Táctil"), "touch_app", touch);
 
+    sync_fullscreen_selection();
+}
+
+void BackofficeSettingsPanel::sync_fullscreen_selection() {
+    const bool full = Theme::get_fullscreen();
+    const int btn_h_logical = Theme::is_touch() ? 56 : 48;
+
+    if (card_fullscreen_) {
+        card_fullscreen_->set_card_background(full ? Theme::ColorBrandSoft : Theme::ColorSurfaceSubtle);
+        card_fullscreen_->set_card_border(full ? Theme::ColorBrand : Theme::ColorBorder, full ? 2 : 1);
+        card_fullscreen_->Refresh();
+    }
+    if (btn_fullscreen_) {
+        if (full) {
+            btn_fullscreen_->SetLabel(wxT("Pantalla completa (Activa)"));
+            Theme::style_button_primary(btn_fullscreen_, btn_h_logical);
+            Theme::setup_button_icon(btn_fullscreen_, "check_circle", wxSize(20, 20), Theme::ColorSurface);
+        } else {
+            btn_fullscreen_->SetLabel(wxT("Pantalla completa"));
+            Theme::style_button_secondary(btn_fullscreen_, btn_h_logical);
+            btn_fullscreen_->SetBitmap(wxNullBitmap);
+        }
+        Theme::ensure_button_min_size(btn_fullscreen_, 240, btn_h_logical);
+    }
+    if (lbl_fullscreen_status_) {
+        lbl_fullscreen_status_->SetLabel(full ? wxT("Opción activa ahora") : wxT("Desactivada (ventana normal)"));
+        lbl_fullscreen_status_->SetForegroundColour(full ? Theme::ColorBrandDeep : Theme::ColorTextSecondary);
+    }
+
     update_scroll_layout();
 }
 
@@ -196,6 +256,12 @@ void BackofficeSettingsPanel::update_scroll_layout() {
             lbl_touch_desc_->SetLabel(wxT("Para pantallas que se tocan con el dedo."));
             lbl_touch_desc_->Wrap(tile_wrap);
         }
+        if (lbl_fullscreen_desc_) {
+            lbl_fullscreen_desc_->SetLabel(
+                wxT("Ocupa toda la pantalla y oculta la barra de Windows. También con la tecla F11.")
+            );
+            lbl_fullscreen_desc_->Wrap(std::max(FromDIP(160), card_wrap - FromDIP(28)));
+        }
     }
 
     const wxSize min_sz = scroll_sizer_->GetMinSize();
@@ -214,6 +280,16 @@ void BackofficeSettingsPanel::on_select_profile(UiProfile profile) {
     sync_profile_selection();
     if (on_profile_changed_) {
         on_profile_changed_(profile);
+    }
+}
+
+void BackofficeSettingsPanel::on_toggle_fullscreen() {
+    const bool next_state = !Theme::get_fullscreen();
+    if (on_fullscreen_changed_) {
+        on_fullscreen_changed_(next_state);
+    } else {
+        Theme::save_station_fullscreen(next_state);
+        sync_fullscreen_selection();
     }
 }
 

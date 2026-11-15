@@ -61,6 +61,7 @@ from gui_dpi import (
     set_edit_text,
     click_button,
     post_click_button,
+    click_control_at,
     select_list_row,
     get_list_item_rect,
     rects_overlap,
@@ -481,11 +482,34 @@ def run_suite(label, exe_path, write_audit=False):
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Venta (con linea)", scale)
         record_audit("Venta (con linea)", items, overlaps, lrows)
 
+        # --- 1c. Venta (teclado numérico visible) ---
+        pos_edits = [
+            (h, get_rect(h)) for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)
+        ]
+        txt_qty_h = min(pos_edits, key=lambda x: x[1][2] - x[1][0])[0]
+        click_control_at(txt_qty_h)
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Venta (teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Venta"
+        record_audit("Venta (teclado)", items, overlaps, lrows)
+
         # --- 2. Caja y turnos (inicial / cerrado) ---
         click_sidebar_section(hwnd_main, "Caja y Reportes")
         click_subnav(hwnd_main, "Caja y turnos")
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Caja y turnos", scale)
         record_audit("Caja y turnos", items, overlaps, lrows)
+
+        cash_edits_init = [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)]
+        assert cash_edits_init, "Campo fondo inicial no encontrado"
+        click_control_at(cash_edits_init[0])
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Caja y turnos (teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Caja inicial"
+        record_audit("Caja y turnos (teclado)", items, overlaps, lrows)
+        btn_listo_c = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Listo"), None)
+        if btn_listo_c:
+            click_button(btn_listo_c)
+            time.sleep(0.2)
 
         # --- 2b. Caja y turnos (turno abierto) ---
         btn_open_shift = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and "Abrir Turno de Caja" in t), None)
@@ -500,6 +524,14 @@ def run_suite(label, exe_path, write_audit=False):
         time.sleep(0.45)
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Caja y turnos (abierto)", scale)
         record_audit("Caja y turnos (abierto)", items, overlaps, lrows)
+
+        cash_edits_open = [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)]
+        assert cash_edits_open, "Campo arqueo final no encontrado"
+        click_control_at(cash_edits_open[0])
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Caja y turnos (abierto, teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Caja final"
+        record_audit("Caja y turnos (abierto, teclado)", items, overlaps, lrows)
 
         # --- 3. Bitacora (con filas + desplegable abierta) ---
         click_subnav(hwnd_main, "Bitácora")
@@ -576,6 +608,17 @@ def run_suite(label, exe_path, write_audit=False):
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Ingredientes (nuevo)", scale)
         record_audit("Ingredientes (nuevo)", items, overlaps, lrows)
 
+        ing_edits = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda x: x[1][1],
+        )
+        assert len(ing_edits) >= 2, "Campo de aviso bajo en Ingredientes no encontrado"
+        click_control_at(ing_edits[1][0])
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Ingredientes (nuevo, teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Ingredientes"
+        record_audit("Ingredientes (nuevo, teclado)", items, overlaps, lrows)
+
         # --- 8. Dialogos de Venta: Cobro, Ticket e Historial de tickets ---
         click_sidebar_section(hwnd_main, "Punto de Venta")
         time.sleep(0.45)
@@ -586,6 +629,7 @@ def run_suite(label, exe_path, write_audit=False):
         hwnd_chk, _ = wait_for_window(p2.pid, "Cobro de Venta", timeout=8.0)
         time.sleep(0.25)
         items_chk, overlaps_chk, lrows_chk = audit_window_touch_targets(hwnd_chk, "Dialogo Cobro", scale)
+        assert any(it["label"] == "Listo" for it in items_chk), "Teclado numérico embebido no visible en Dialogo Cobro"
         record_audit("Dialogo Cobro", items_chk, overlaps_chk, lrows_chk)
 
         btn_conf = next((h for (h, c, t) in enum_children(hwnd_chk) if c.lower() == "button" and user32.IsWindowVisible(h) and "Confirmar Venta" in t), None)

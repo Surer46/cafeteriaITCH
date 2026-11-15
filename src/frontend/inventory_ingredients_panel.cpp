@@ -437,6 +437,28 @@ void InventoryIngredientsPanel::build_ui() {
     root->Add(body, 1, wxEXPAND);
     SetSizer(root);
 
+    if (touch) {
+        keypad_ = new ui::NumericKeypad(this);
+        keypad_->bind_field(
+            txt_threshold_,
+            thresh_box,
+            false,
+            right_card_,
+            [this]() {
+                std::vector<wxRect> rects;
+                auto add_rect = [&](wxWindow* w) {
+                    if (!w || !w->IsShownOnScreen()) return;
+                    rects.emplace_back(ScreenToClient(w->GetScreenPosition()), w->GetSize());
+                };
+                add_rect(right_card_);
+                add_rect(txt_name_);
+                add_rect(lbl_stock_value_);
+                add_rect(btn_save_);
+                return rects;
+            }
+        );
+    }
+
     Bind(wxEVT_SIZE, &InventoryIngredientsPanel::on_size, this);
 }
 

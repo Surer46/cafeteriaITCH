@@ -44,6 +44,43 @@ DPI=96 escala=1.00 (1200x720 logicos, perfil Tactil)
   Venta (con linea) | button | Cancelar pedido | 294.0x48.0 | OK
   Venta (con linea) | list_row | SysListView32#0 (1 filas) | 563.0x43.0 | OK
 
+=== Venta (teclado) (total=34, marcados=0) ===
+  Venta (teclado) | button | Estándar | 140.0x48.0 | OK
+  Venta (teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Venta (teclado) | button | Inventario | 220.0x56.0 | OK
+  Venta (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Venta (teclado) | button | BackOffice | 220.0x56.0 | OK
+  Venta (teclado) | button | Venta | 75.0x48.0 | OK
+  Venta (teclado) | button | Catálogo visual | 140.0x48.0 | OK
+  Venta (teclado) | button | 0 | 208.0x64.0 | OK
+  Venta (teclado) | button | 1 | 64.0x64.0 | OK
+  Venta (teclado) | button | 2 | 64.0x64.0 | OK
+  Venta (teclado) | button | 3 | 64.0x64.0 | OK
+  Venta (teclado) | button | 4 | 64.0x64.0 | OK
+  Venta (teclado) | button | 5 | 64.0x64.0 | OK
+  Venta (teclado) | button | 6 | 64.0x64.0 | OK
+  Venta (teclado) | button | 7 | 64.0x64.0 | OK
+  Venta (teclado) | button | 8 | 64.0x64.0 | OK
+  Venta (teclado) | button | 9 | 64.0x64.0 | OK
+  Venta (teclado) | button | Borrar | 88.0x64.0 | OK
+  Venta (teclado) | button | Limpiar | 88.0x64.0 | OK
+  Venta (teclado) | button | Listo | 88.0x136.0 | OK
+  Venta (teclado) | edit | <edit> | 220.0x48.0 | OK
+  Venta (teclado) | edit | Edit:1 | 64.0x48.0 | OK
+  Venta (teclado) | edit | <edit> | 586.0x48.0 | OK
+  Venta (teclado) | button | − | 75.0x48.0 | OK
+  Venta (teclado) | button | + | 75.0x48.0 | OK
+  Venta (teclado) | button | Buscar | 128.0x48.0 | OK
+  Venta (teclado) | switch/combo | comboBox | 218.0x48.0 | OK
+  Venta (teclado) | button | Agregar al Carrito | 210.0x56.0 | OK
+  Venta (teclado) | button | Editar cantidad | 186.0x48.0 | OK
+  Venta (teclado) | button | Editar nota | 156.0x48.0 | OK
+  Venta (teclado) | button | Quitar línea | 161.0x48.0 | OK
+  Venta (teclado) | button | Más acciones ▾ | 188.0x48.0 | OK
+  Venta (teclado) | button | Cobrar | 294.0x60.0 | OK
+  Venta (teclado) | button | Cancelar pedido | 294.0x48.0 | OK
+  Venta (teclado) | list_row | SysListView32#0 (1 filas) | 563.0x43.0 | OK
+
 === Caja y turnos (total=10, marcados=0) ===
   Caja y turnos | button | Estándar | 140.0x48.0 | OK
   Caja y turnos | button | Punto de Venta | 220.0x56.0 | OK
@@ -56,6 +93,32 @@ DPI=96 escala=1.00 (1200x720 logicos, perfil Tactil)
   Caja y turnos | edit | <edit> | 140.0x48.0 | OK
   Caja y turnos | button | Abrir Turno de Caja | 250.0x48.0 | OK
 
+=== Caja y turnos (teclado) (total=24, marcados=0) ===
+  Caja y turnos (teclado) | button | Estándar | 140.0x48.0 | OK
+  Caja y turnos (teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Caja y turnos (teclado) | button | Inventario | 220.0x56.0 | OK
+  Caja y turnos (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Caja y turnos (teclado) | button | BackOffice | 220.0x56.0 | OK
+  Caja y turnos (teclado) | button | Caja y turnos | 124.0x48.0 | OK
+  Caja y turnos (teclado) | button | Bitácora | 90.0x48.0 | OK
+  Caja y turnos (teclado) | button | Reportes | 95.0x48.0 | OK
+  Caja y turnos (teclado) | button | 0 | 136.0x64.0 | OK
+  Caja y turnos (teclado) | button | 1 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | 2 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | 3 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | 4 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | 5 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | 6 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | 7 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | 8 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | 9 | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | . | 64.0x64.0 | OK
+  Caja y turnos (teclado) | button | Borrar | 88.0x64.0 | OK
+  Caja y turnos (teclado) | button | Limpiar | 88.0x64.0 | OK
+  Caja y turnos (teclado) | button | Listo | 88.0x136.0 | OK
+  Caja y turnos (teclado) | edit | <edit> | 140.0x48.0 | OK
+  Caja y turnos (teclado) | button | Abrir Turno de Caja | 250.0x48.0 | OK
+
 === Caja y turnos (abierto) (total=10, marcados=0) ===
   Caja y turnos (abierto) | button | Estándar | 140.0x48.0 | OK
   Caja y turnos (abierto) | button | Punto de Venta | 220.0x56.0 | OK
@@ -67,6 +130,32 @@ DPI=96 escala=1.00 (1200x720 logicos, perfil Tactil)
   Caja y turnos (abierto) | button | Reportes | 95.0x48.0 | OK
   Caja y turnos (abierto) | edit | <edit> | 140.0x48.0 | OK
   Caja y turnos (abierto) | button | Cerrar Turno de Caja | 227.0x48.0 | OK
+
+=== Caja y turnos (abierto, teclado) (total=24, marcados=0) ===
+  Caja y turnos (abierto, teclado) | button | Estándar | 140.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Caja y turnos (abierto, teclado) | button | Inventario | 220.0x56.0 | OK
+  Caja y turnos (abierto, teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Caja y turnos (abierto, teclado) | button | BackOffice | 220.0x56.0 | OK
+  Caja y turnos (abierto, teclado) | button | Caja y turnos | 124.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Bitácora | 90.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Reportes | 95.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | 0 | 136.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 1 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 2 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 3 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 4 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 5 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 6 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 7 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 8 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | 9 | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | . | 64.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | Borrar | 88.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | Limpiar | 88.0x64.0 | OK
+  Caja y turnos (abierto, teclado) | button | Listo | 88.0x136.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 140.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Cerrar Turno de Caja | 227.0x48.0 | OK
 
 === Bitácora (total=13, marcados=0) ===
   Bitácora | button | Estándar | 140.0x48.0 | OK
@@ -146,7 +235,7 @@ DPI=96 escala=1.00 (1200x720 logicos, perfil Tactil)
   Roles y permisos | button | Guardar | 135.0x48.0 | OK
   Roles y permisos | list_row | SysListView32#0 (2 filas) | 364.0x43.0 | OK
 
-=== Configuración (total=14, marcados=0) ===
+=== Configuración (total=15, marcados=0) ===
   Configuración | button | Estándar | 140.0x48.0 | OK
   Configuración | button | Punto de Venta | 220.0x56.0 | OK
   Configuración | button | Inventario | 220.0x56.0 | OK
@@ -158,6 +247,7 @@ DPI=96 escala=1.00 (1200x720 logicos, perfil Tactil)
   Configuración | button | Respaldos | 105.0x48.0 | OK
   Configuración | button | Estándar | 386.0x56.0 | OK
   Configuración | button | Táctil (Activa) | 397.0x56.0 | OK
+  Configuración | button | Pantalla completa | 240.0x56.0 | OK
   Configuración | switch/combo | comboBox | 380.0x48.0 | OK
   Configuración | switch/combo | comboBox | 380.0x48.0 | OK
   Configuración | button | Guardar Configuración | 240.0x48.0 | OK
@@ -203,11 +293,58 @@ DPI=96 escala=1.00 (1200x720 logicos, perfil Tactil)
   Ingredientes (nuevo) | button | Guardar | 120.0x48.0 | OK
   Ingredientes (nuevo) | list_row | SysListView32#0 (1 filas) | 601.0x43.0 | OK
 
-=== Dialogo Cobro (total=4, marcados=0) ===
-  Dialogo Cobro | switch/combo | comboBox | 404.0x48.0 | OK
-  Dialogo Cobro | edit | <edit> | 408.0x48.0 | OK
+=== Ingredientes (nuevo, teclado) (total=30, marcados=0) ===
+  Ingredientes (nuevo, teclado) | button | Estándar | 140.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Ingredientes (nuevo, teclado) | button | Inventario | 220.0x56.0 | OK
+  Ingredientes (nuevo, teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Ingredientes (nuevo, teclado) | button | BackOffice | 220.0x56.0 | OK
+  Ingredientes (nuevo, teclado) | button | Existencias | 111.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Reabastecimiento | 160.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Productos y recetas | 173.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Ingredientes | 121.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Promociones y combos | 198.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Barra | 75.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | 0 | 208.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 1 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 2 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 3 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 4 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 5 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 6 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 7 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 8 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | 9 | 64.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | Borrar | 88.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | Limpiar | 88.0x64.0 | OK
+  Ingredientes (nuevo, teclado) | button | Listo | 88.0x136.0 | OK
+  Ingredientes (nuevo, teclado) | button | Nuevo ingrediente | 168.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Actualizar | 109.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | edit | <edit> | 233.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | combobox | <combobox> | 233.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | edit | <edit> | 240.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Guardar | 120.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | list_row | SysListView32#0 (1 filas) | 601.0x43.0 | OK
+
+=== Dialogo Cobro (total=18, marcados=0) ===
+  Dialogo Cobro | switch/combo | comboBox | 380.0x48.0 | OK
+  Dialogo Cobro | edit | <edit> | 384.0x48.0 | OK
   Dialogo Cobro | button | Cancelar | 110.0x48.0 | OK
-  Dialogo Cobro | button | Confirmar Venta | 306.0x48.0 | OK
+  Dialogo Cobro | button | Confirmar Venta | 282.0x48.0 | OK
+  Dialogo Cobro | button | 0 | 136.0x64.0 | OK
+  Dialogo Cobro | button | 1 | 64.0x64.0 | OK
+  Dialogo Cobro | button | 2 | 64.0x64.0 | OK
+  Dialogo Cobro | button | 3 | 64.0x64.0 | OK
+  Dialogo Cobro | button | 4 | 64.0x64.0 | OK
+  Dialogo Cobro | button | 5 | 64.0x64.0 | OK
+  Dialogo Cobro | button | 6 | 64.0x64.0 | OK
+  Dialogo Cobro | button | 7 | 64.0x64.0 | OK
+  Dialogo Cobro | button | 8 | 64.0x64.0 | OK
+  Dialogo Cobro | button | 9 | 64.0x64.0 | OK
+  Dialogo Cobro | button | . | 64.0x64.0 | OK
+  Dialogo Cobro | button | Borrar | 88.0x64.0 | OK
+  Dialogo Cobro | button | Limpiar | 88.0x64.0 | OK
+  Dialogo Cobro | button | Listo | 88.0x136.0 | OK
 
 === Dialogo Ticket (total=2, marcados=0) ===
   Dialogo Ticket | button | Ahora no | 214.0x48.0 | OK

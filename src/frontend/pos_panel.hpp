@@ -7,6 +7,7 @@
 #include <vector>
 #include <string>
 #include "app/services/mock_services.hpp"
+#include "src/frontend/numeric_keypad.hpp"
 
 namespace app::frontend {
 
@@ -62,6 +63,7 @@ private:
     wxButton* btn_checkout_{nullptr};
     wxButton* btn_cancel_order_{nullptr};
     wxStaticText* lbl_shift_status_{nullptr};
+    ui::NumericKeypad* keypad_{nullptr};
 };
 
 } // namespace app::frontend

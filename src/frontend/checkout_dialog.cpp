@@ -13,7 +13,9 @@ CheckoutDialog::CheckoutDialog(
     total_(total),
     cash_received_(total) {
     SetBackgroundColour(Theme::ColorBackground);
+    const bool touch = Theme::is_touch();
 
+    auto* outer_sizer = new wxBoxSizer(wxHORIZONTAL);
     auto* main_sizer = new wxBoxSizer(wxVERTICAL);
 
     // Encabezado
@@ -56,7 +58,7 @@ CheckoutDialog::CheckoutDialog(
     methods.Add(wxT("Efectivo"));
     methods.Add(wxT("Tarjeta"));
     methods.Add(wxT("Transferencia"));
-    const int combo_h_logical = Theme::is_touch() ? 48 : 34;
+    const int combo_h_logical = touch ? 48 : 34;
     choice_method_ = new ui::TouchComboBox(payment_card, wxID_ANY, FromDIP(wxSize(-1, combo_h_logical)), methods);
     choice_method_->SetFont(Theme::get_font_body());
     choice_method_->SetMinSize(FromDIP(wxSize(-1, combo_h_logical)));
@@ -72,7 +74,7 @@ CheckoutDialog::CheckoutDialog(
     cash_details_sizer_->Add(lbl_received, 0, wxBOTTOM, FromDIP(4));
 
     auto* cash_field = ui::make_text_field(
-        payment_card, txt_cash_received_, Theme::is_touch() ? 48 : 36, -1, Theme::get_font_body());
+        payment_card, txt_cash_received_, touch ? 48 : 36, -1, Theme::get_font_body());
     txt_cash_received_->ChangeValue(wxString::FromUTF8(total_.to_string().c_str()));
     cash_details_sizer_->Add(cash_field, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
 
@@ -98,7 +100,7 @@ CheckoutDialog::CheckoutDialog(
 
     // Botones de acción
     auto* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
-    const int btn_h_logical = Theme::is_touch() ? 48 : 40;
+    const int btn_h_logical = touch ? 48 : 40;
     auto* btn_cancel = new wxButton(this, wxID_CANCEL, wxT("Cancelar"));
     Theme::style_button_secondary(btn_cancel, btn_h_logical);
     Theme::ensure_button_min_size(btn_cancel, 110, btn_h_logical);
@@ -112,8 +114,20 @@ CheckoutDialog::CheckoutDialog(
     btn_sizer->Add(btn_confirm_, 1);
     main_sizer->Add(btn_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
-    main_sizer->SetMinSize(FromDIP(wxSize(Theme::is_touch() ? 460 : 440, Theme::is_touch() ? 550 : 520)));
-    SetSizerAndFit(main_sizer);
+    if (touch) {
+        main_sizer->SetMinSize(FromDIP(wxSize(436, 540)));
+        outer_sizer->Add(main_sizer, 1, wxEXPAND);
+
+        keypad_ = new ui::NumericKeypad(this, true, false);
+        keypad_->set_target_field(txt_cash_received_, false);
+        outer_sizer->Add(
+            keypad_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxTOP | wxBOTTOM | wxRESERVE_SPACE_EVEN_IF_HIDDEN, FromDIP(16));
+        SetSizerAndFit(outer_sizer);
+    } else {
+        main_sizer->SetMinSize(FromDIP(wxSize(440, 520)));
+        outer_sizer->Add(main_sizer, 1, wxEXPAND);
+        SetSizerAndFit(outer_sizer);
+    }
     Center();
 
     // Eventos
@@ -135,6 +149,9 @@ void CheckoutDialog::on_payment_method_changed(wxCommandEvent&) {
     } else {
         selected_method_ = contracts::PaymentMethod::Transferencia;
         cash_details_sizer_->ShowItems(false);
+    }
+    if (keypad_) {
+        keypad_->Show(sel == 0);
     }
     Layout();
     update_cash_calculations();

@@ -35,6 +35,7 @@ const wxColour Theme::ColorFocus         = wxColour(0x1D, 0x4E, 0xD8); // #1D4ED
 std::string Theme::assets_dir_ = "";
 std::string Theme::data_dir_ = "";
 UiProfile Theme::current_profile_ = UiProfile::Standard;
+bool Theme::current_fullscreen_ = false;
 bool Theme::fonts_registered_ = false;
 std::vector<std::string> Theme::registered_font_paths_;
 std::map<Theme::IconKey, wxBitmapBundle> Theme::icon_cache_;
@@ -105,6 +106,7 @@ std::string Theme::get_assets_dir() {
 void Theme::set_data_dir(const std::string& data_dir) {
     data_dir_ = data_dir;
     load_station_profile();
+    load_station_fullscreen();
 }
 
 std::string Theme::get_data_dir() {
@@ -139,6 +141,44 @@ void Theme::save_station_profile(UiProfile profile) {
     if (f.IsOpened()) {
         f.Write(profile == UiProfile::Touch ? "touch\n" : "standard\n");
     }
+}
+
+void Theme::load_station_fullscreen() {
+    current_fullscreen_ = false;
+    if (data_dir_.empty()) return;
+    wxString cfg_file = wxString::FromUTF8(data_dir_.c_str()) + "/station_fullscreen.cfg";
+    if (wxFileExists(cfg_file)) {
+        wxFile f(cfg_file, wxFile::read);
+        if (f.IsOpened()) {
+            wxString content;
+            if (f.ReadAll(&content)) {
+                content = content.Trim().Trim(false).Lower();
+                if (content == "fullscreen" || content == "1" || content == "true") {
+                    current_fullscreen_ = true;
+                } else if (content == "windowed" || content == "0" || content == "false") {
+                    current_fullscreen_ = false;
+                }
+            }
+        }
+    }
+}
+
+void Theme::save_station_fullscreen(bool fullscreen) {
+    current_fullscreen_ = fullscreen;
+    if (data_dir_.empty()) return;
+    wxString cfg_file = wxString::FromUTF8(data_dir_.c_str()) + "/station_fullscreen.cfg";
+    wxFile f(cfg_file, wxFile::write);
+    if (f.IsOpened()) {
+        f.Write(fullscreen ? "fullscreen\n" : "windowed\n");
+    }
+}
+
+bool Theme::get_fullscreen() {
+    return current_fullscreen_;
+}
+
+void Theme::set_fullscreen(bool fullscreen) {
+    save_station_fullscreen(fullscreen);
 }
 
 UiProfile Theme::get_profile() {

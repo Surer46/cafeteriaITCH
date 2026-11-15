@@ -50,21 +50,27 @@ void CashShiftPanel::setup_ui() {
     lbl_open_prompt->SetForegroundColour(Theme::ColorText);
     open_box_->Add(lbl_open_prompt, 0, wxBOTTOM, FromDIP(6));
 
-    const int field_h_logical = Theme::is_touch() ? 48 : 36;
+    const bool touch = Theme::is_touch();
+    const int field_h_logical = touch ? 48 : 36;
     const int field_w_logical = 140;
+    const int btn_h_logical = touch ? 48 : 38;
 
-    auto* open_row = new wxBoxSizer(wxHORIZONTAL);
+    auto* open_row = new wxBoxSizer(touch ? wxVERTICAL : wxHORIZONTAL);
     auto* initial_field = ui::make_text_field(status_card_, txt_initial_cash_, field_h_logical, field_w_logical, Theme::get_font_body());
     txt_initial_cash_->SetValue(wxT("300.00"));
 
-    const int btn_h_logical = Theme::is_touch() ? 48 : 38;
     btn_open_shift_ = new wxButton(status_card_, wxID_ANY, wxT("Abrir Turno de Caja"));
     Theme::style_button_success(btn_open_shift_, btn_h_logical);
     Theme::setup_button_icon(btn_open_shift_, "lock_open", wxSize(18, 18), Theme::ColorSurface);
     Theme::ensure_button_min_size(btn_open_shift_, 200, btn_h_logical);
 
-    open_row->Add(initial_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, FromDIP(10));
-    open_row->Add(btn_open_shift_, 0, wxALIGN_CENTER_VERTICAL);
+    if (touch) {
+        open_row->Add(initial_field, 0, wxBOTTOM | wxALIGN_LEFT, FromDIP(10));
+        open_row->Add(btn_open_shift_, 0, wxALIGN_LEFT);
+    } else {
+        open_row->Add(initial_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, FromDIP(10));
+        open_row->Add(btn_open_shift_, 0, wxALIGN_CENTER_VERTICAL);
+    }
     open_box_->Add(open_row, 0, wxEXPAND | wxBOTTOM, FromDIP(16));
 
     card_sizer->Add(open_box_, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
@@ -78,7 +84,7 @@ void CashShiftPanel::setup_ui() {
     lbl_close_prompt->SetForegroundColour(Theme::ColorText);
     close_box_->Add(lbl_close_prompt, 0, wxBOTTOM, FromDIP(6));
 
-    auto* close_row = new wxBoxSizer(wxHORIZONTAL);
+    auto* close_row = new wxBoxSizer(touch ? wxVERTICAL : wxHORIZONTAL);
     auto* final_field = ui::make_text_field(status_card_, txt_final_cash_, field_h_logical, field_w_logical, Theme::get_font_body());
     txt_final_cash_->SetValue(wxT("0.00"));
 
@@ -87,8 +93,13 @@ void CashShiftPanel::setup_ui() {
     Theme::setup_button_icon(btn_close_shift_, "lock", wxSize(18, 18), Theme::ColorError);
     Theme::ensure_button_min_size(btn_close_shift_, 200, btn_h_logical);
 
-    close_row->Add(final_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, FromDIP(10));
-    close_row->Add(btn_close_shift_, 0, wxALIGN_CENTER_VERTICAL);
+    if (touch) {
+        close_row->Add(final_field, 0, wxBOTTOM | wxALIGN_LEFT, FromDIP(10));
+        close_row->Add(btn_close_shift_, 0, wxALIGN_LEFT);
+    } else {
+        close_row->Add(final_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, FromDIP(10));
+        close_row->Add(btn_close_shift_, 0, wxALIGN_CENTER_VERTICAL);
+    }
     close_box_->Add(close_row, 0, wxEXPAND | wxBOTTOM, FromDIP(16));
 
     card_sizer->Add(close_box_, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
@@ -100,6 +111,26 @@ void CashShiftPanel::setup_ui() {
 
     btn_open_shift_->Bind(wxEVT_BUTTON, &CashShiftPanel::on_open_shift_clicked, this);
     btn_close_shift_->Bind(wxEVT_BUTTON, &CashShiftPanel::on_close_shift_clicked, this);
+
+    if (touch) {
+        keypad_ = new ui::NumericKeypad(this);
+        auto make_protected = [this, initial_field, final_field]() {
+            std::vector<wxRect> rects;
+            auto add_rect = [&](wxWindow* w) {
+                if (!w || !w->IsShownOnScreen()) return;
+                rects.emplace_back(ScreenToClient(w->GetScreenPosition()), w->GetSize());
+            };
+            add_rect(shift_badge_);
+            add_rect(lbl_details_);
+            add_rect(initial_field);
+            add_rect(btn_open_shift_);
+            add_rect(final_field);
+            add_rect(btn_close_shift_);
+            return rects;
+        };
+        keypad_->bind_field(txt_initial_cash_, initial_field, true, btn_open_shift_, make_protected);
+        keypad_->bind_field(txt_final_cash_, final_field, true, btn_close_shift_, make_protected);
+    }
 }
 
 void CashShiftPanel::refresh_status() {
@@ -134,7 +165,7 @@ void CashShiftPanel::refresh_status() {
         close_box_->ShowItems(false);
     }
 
-    lbl_details_->Wrap(FromDIP(660));
+    lbl_details_->Wrap(FromDIP(Theme::is_touch() ? 290 : 660));
     status_card_->Layout();
     Layout();
 }

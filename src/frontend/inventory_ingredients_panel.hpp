@@ -2,6 +2,7 @@
 
 #include "app/contracts/account_service.hpp"
 #include "app/contracts/inventory_service.hpp"
+#include "src/frontend/numeric_keypad.hpp"
 
 #include <cstdint>
 #include <memory>
@@ -89,6 +90,7 @@ private:
     wxStaticText* lbl_stock_hint_{nullptr};
     wxButton* btn_save_{nullptr};
     wxStaticText* lbl_feedback_{nullptr};
+    ui::NumericKeypad* keypad_{nullptr};
 
     std::string last_list_error_;
     std::string last_feedback_;
