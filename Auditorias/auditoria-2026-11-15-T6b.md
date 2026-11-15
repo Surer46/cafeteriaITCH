@@ -27,3 +27,13 @@ Ronda 9 — T6b (AntiGravity, Gemini) — auditado el 2026-11-15
   - `test_t5_fullscreen` falló en Release: otra ventana quedó encima del diálogo de Cobro en el punto medido.
   - Repetidas una vez, las dos pasan (Release y Debug). Las carpetas temporales ya no estaban, así que no se encontró la causa.
   - Se registran como **intermitentes**, para investigar en el próximo bloque de Gemini: volcar la bitácora y `backup_state` cuando falle, y en T5 nombrar la ventana que tapa.
+- **Verificación del orquestador al 125 % (120 DPI), el mismo día:**
+  - Compilación de Release y Debug sin advertencias; CTest 14/14 en Release y Debug.
+  - Batería GUI (11 pruebas): 8 pasan a la primera y tres fallan. Repetidas una vez, las tres pasan:
+    - `test_t6_backups` (Release) volvió a encontrar el interruptor «Activado» al empezar. Es la segunda vez, y las dos fue la primera prueba GUI tras compilar. El interruptor se llena de forma síncrona con `get_status` al construir la pantalla, así que en ese momento el servicio devolvió `is_enabled = true` o algo lo activó antes. **Sin explicar**, no se puede dar por intermitente sin más: hay que investigarlo.
+    - `test_t5_fullscreen` (Release): la ventana encima del diálogo de Cobro es `claude.exe`, la app de escritorio del orquestador, que pasó al frente. Causa del entorno, no del programa. Mismo fallo que al 100 %.
+    - `test_t1_touch_profile` (Release): la barra lateral midió 58 px (menos de 70) justo después de aparecer «Táctil (Activa)». La prueba espera el texto del botón pero no el nuevo diseño, así que la carrera está en la prueba.
+  - **Para el próximo bloque de Gemini:**
+    - T6: conservar la carpeta temporal y volcar `backup_state` y la bitácora cuando falle el estado inicial; buscar qué deja `is_enabled = 1`.
+    - T1: esperar con condición a que la barra lateral tenga la altura táctil antes de medir, sin bajar el umbral.
+    - T5: si la ventana de encima es de otro proceso, decir de cuál en el mensaje.
