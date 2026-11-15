@@ -1,5 +1,6 @@
 #include <wx/wx.h>
-#include <wx/progdlg.h>
+#include <wx/evtloop.h>
+#include <wx/gauge.h>
 #include <memory>
 #include <filesystem>
 #include <fstream>
@@ -30,6 +31,112 @@ std::filesystem::path native_path(const wxString& value) {
     return std::filesystem::u8path(value.ToUTF8().data());
 #endif
 }
+
+// Ventana de progreso de una actualización larga de la base (B9b). Sin padre (aún no hay ventana
+// principal), sin botón de cerrar en la barra de título, sin ningún botón y sin poder cerrarse mientras dura
+// la actualización. Todo ocurre en el mismo hilo: tras cada cambio se repinta de inmediato y se procesan
+// SOLO eventos de interfaz (pintado), nunca entrada del usuario, temporizadores ni otras categorías.
+class UpdateProgressWindow : public wxDialog {
+public:
+    UpdateProgressWindow()
+        : wxDialog(nullptr, wxID_ANY, wxT("Cafetería ITCH"), wxDefaultPosition, wxDefaultSize,
+                   wxCAPTION | wxSTAY_ON_TOP) {
+        // Aún no corre el bucle principal de la aplicación: se activa uno propio, sin ejecutarlo, solo
+        // para poder procesar eventos de pintado.
+        if (wxEventLoopBase::GetActive() == nullptr) {
+            temp_loop_.reset(new wxEventLoop());
+            activator_.reset(new wxEventLoopActivator(temp_loop_.get()));
+        }
+        SetEscapeId(wxID_NONE);  // Esc no hace nada
+
+        // Medidas en unidades lógicas, convertidas una sola vez.
+        const int width = FromDIP(480);
+        const int margin = FromDIP(24);
+        const int gap = FromDIP(14);
+        const int gauge_height = FromDIP(22);
+        text_width_ = width - 2 * margin;
+
+        SetBackgroundColour(Theme::ColorSurface);
+        auto* sizer = new wxBoxSizer(wxVERTICAL);
+
+        auto* warning = new wxStaticText(this, wxID_ANY, wxT("No apague el equipo."));
+        warning->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
+        warning->SetForegroundColour(Theme::ColorText);
+        warning->Wrap(text_width_);
+
+        auto* info = new wxStaticText(this, wxID_ANY,
+            wxT("Estamos actualizando los datos de la cafetería. Puede tardar varios minutos."));
+        info->SetFont(Theme::get_font_body());
+        info->SetForegroundColour(Theme::ColorText);
+        info->Wrap(text_width_);
+
+        phase_ = new wxStaticText(this, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxST_NO_AUTORESIZE);
+        phase_->SetFont(Theme::get_font_body());
+        phase_->SetForegroundColour(Theme::ColorTextSecondary);
+        // Altura fija de dos líneas: la ventana no cambia de tamaño al cambiar de fase.
+        phase_->SetMinSize(wxSize(text_width_, 2 * phase_->GetCharHeight()));
+
+        gauge_ = new wxGauge(this, wxID_ANY, 100, wxDefaultPosition, wxSize(text_width_, gauge_height),
+                             wxGA_HORIZONTAL | wxGA_SMOOTH);
+
+        sizer->Add(warning, 0, wxLEFT | wxRIGHT | wxTOP, margin);
+        sizer->Add(info, 0, wxLEFT | wxRIGHT | wxTOP, gap);
+        sizer->Add(phase_, 0, wxLEFT | wxRIGHT | wxTOP, gap);
+        sizer->Add(gauge_, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, margin);
+        SetSizerAndFit(sizer);
+        SetMinClientSize(wxSize(width, -1));
+
+        // Mientras dure la actualización no se puede cerrar (Alt+F4, menú del sistema...).
+        Bind(wxEVT_CLOSE_WINDOW, [this](wxCloseEvent& event) {
+            if (!allow_close_ && event.CanVeto()) {
+                event.Veto();
+            } else {
+                event.Skip();
+            }
+        });
+    }
+
+    void show_centered() {
+        CenterOnScreen();
+        Show(true);
+        Raise();
+        repaint();
+    }
+
+    // percent < 0: fase sin porcentaje real (barra en movimiento); si no, barra al porcentaje indicado.
+    void set_phase(const wxString& text, int percent) {
+        phase_->SetLabel(text);
+        phase_->Wrap(text_width_);
+        if (percent >= 0) {
+            gauge_->SetValue(percent < 99 ? percent : 99);
+        } else {
+            gauge_->Pulse();
+        }
+        repaint();
+    }
+
+    void allow_close_and_finish() { allow_close_ = true; }
+
+private:
+    // Repinta ya (Update fuerza el pintado síncrono de esta ventana) y deja procesar SOLO eventos de
+    // interfaz: YieldFor(wxEVT_CATEGORY_UI) excluye la entrada del usuario, los temporizadores, los hilos y
+    // demás categorías. En este punto de OnInit no existe ninguna otra ventana ni servicio con acceso a la base.
+    void repaint() {
+        Layout();
+        Refresh();
+        Update();
+        if (wxEventLoopBase* loop = wxEventLoopBase::GetActive()) {
+            loop->YieldFor(wxEVT_CATEGORY_UI);
+        }
+    }
+
+    std::unique_ptr<wxEventLoop> temp_loop_;
+    std::unique_ptr<wxEventLoopActivator> activator_;  // se destruye antes que temp_loop_
+    wxStaticText* phase_{nullptr};
+    wxGauge* gauge_{nullptr};
+    int text_width_{0};
+    bool allow_close_{false};
+};
 } // namespace
 
 class CafeteriaApp : public wxApp {
@@ -165,35 +272,25 @@ public:
         startup.backups_dir = data_dir / "backups";
 
         // Ventana de progreso: solo cuando hay una actualización larga (base con datos y migraciones
-        // pendientes). Sin padre (aún no hay ventana principal), sin botón de cancelar y sin poder
-        // cerrarse. Los avisos llegan en este mismo hilo (no hay hilos); el servicio ya los limita.
-        // En este punto ningún otro objeto toca la base (los servicios aún no existen), así que
-        // procesar los eventos de la ventana, aun dentro de una migración, no puede tocar la base.
-        std::unique_ptr<wxProgressDialog> progress_dialog;
-        startup.on_progress = [&progress_dialog, this](const services::StartupProgress& p) {
-            if (p.phase == services::StartupPhase::UpdateStarting && !progress_dialog) {
+        // pendientes). Ver UpdateProgressWindow. Los avisos llegan en este mismo hilo y el servicio ya los
+        // limita; en este punto ningún otro objeto toca la base (los servicios aún no existen).
+        std::unique_ptr<UpdateProgressWindow> progress_window;
+        startup.on_progress = [&progress_window, this](const services::StartupProgress& p) {
+            if (p.phase == services::StartupPhase::UpdateStarting && !progress_window) {
                 SetExitOnFrameDelete(false);  // cerrar esta ventana nunca debe terminar la aplicación
-                progress_dialog.reset(new wxProgressDialog(
-                    wxT("Actualizando los datos de la cafetería"),
-                    wxT("Actualizando los datos de la cafetería.\nNo apague el equipo.\n\n"),
-                    100, nullptr, wxPD_APP_MODAL | wxPD_SMOOTH));
-                progress_dialog->SetMinClientSize(wxWindow::FromDIP(wxSize(420, -1), nullptr));
+                progress_window.reset(new UpdateProgressWindow());
+                progress_window->show_centered();
             }
-            if (!progress_dialog || p.phase == services::StartupPhase::Finished) return;
-            wxString text = wxT("Actualizando los datos de la cafetería.\nNo apague el equipo.\n\n") +
-                            wxString::FromUTF8(p.message_utf8.c_str());
-            if (p.percent >= 0) {
-                text += wxString::Format(wxT(" %d %%"), p.percent);
-                // Nunca se llega al máximo de la barra: al alcanzarlo, la ventana esperaría un clic.
-                progress_dialog->Update(p.percent < 99 ? p.percent : 99, text);
-            } else {
-                progress_dialog->Pulse(text);  // fase sin porcentaje real: barra en movimiento
-            }
+            if (!progress_window || p.phase == services::StartupPhase::Finished) return;
+            wxString text = wxString::FromUTF8(p.message_utf8.c_str());
+            if (p.percent >= 0) text += wxString::Format(wxT(" %d %%"), p.percent);
+            progress_window->set_phase(text, p.percent);
         };
         const auto startup_res = services::open_and_migrate_database(db_, startup);
         // La ventana se destruye antes de cualquier mensaje de error y antes del inicio de sesión.
-        if (progress_dialog) {
-            progress_dialog.reset();
+        if (progress_window) {
+            progress_window->allow_close_and_finish();
+            progress_window.reset();
             SetExitOnFrameDelete(true);
         }
         if (!startup_res.ok) {
