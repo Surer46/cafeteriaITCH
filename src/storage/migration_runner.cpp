@@ -102,6 +102,11 @@ contracts::OperationResult MigrationRunner::apply_migration(
 }
 
 contracts::OperationResult MigrationRunner::run_pending_migrations_from_dir(const std::filesystem::path& migrations_dir) {
+    return run_pending_migrations_from_dir(migrations_dir, MigrationProgress{});
+}
+
+contracts::OperationResult MigrationRunner::run_pending_migrations_from_dir(
+    const std::filesystem::path& migrations_dir, const MigrationProgress& on_start) {
     namespace fs = std::filesystem;
     std::error_code ec;
     if (!fs::exists(migrations_dir, ec)) {
@@ -119,6 +124,22 @@ contracts::OperationResult MigrationRunner::run_pending_migrations_from_dir(cons
     }
     std::sort(files.begin(), files.end());
 
+    // Pendientes (solo para avisar el avance: la decisión de aplicar sigue en apply_migration).
+    int total_pending = 0;
+    int index = 0;
+    std::vector<int> applied_versions;
+    if (on_start) {
+        auto applied_res = get_applied_versions();
+        if (applied_res.is_success()) applied_versions = applied_res.value();
+        for (const auto& fp : files) {
+            try {
+                int v = std::stoi(fp.filename().string().substr(0, 3));
+                if (std::find(applied_versions.begin(), applied_versions.end(), v) == applied_versions.end()) ++total_pending;
+            } catch (...) {
+            }
+        }
+    }
+
     for (const auto& filepath : files) {
         std::string filename = filepath.filename().string();
         // Parse version e.g. "001_initial_schema.sql"
@@ -127,6 +148,12 @@ contracts::OperationResult MigrationRunner::run_pending_migrations_from_dir(cons
             version = std::stoi(filename.substr(0, 3));
         } catch (...) {
             continue;
+        }
+
+        if (on_start &&
+            std::find(applied_versions.begin(), applied_versions.end(), version) == applied_versions.end()) {
+            ++index;
+            try { on_start(index, total_pending, version); } catch (...) {}
         }
 
         std::ifstream f(filepath);

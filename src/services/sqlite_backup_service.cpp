@@ -14,6 +14,7 @@
 #include <vector>
 #include "app/crypto/password_hasher.hpp"
 #include "app/domain/clock.hpp"
+#include "app/services/file_fingerprint.hpp"
 #include "app/services/identifiers.hpp"
 #include "app/storage/migration_runner.hpp"
 
@@ -446,23 +447,6 @@ contracts::Result<contracts::RestoreResultDto> SqliteBackupService::restore_from
 // ---------------------------------------------------------------------------------------------
 
 namespace {
-
-struct FileFingerprint {
-    std::int64_t size{0};
-    std::string sha256;
-};
-
-// Tamaño y SHA-256 de un archivo regular. false si no existe, no es regular o no se puede leer.
-bool fingerprint_file(const fs::path& p, FileFingerprint& out) {
-    std::error_code ec;
-    if (!fs::is_regular_file(p, ec)) return false;
-    std::ifstream in(p, std::ios::binary);
-    if (!in) return false;
-    std::vector<std::uint8_t> bytes((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
-    out.size = static_cast<std::int64_t>(bytes.size());
-    out.sha256 = crypto::PasswordHasher::to_hex(crypto::PasswordHasher::sha256(bytes.data(), bytes.size()));
-    return true;
-}
 
 struct RegisteredBackup {
     std::string id;

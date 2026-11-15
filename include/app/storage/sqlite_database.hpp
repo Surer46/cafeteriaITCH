@@ -2,6 +2,7 @@
 #define APP_STORAGE_SQLITE_DATABASE_HPP
 
 #include <filesystem>
+#include <functional>
 #include <string>
 #include <vector>
 #include <memory>
@@ -57,6 +58,9 @@ struct BackupFileInfo {
     bool has_active_owner{false};
 };
 
+// Avisos de avance de una copia: páginas que faltan y páginas totales.
+using BackupProgress = std::function<void(int remaining_pages, int total_pages)>;
+
 class SqliteDatabase {
 public:
     SqliteDatabase();
@@ -78,13 +82,25 @@ public:
     contracts::OperationResult rollback_transaction();
 
     contracts::OperationResult backup_to(const std::filesystem::path& dest_path);
+    // Misma copia consistente y el mismo resultado, pero por tandas de páginas (sqlite3_backup_step)
+    // avisando el avance tras cada tanda. Con `progress` vacío equivale exactamente a la anterior.
+    contracts::OperationResult backup_to(const std::filesystem::path& dest_path, const BackupProgress& progress);
+
+    // Aviso periódico durante operaciones largas de SQLite (comprobaciones de integridad, consultas
+    // grandes). El aviso se llama en el hilo de esta conexión cada ~`every_n_vm_ops` instrucciones y
+    // nunca interrumpe la operación (el manejador de SQLite devuelve siempre 0). close() lo quita.
+    void set_progress_callback(std::function<void()> callback, int every_n_vm_ops = 20000);
+    void clear_progress_callback();
+    bool has_progress_callback() const { return static_cast<bool>(progress_callback_); }
 
     // Deja el archivo como una base de un solo archivo: checkpoint completo y journal_mode=DELETE,
     // de modo que no queden archivos -wal ni -shm junto a él. Pensado para respaldos recién creados.
     static contracts::OperationResult make_single_file(const std::filesystem::path& file_path);
 
     // Inspección de solo lectura de un archivo de respaldo; no modifica nada.
-    static contracts::Result<BackupFileInfo> inspect_file(const std::filesystem::path& file_path);
+    // `tick` (opcional) se llama periódicamente durante la comprobación de integridad del archivo.
+    static contracts::Result<BackupFileInfo> inspect_file(
+        const std::filesystem::path& file_path, const std::function<void()>& tick = {});
 
     // Copia el archivo sobre esta conexión viva con sqlite3_backup.
     // Falla sin tocar nada si hay una transacción abierta.
@@ -98,6 +114,7 @@ public:
 
 private:
     sqlite3* db_{nullptr};
+    std::function<void()> progress_callback_;
 };
 
 } // namespace app::storage

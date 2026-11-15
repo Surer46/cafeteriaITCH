@@ -145,6 +145,23 @@ struct Env {
     }
 };
 
+// Identidad Desarrollador REAL (B9): el Dueño no puede crear cuentas del rol Desarrollador, así que la fila
+// "user-dev" se inserta por SQL solo aquí, en la prueba, y la sesión se abre con un inicio de sesión de verdad.
+void login_as_developer(Env& env) {
+    const std::string pwd = "Clave-Dev-B9-1";
+    if (scalar(env.db, "SELECT COUNT(*) FROM users WHERE id = 'user-dev';") == 0) {
+        auto prep = env.db.prepare(
+            "INSERT INTO users (id, username, display_name, password_hash, role_id, is_active, created_at) "
+            "VALUES ('user-dev', 'desarrollador', 'Desarrollador', ?, 'role-dev', 1, '2026-01-01 00:00:00');");
+        TEST_CHECK(prep.is_success(), "Debe preparar la fila del Desarrollador");
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, app::crypto::PasswordHasher::hash_password(pwd));
+        TEST_CHECK(stmt.step().is_success(), "Debe insertar la fila del Desarrollador");
+    }
+    auto r = env.account->login("desarrollador", pwd);
+    TEST_CHECK(r.is_success(), "El Desarrollador debe iniciar sesión: " + r.error_message());
+}
+
 // Modifica una copia del respaldo con SQL crudo (modo clásico para evitar archivos -wal).
 void tamper(const fs::path& file, const std::string& sql) {
     sqlite3* h = nullptr;
@@ -294,14 +311,7 @@ void test_permissions(const fs::path& base, const fs::path& mig) {
     TEST_CHECK(!r2.is_success() && r2.error_code() == ErrorCode::Forbidden, "Sin sesión = Forbidden");
 
     // Desarrollador: no recibe backup.restore por defecto
-    UserDto dev;
-    dev.id = "user-dev";
-    dev.username = "desarrollador";
-    dev.display_name = "Desarrollador";
-    dev.role_id = "role-dev";
-    dev.role_name = "Desarrollador";
-    dev.is_active = true;
-    env.account->set_current_user_for_testing(dev);
+    login_as_developer(env);
     TEST_CHECK(!env.account->has_permission("backup.restore"), "role-dev no tiene backup.restore por defecto");
     auto r3 = env.backup->restore_from_backup(bk.u8string());
     TEST_CHECK(!r3.is_success() && r3.error_code() == ErrorCode::Forbidden, "Desarrollador no puede restaurar");
@@ -708,10 +718,7 @@ void test_server_config_persistence(const fs::path& base, const fs::path& mig) {
     owner_try.server_url = "https://x.example/api"; owner_try.retention_days = "30";
     TEST_CHECK(env.backup->update_developer_server_config(owner_try).error_code() == ErrorCode::Forbidden, "El Dueño no puede cambiarla");
 
-    UserDto dev_user;
-    dev_user.id = "user-dev"; dev_user.username = "desarrollador"; dev_user.display_name = "Desarrollador";
-    dev_user.role_id = "role-dev"; dev_user.role_name = "Desarrollador"; dev_user.is_active = true; dev_user.is_owner = false;
-    env.account->set_current_user_for_testing(dev_user);
+    login_as_developer(env);
 
     auto initial = env.backup->get_developer_server_config();
     TEST_CHECK(initial.is_success() && initial.value().server_url.empty() && initial.value().retention_days.empty() && initial.value().is_tls_enabled,

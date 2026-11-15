@@ -176,6 +176,7 @@ contracts::OperationResult SqliteDatabase::open(const std::string& db_path) {
 }
 
 void SqliteDatabase::close() {
+    progress_callback_ = nullptr;
     if (db_) {
         sqlite3_close_v2(db_);
         db_ = nullptr;
@@ -213,6 +214,10 @@ contracts::OperationResult SqliteDatabase::rollback_transaction() {
 }
 
 contracts::OperationResult SqliteDatabase::backup_to(const std::filesystem::path& dest_path) {
+    return backup_to(dest_path, BackupProgress{});
+}
+
+contracts::OperationResult SqliteDatabase::backup_to(const std::filesystem::path& dest_path, const BackupProgress& progress) {
     if (!db_) {
         return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState, "Base de datos no inicializada");
     }
@@ -241,7 +246,28 @@ contracts::OperationResult SqliteDatabase::backup_to(const std::filesystem::path
         );
     }
 
-    rc = sqlite3_backup_step(backup, -1);
+    if (!progress) {
+        rc = sqlite3_backup_step(backup, -1);
+    } else {
+        // Por tandas: el resultado es el mismo; entre tandas se avisa el avance.
+        constexpr int kPagesPerStep = 256;
+        int busy_retries = 0;
+        while (true) {
+            rc = sqlite3_backup_step(backup, kPagesPerStep);
+            const int remaining = sqlite3_backup_remaining(backup);
+            const int total = sqlite3_backup_pagecount(backup);
+            if (rc == SQLITE_OK || rc == SQLITE_DONE) {
+                try { progress(remaining, total); } catch (...) {}
+                busy_retries = 0;
+                if (rc == SQLITE_DONE) break;
+            } else if ((rc == SQLITE_BUSY || rc == SQLITE_LOCKED) && busy_retries < 50) {
+                ++busy_retries;
+                sqlite3_sleep(100);
+            } else {
+                break;
+            }
+        }
+    }
     sqlite3_backup_finish(backup);
     if (rc != SQLITE_DONE) {
         std::string err = sqlite3_errmsg(dest_db);
@@ -254,6 +280,27 @@ contracts::OperationResult SqliteDatabase::backup_to(const std::filesystem::path
 
     sqlite3_close_v2(dest_db);
     return contracts::OperationResult::ok();
+}
+
+namespace {
+int progress_trampoline(void* user) {
+    auto* cb = static_cast<std::function<void()>*>(user);
+    if (cb && *cb) {
+        try { (*cb)(); } catch (...) {}
+    }
+    return 0;  // nunca interrumpe la operación
+}
+} // namespace
+
+void SqliteDatabase::set_progress_callback(std::function<void()> callback, int every_n_vm_ops) {
+    if (!db_) return;
+    progress_callback_ = std::move(callback);
+    sqlite3_progress_handler(db_, every_n_vm_ops > 0 ? every_n_vm_ops : 20000, progress_trampoline, &progress_callback_);
+}
+
+void SqliteDatabase::clear_progress_callback() {
+    if (db_) sqlite3_progress_handler(db_, 0, nullptr, nullptr);
+    progress_callback_ = nullptr;
 }
 
 namespace {
@@ -335,7 +382,7 @@ contracts::OperationResult SqliteDatabase::make_single_file(const std::filesyste
     return contracts::OperationResult::ok();
 }
 
-contracts::Result<BackupFileInfo> SqliteDatabase::inspect_file(const std::filesystem::path& file_path) {
+contracts::Result<BackupFileInfo> SqliteDatabase::inspect_file(const std::filesystem::path& file_path, const std::function<void()>& tick) {
     std::error_code ec;
     if (!std::filesystem::is_regular_file(file_path, ec)) {
         return contracts::Result<BackupFileInfo>::fail(contracts::ErrorCode::NotFound, "El archivo de respaldo no existe");
@@ -348,7 +395,11 @@ contracts::Result<BackupFileInfo> SqliteDatabase::inspect_file(const std::filesy
     }
     BackupFileInfo info;
     std::string text;
-    if (!query_single_text(h, "PRAGMA integrity_check;", text)) {
+    std::function<void()> tick_copy = tick;
+    if (tick_copy) sqlite3_progress_handler(h, 20000, progress_trampoline, &tick_copy);
+    const bool integrity_read = query_single_text(h, "PRAGMA integrity_check;", text);
+    if (tick_copy) sqlite3_progress_handler(h, 0, nullptr, nullptr);
+    if (!integrity_read) {
         info.integrity_message = "El archivo no es una base SQLite legible";
         sqlite3_close_v2(h);
         return contracts::Result<BackupFileInfo>::ok(info);

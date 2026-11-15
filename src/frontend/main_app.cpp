@@ -1,4 +1,6 @@
 #include <wx/wx.h>
+#include <wx/progdlg.h>
+#include <memory>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -161,7 +163,39 @@ public:
         startup.db_path = db_path;
         startup.migrations_dir = mig_dir;
         startup.backups_dir = data_dir / "backups";
+
+        // Ventana de progreso: solo cuando hay una actualización larga (base con datos y migraciones
+        // pendientes). Sin padre (aún no hay ventana principal), sin botón de cancelar y sin poder
+        // cerrarse. Los avisos llegan en este mismo hilo (no hay hilos); el servicio ya los limita.
+        // En este punto ningún otro objeto toca la base (los servicios aún no existen), así que
+        // procesar los eventos de la ventana, aun dentro de una migración, no puede tocar la base.
+        std::unique_ptr<wxProgressDialog> progress_dialog;
+        startup.on_progress = [&progress_dialog, this](const services::StartupProgress& p) {
+            if (p.phase == services::StartupPhase::UpdateStarting && !progress_dialog) {
+                SetExitOnFrameDelete(false);  // cerrar esta ventana nunca debe terminar la aplicación
+                progress_dialog.reset(new wxProgressDialog(
+                    wxT("Actualizando los datos de la cafetería"),
+                    wxT("Actualizando los datos de la cafetería.\nNo apague el equipo.\n\n"),
+                    100, nullptr, wxPD_APP_MODAL | wxPD_SMOOTH));
+                progress_dialog->SetMinClientSize(wxWindow::FromDIP(wxSize(420, -1), nullptr));
+            }
+            if (!progress_dialog || p.phase == services::StartupPhase::Finished) return;
+            wxString text = wxT("Actualizando los datos de la cafetería.\nNo apague el equipo.\n\n") +
+                            wxString::FromUTF8(p.message_utf8.c_str());
+            if (p.percent >= 0) {
+                text += wxString::Format(wxT(" %d %%"), p.percent);
+                // Nunca se llega al máximo de la barra: al alcanzarlo, la ventana esperaría un clic.
+                progress_dialog->Update(p.percent < 99 ? p.percent : 99, text);
+            } else {
+                progress_dialog->Pulse(text);  // fase sin porcentaje real: barra en movimiento
+            }
+        };
         const auto startup_res = services::open_and_migrate_database(db_, startup);
+        // La ventana se destruye antes de cualquier mensaje de error y antes del inicio de sesión.
+        if (progress_dialog) {
+            progress_dialog.reset();
+            SetExitOnFrameDelete(true);
+        }
         if (!startup_res.ok) {
             wxMessageBox(
                 wxString::FromUTF8(startup_res.message_utf8.c_str()),

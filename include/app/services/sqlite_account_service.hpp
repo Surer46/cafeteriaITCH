@@ -75,9 +75,6 @@ public:
         const LoginLockoutPolicy& policy,
         std::function<std::chrono::system_clock::time_point()> clock = {});
 
-    // Método para cambiar sesión en pruebas o flujos autorizados
-    void set_current_user_for_testing(const contracts::UserDto& user);
-
 private:
     contracts::OperationResult check_permission_or_fail(std::string_view permission_key) const;
     contracts::Result<std::vector<std::string>> load_role_permissions(const std::string& role_id);

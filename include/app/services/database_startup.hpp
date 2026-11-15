@@ -27,7 +27,28 @@ enum class StartupError {
     DatabaseDamaged,
     NotEnoughSpace,
     BackupFailed,
-    MigrationFailed
+    MigrationFailed,
+    DatabaseNewerThanProgram   // la base trae una versión mayor que la última migración del paquete
+};
+
+// Fases de una actualización larga (base con datos y migraciones pendientes).
+enum class StartupPhase {
+    UpdateStarting,  // se sabe que habrá actualización: es el momento de mostrar la ventana de progreso
+    QuickCheck,
+    FullCheck,
+    BackupCopy,
+    BackupVerify,
+    Migrate,
+    BackupRegister,
+    Finished
+};
+
+struct StartupProgress {
+    StartupPhase phase{StartupPhase::QuickCheck};
+    int percent{-1};          // 0..100 si se conoce; -1 = sin porcentaje real (la interfaz muestra "en movimiento")
+    int step{0};              // Migrate: número de la migración que se aplica (1..total)
+    int total_steps{0};       // Migrate: total de migraciones pendientes
+    std::string message_utf8; // texto de la fase en lenguaje llano
 };
 
 struct StartupOptions {
@@ -39,6 +60,10 @@ struct StartupOptions {
     std::function<std::uint64_t(const std::filesystem::path&)> free_space_bytes;
     // Instante actual (para el nombre del respaldo y su registro). Si está vacío, la hora del sistema.
     std::function<std::chrono::system_clock::time_point()> now;
+    // Aviso de avance opcional (mismo hilo; sin wxWidgets). Los cambios de fase siempre se avisan; el
+    // avance dentro de una fase se limita a uno cada `progress_min_interval_ms`. Sin aviso, todo funciona igual.
+    std::function<void(const StartupProgress&)> on_progress;
+    int progress_min_interval_ms{200};
 };
 
 struct StartupResult {

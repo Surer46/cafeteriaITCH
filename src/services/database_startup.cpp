@@ -7,8 +7,8 @@
 #include <set>
 #include <vector>
 
-#include "app/crypto/password_hasher.hpp"
 #include "app/domain/clock.hpp"
+#include "app/services/file_fingerprint.hpp"
 #include "app/services/identifiers.hpp"
 #include "app/storage/migration_runner.hpp"
 
@@ -117,14 +117,69 @@ StartupResult fail(StartupResult r, StartupError kind, std::string message) {
     return r;
 }
 
-// Respaldo consistente y verificado: instantánea en un temporal, archivo único, integridad y renombrado.
-contracts::OperationResult create_verified_snapshot(storage::SqliteDatabase& db, const fs::path& dest) {
+// Avisos de progreso: los cambios de fase siempre salen; el avance dentro de una fase, a lo sumo uno
+// cada `min_interval_ms`. Sin on_progress no hace nada.
+class Emitter {
+public:
+    explicit Emitter(const StartupOptions& opt) : opt_(opt) {}
+    bool enabled() const { return static_cast<bool>(opt_.on_progress); }
+
+    void phase(StartupPhase ph, int percent, const std::string& message, int step = 0, int total = 0) {
+        if (!enabled()) return;
+        last_.phase = ph;
+        last_.percent = percent;
+        last_.step = step;
+        last_.total_steps = total;
+        last_.message_utf8 = message;
+        send();
+    }
+    // Avance dentro de la fase actual (cambia solo el porcentaje).
+    void percent(int pct) {
+        if (!enabled()) return;
+        last_.percent = pct;
+        throttled();
+    }
+    // Latido periódico durante operaciones largas de SQLite: repite el último aviso.
+    void tick() {
+        if (!enabled()) return;
+        throttled();
+    }
+
+private:
+    void send() {
+        last_time_ = Clock::now();
+        try { opt_.on_progress(last_); } catch (...) {}
+    }
+    void throttled() {
+        const auto now = Clock::now();
+        if (std::chrono::duration_cast<std::chrono::milliseconds>(now - last_time_).count() >= opt_.progress_min_interval_ms) {
+            send();
+        }
+    }
+
+    const StartupOptions& opt_;
+    StartupProgress last_;
+    Clock::time_point last_time_{};
+};
+
+// Quita SIEMPRE el manejador de progreso de SQLite al salir (cualquier camino, también los de error).
+struct ProgressHandlerGuard {
+    storage::SqliteDatabase& db;
+    ~ProgressHandlerGuard() { db.clear_progress_callback(); }
+};
+
+// Respaldo consistente y verificado: instantánea por tandas en un temporal, archivo único, integridad
+// y renombrado.
+contracts::OperationResult create_verified_snapshot(storage::SqliteDatabase& db, const fs::path& dest, Emitter& em) {
     std::error_code ec;
     fs::create_directories(dest.parent_path(), ec);
     const fs::path tmp = fs::path(dest.u8string() + ".tmp");
     remove_with_sidecars(tmp);
 
-    auto res = db.backup_to(tmp);
+    em.phase(StartupPhase::BackupCopy, 0, "Guardando una copia de seguridad de sus datos…");
+    auto res = db.backup_to(tmp, [&](int remaining, int total) {
+        em.percent(total > 0 ? static_cast<int>((static_cast<long long>(total - remaining) * 100) / total) : 100);
+    });
     if (!res.is_success()) {
         remove_with_sidecars(tmp);
         return res;
@@ -134,7 +189,8 @@ contracts::OperationResult create_verified_snapshot(storage::SqliteDatabase& db,
         remove_with_sidecars(tmp);
         return contracts::OperationResult::fail(contracts::ErrorCode::BackupFailure, single.error_message());
     }
-    auto info = storage::SqliteDatabase::inspect_file(tmp);
+    em.phase(StartupPhase::BackupVerify, -1, "Comprobando que la copia de seguridad quedó bien…");
+    auto info = storage::SqliteDatabase::inspect_file(tmp, [&] { em.tick(); });
     if (!info.is_success() || !info.value().integrity_ok) {
         remove_with_sidecars(tmp);
         return contracts::OperationResult::fail(contracts::ErrorCode::BackupFailure,
@@ -150,22 +206,20 @@ contracts::OperationResult create_verified_snapshot(storage::SqliteDatabase& db,
 }
 
 bool register_pre_migration_backup(storage::SqliteDatabase& db, const fs::path& backup,
-                                   std::chrono::system_clock::time_point now) {
+                                   std::chrono::system_clock::time_point now, Emitter& em) {
     if (!table_exists(db, "backup_files")) return false;
     std::error_code ec;
     fs::path abs = fs::absolute(backup, ec);
     if (ec) abs = backup;
     abs = abs.lexically_normal();
 
-    std::ifstream in(abs, std::ios::binary);
-    if (!in) return false;
-    // Se lee con el tamaño exacto (sin duplicar memoria): el hash necesita el archivo completo en memoria.
-    const std::uint64_t file_bytes = fs::file_size(abs, ec);
-    if (ec) return false;
-    std::vector<std::uint8_t> bytes(static_cast<std::size_t>(file_bytes));
-    in.read(reinterpret_cast<char*>(bytes.data()), static_cast<std::streamsize>(bytes.size()));
-    if (static_cast<std::uint64_t>(in.gcount()) != file_bytes) return false;
-    const std::string sha = crypto::PasswordHasher::to_hex(crypto::PasswordHasher::sha256(bytes.data(), bytes.size()));
+    em.phase(StartupPhase::BackupRegister, 0, "Registrando la copia de seguridad…");
+    FileFingerprint fp;
+    if (!fingerprint_file(abs, fp, kHashBlockBytes, [&](std::uint64_t done, std::uint64_t total) {
+            em.percent(total > 0 ? static_cast<int>((done * 100) / total) : 100);
+        })) {
+        return false;
+    }
     const auto ts = domain::timestamp_from(now);
 
     auto prep = db.prepare(
@@ -175,8 +229,8 @@ bool register_pre_migration_backup(storage::SqliteDatabase& db, const fs::path& 
     auto stmt = std::move(prep.value());
     stmt.bind_text(1, generate_id("bkf"));
     stmt.bind_text(2, abs.u8string());
-    stmt.bind_int64(3, static_cast<std::int64_t>(bytes.size()));
-    stmt.bind_text(4, sha);
+    stmt.bind_int64(3, fp.size);
+    stmt.bind_text(4, fp.sha256);
     stmt.bind_text(5, ts.local);
     stmt.bind_text(6, ts.utc);
     auto step = stmt.step();
@@ -193,6 +247,7 @@ StartupResult open_and_migrate_database(storage::SqliteDatabase& db, const Start
         return res;
     };
     const std::string db_text = opt.db_path.u8string();
+    Emitter em(opt);
 
     std::error_code ec;
     if (!fs::is_directory(opt.migrations_dir, ec)) {
@@ -211,8 +266,27 @@ StartupResult open_and_migrate_database(storage::SqliteDatabase& db, const Start
             "\n\nLlame a quien instaló el sistema."));
     }
 
+    // El manejador de progreso de SQLite vive solo durante esta función y se quita siempre al salir.
+    // Solo se instala si hay quien escuche; nunca interrumpe ninguna operación (devuelve siempre 0).
+    ProgressHandlerGuard handler_guard{db};
+    if (em.enabled()) db.set_progress_callback([&em] { em.tick(); });
+
+    // Versiones aplicadas (si el archivo es ilegible quedan vacías y lo detecta la comprobación de integridad).
+    const std::set<int> applied = file_had_content ? applied_versions(db) : std::set<int>{};
+    r.schema_version_before = max_version(applied);
+    const bool has_data = !applied.empty();
+    const int newest_in_package = max_version(file_versions);
+    const bool newer_than_program = has_data && !file_versions.empty() && r.schema_version_before > newest_in_package;
+    std::vector<int> pending;
+    for (int v : file_versions) {
+        if (!applied.count(v)) pending.push_back(v);
+    }
+    const bool will_update = has_data && !pending.empty() && !newer_than_program;
+    if (will_update) em.phase(StartupPhase::UpdateStarting, -1, "Preparando la actualización de los datos…");
+
     // Base existente: comprobación rápida de integridad antes de tocar nada.
     if (file_had_content) {
+        em.phase(StartupPhase::QuickCheck, -1, "Revisando que los datos estén en buen estado…");
         const auto t0 = Clock::now();
         const bool quick_ok = pragma_check_ok(db, "PRAGMA quick_check;");
         r.quick_check_ms = elapsed_ms(t0);
@@ -225,18 +299,22 @@ StartupResult open_and_migrate_database(storage::SqliteDatabase& db, const Start
         }
     }
 
-    const std::set<int> applied = applied_versions(db);
-    r.schema_version_before = max_version(applied);
-    const bool has_data = !applied.empty();
-    std::vector<int> pending;
-    for (int v : file_versions) {
-        if (!applied.count(v)) pending.push_back(v);
+    // Datos de una versión más nueva que este programa: no se abre para vender y no se toca nada.
+    if (newer_than_program) {
+        db.close();
+        return finish(fail(r, StartupError::DatabaseNewerThanProgram,
+            "El programa instalado es más antiguo que los datos de la cafetería.\n\n"
+            "Estos datos se usaron con una versión más nueva del programa, y esta versión no puede leerlos con "
+            "seguridad: podría estropearlos.\n\nArchivo:\n" + db_text +
+            "\n\nNo se hizo ningún cambio. Instale la versión correcta del programa. Llame a quien instaló el sistema."));
     }
 
     const auto now_tp = opt.now ? opt.now() : std::chrono::system_clock::now();
 
     // Base con datos y migraciones pendientes: respaldo verificado ANTES de la primera migración.
-    if (has_data && !pending.empty()) {
+    if (will_update) {
+        em.phase(StartupPhase::FullCheck, -1,
+                 "Revisando a fondo los datos antes de actualizar. Esto puede tardar varios minutos…");
         const auto t0 = Clock::now();
         const bool full_ok = pragma_check_ok(db, "PRAGMA integrity_check;");
         r.full_check_ms = elapsed_ms(t0);
@@ -274,13 +352,13 @@ StartupResult open_and_migrate_database(storage::SqliteDatabase& db, const Start
         }
 
         const std::string base_name = "cafeteria-v" + std::to_string(r.schema_version_before) + "-a-v" +
-                                      std::to_string(max_version(file_versions)) + "-" + stamp_for_filename(now_tp);
+                                      std::to_string(newest_in_package) + "-" + stamp_for_filename(now_tp);
         fs::path dest = backup_dir / (base_name + ".db");
         for (int n = 2; fs::exists(dest, ec); ++n) {
             dest = backup_dir / (base_name + "-" + std::to_string(n) + ".db");
         }
         const auto tb = Clock::now();
-        auto snap = create_verified_snapshot(db, dest);
+        auto snap = create_verified_snapshot(db, dest, em);
         r.backup_ms = elapsed_ms(tb);
         if (!snap.is_success()) {
             db.close();
@@ -296,7 +374,11 @@ StartupResult open_and_migrate_database(storage::SqliteDatabase& db, const Start
     // Migraciones (cada una en su propia transacción).
     const auto tm = Clock::now();
     storage::MigrationRunner runner(db);
-    auto mig = runner.run_pending_migrations_from_dir(opt.migrations_dir);
+    auto mig = runner.run_pending_migrations_from_dir(opt.migrations_dir, [&](int index, int total, int) {
+        em.phase(StartupPhase::Migrate, total > 0 ? ((index - 1) * 100) / total : -1,
+                 "Actualizando los datos (paso " + std::to_string(index) + " de " + std::to_string(total) + ")…",
+                 index, total);
+    });
     r.migrate_ms = elapsed_ms(tm);
     const std::set<int> applied_after = applied_versions(db);
     r.schema_version_after = max_version(applied_after);
@@ -325,9 +407,10 @@ StartupResult open_and_migrate_database(storage::SqliteDatabase& db, const Start
 
     // Migración correcta: ahora sí se puede registrar el respaldo previo.
     if (r.backup_created) {
-        r.backup_registered = register_pre_migration_backup(db, r.backup_path, now_tp);
+        r.backup_registered = register_pre_migration_backup(db, r.backup_path, now_tp, em);
     }
 
+    em.phase(StartupPhase::Finished, 100, "Listo.");
     r.ok = true;
     return finish(r);
 }

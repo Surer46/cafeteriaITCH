@@ -35,8 +35,10 @@ endif()
 # 2. Biblioteca de Criptografía y Hash de contraseñas (PBKDF2-HMAC-SHA256)
 add_library(app_crypto STATIC
     src/crypto/password_hasher.cpp
+    src/crypto/sha256.cpp
     src/crypto/random_bytes.cpp
     include/app/crypto/password_hasher.hpp
+    include/app/crypto/sha256.hpp
     include/app/crypto/random_bytes.hpp
 )
 target_include_directories(app_crypto PUBLIC
@@ -112,9 +114,11 @@ add_library(app_services STATIC
     src/services/sqlite_print_config_service.cpp
     src/services/data_dir_policy.cpp
     src/services/database_startup.cpp
+    src/services/file_fingerprint.cpp
     src/services/package_self_check.cpp
     include/app/services/data_dir_policy.hpp
     include/app/services/database_startup.hpp
+    include/app/services/file_fingerprint.hpp
     include/app/services/package_self_check.hpp
     include/app/services/identifiers.hpp
     include/app/services/stock_ledger.hpp

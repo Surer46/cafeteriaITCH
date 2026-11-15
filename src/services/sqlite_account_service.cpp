@@ -1654,12 +1654,4 @@ void SqliteAccountService::clear_login_failures(const std::string& key) {
     stmt.step();
 }
 
-void SqliteAccountService::set_current_user_for_testing(const contracts::UserDto& user) {
-    current_user_ = user;
-    auto perms = load_role_permissions(user.role_id);
-    if (perms.is_success()) {
-        current_user_permissions_ = perms.value();
-    }
-}
-
 } // namespace app::services

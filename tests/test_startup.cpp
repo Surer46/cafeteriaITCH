@@ -10,6 +10,7 @@
 #include <iterator>
 #include <set>
 #include <string>
+#include <stdexcept>
 #include <vector>
 
 #include "app/crypto/password_hasher.hpp"
@@ -529,6 +530,317 @@ static void test_self_check_creates_no_backups() {
                "No debe crear respaldos ni datos en el paquete");
 }
 
+// ===================== B9 =====================
+
+static std::set<std::string> list_names(const fs::path& dir) {
+    std::set<std::string> names;
+    std::error_code ec;
+    for (auto it = fs::recursive_directory_iterator(dir, ec); it != fs::recursive_directory_iterator(); it.increment(ec)) {
+        names.insert(fs::relative(it->path(), dir, ec).generic_u8string());
+    }
+    return names;
+}
+
+// --- Base más nueva que el programa ---
+static void test_newer_database_than_program() {
+    std::cout << "[TEST] B9: base más nueva que el programa -> no se abre y no se toca nada..." << std::endl;
+    const fs::path real = fs::u8path(SOURCE_MIGRATIONS_DIR);
+    const fs::path dir = g_root / "mas nueva";
+    fs::create_directories(dir);
+    {
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, options_for(dir, real));
+        TEST_CHECK(r.ok, "Base inicial en la versión más alta: " + r.message_utf8);
+        SqliteAccountService account(db);
+        TEST_CHECK(account.create_initial_owner("dueno_b9", "Dueño B9", kOwnerPwd, "dueno@cafeteria-itch.edu.mx").is_success(), "Dueño");
+        db.close();
+    }
+    // El programa instalado solo trae hasta la migración 13: es más antiguo que los datos.
+    const fs::path old_package = copy_migrations(g_root / "paquete antiguo", 13);
+    const fs::path db_file = dir / "cafeteria.db";
+    const std::string sha_before = file_sha(db_file);
+    const auto names_before = list_names(dir);
+
+    std::vector<StartupProgress> events;
+    auto opt = options_for(dir, old_package);
+    opt.progress_min_interval_ms = 0;
+    opt.on_progress = [&](const StartupProgress& p) { events.push_back(p); };
+    SqliteDatabase db;
+    auto r = open_and_migrate_database(db, opt);
+    TEST_CHECK(!r.ok && r.error == StartupError::DatabaseNewerThanProgram, "Debe rechazar la base más nueva");
+    TEST_CHECK(!db.is_open() && !db.has_progress_callback(), "La base queda cerrada y sin manejador de progreso");
+    TEST_CHECK(!r.backup_created && r.migrations_applied == 0, "Sin respaldo ni migraciones");
+    TEST_CHECK(r.message_utf8.find("más antiguo que los datos") != std::string::npos &&
+                   r.message_utf8.find("Instale la versión correcta") != std::string::npos &&
+                   r.message_utf8.find(db_file.u8string()) != std::string::npos && plain_language(r.message_utf8),
+               "Mensaje llano con la ruta: " + r.message_utf8);
+    TEST_CHECK(file_sha(db_file) == sha_before, "La base no se modificó");
+    TEST_CHECK(!fs::exists(dir / "backups"), "No debe crearse la carpeta backups");
+    TEST_CHECK(list_names(dir) == names_before, "No debe aparecer ni desaparecer ningún archivo");
+    for (const auto& e : events) {
+        TEST_CHECK(e.phase != StartupPhase::UpdateStarting && e.phase != StartupPhase::BackupCopy, "Sin ventana de actualización");
+    }
+
+    // Una base en la MISMA versión que el paquete no es "más nueva".
+    SqliteDatabase db2;
+    auto same = open_and_migrate_database(db2, options_for(dir, real));
+    TEST_CHECK(same.ok, "Con el paquete correcto abre normalmente: " + same.message_utf8);
+    db2.close();
+}
+
+// --- Avisos de progreso ---
+static void test_progress_order_and_handler_removed() {
+    std::cout << "[TEST] B9: avisos de progreso en orden y manejador de SQLite retirado..." << std::endl;
+    const fs::path real = fs::u8path(SOURCE_MIGRATIONS_DIR);
+    const int N = max_real_version();
+    const fs::path m13 = copy_migrations(g_root / "migraciones13e", 13);
+
+    // a) actualización con datos: todas las fases, en orden
+    {
+        const fs::path dir = g_root / "progreso";
+        make_db_with_data(dir, m13);
+        std::vector<StartupProgress> events;
+        int ticks_after = 0;
+        bool collecting = true;
+        auto opt = options_for(dir, real);
+        opt.progress_min_interval_ms = 0;
+        opt.on_progress = [&](const StartupProgress& p) {
+            if (collecting) events.push_back(p); else ++ticks_after;
+        };
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, opt);
+        collecting = false;
+        TEST_CHECK(r.ok && r.backup_created, "Actualización: " + r.message_utf8);
+        TEST_CHECK(!events.empty() && events.front().phase == StartupPhase::UpdateStarting, "El primer aviso es UpdateStarting");
+        TEST_CHECK(events.back().phase == StartupPhase::Finished, "El último aviso es Finished");
+        std::set<StartupPhase> seen;
+        int last_phase = -1;
+        bool in_order = true;
+        for (const auto& e : events) {
+            const int ph = static_cast<int>(e.phase);
+            if (ph < last_phase) in_order = false;
+            last_phase = ph;
+            seen.insert(e.phase);
+            TEST_CHECK(!e.message_utf8.empty() && plain_language(e.message_utf8), "Mensaje de fase en lenguaje llano");
+            TEST_CHECK(e.percent >= -1 && e.percent <= 100, "Porcentaje en rango");
+        }
+        TEST_CHECK(in_order, "Las fases llegan en orden");
+        for (auto ph : {StartupPhase::UpdateStarting, StartupPhase::QuickCheck, StartupPhase::FullCheck, StartupPhase::BackupCopy,
+                        StartupPhase::BackupVerify, StartupPhase::Migrate, StartupPhase::BackupRegister, StartupPhase::Finished}) {
+            TEST_CHECK(seen.count(ph) == 1, "Debe avisar la fase " + std::to_string(static_cast<int>(ph)));
+        }
+        // Migración N de M
+        std::vector<int> steps;
+        for (const auto& e : events) {
+            if (e.phase == StartupPhase::Migrate && e.step > 0 && (steps.empty() || steps.back() != e.step)) {
+                steps.push_back(e.step);
+                TEST_CHECK(e.total_steps == N - 13, "total de migraciones pendientes");
+                TEST_CHECK(e.message_utf8.find("paso " + std::to_string(e.step) + " de " + std::to_string(e.total_steps)) != std::string::npos,
+                           "Texto 'paso N de M': " + e.message_utf8);
+            }
+        }
+        TEST_CHECK(steps.size() == static_cast<std::size_t>(N - 13), "Un aviso por migración pendiente");
+        for (std::size_t i = 0; i < steps.size(); ++i) TEST_CHECK(steps[i] == static_cast<int>(i) + 1, "Pasos 1..M en orden");
+        // Copia del respaldo: porcentaje real, no decreciente, llega a 100
+        int last_pct = -1, max_pct = -1;
+        for (const auto& e : events) {
+            if (e.phase != StartupPhase::BackupCopy || e.percent < 0) continue;
+            TEST_CHECK(e.percent >= last_pct, "El porcentaje de la copia no retrocede");
+            last_pct = e.percent;
+            max_pct = std::max(max_pct, e.percent);
+        }
+        TEST_CHECK(max_pct == 100, "La copia llega al 100 %");
+        // Las fases de integridad no tienen porcentaje real
+        for (const auto& e : events) {
+            if (e.phase == StartupPhase::QuickCheck || e.phase == StartupPhase::FullCheck || e.phase == StartupPhase::BackupVerify) {
+                TEST_CHECK(e.percent == -1, "Fase sin porcentaje real");
+            }
+        }
+
+        // El manejador de SQLite ya no existe: trabajo pesado después no genera avisos.
+        TEST_CHECK(!db.has_progress_callback(), "La conexión no conserva manejador de progreso");
+        const std::size_t seen_events = events.size();
+        TEST_CHECK(db.execute("CREATE TABLE prueba_b9 (x INTEGER);").is_success(), "Tabla de prueba");
+        TEST_CHECK(db.execute("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < 300000) "
+                              "INSERT INTO prueba_b9 SELECT i FROM n;").is_success(), "Trabajo pesado tras el arranque");
+        TEST_CHECK(scalar(db, "SELECT COUNT(*) FROM prueba_b9;") == 300000, "El trabajo pesado se completó");
+        TEST_CHECK(ticks_after == 0 && events.size() == seen_events, "Ningún aviso después del arranque");
+        db.close();
+    }
+
+    // b) base nueva con aviso: sin ventana de actualización ni respaldo
+    {
+        const fs::path dir = g_root / "progreso nueva";
+        fs::create_directories(dir);
+        std::vector<StartupProgress> events;
+        auto opt = options_for(dir, real);
+        opt.progress_min_interval_ms = 0;
+        opt.on_progress = [&](const StartupProgress& p) { events.push_back(p); };
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, opt);
+        TEST_CHECK(r.ok && !r.backup_created, "Base nueva con aviso");
+        for (const auto& e : events) {
+            TEST_CHECK(e.phase != StartupPhase::UpdateStarting && e.phase != StartupPhase::BackupCopy &&
+                           e.phase != StartupPhase::FullCheck, "Una base nueva no muestra fases de actualización");
+        }
+        TEST_CHECK(!db.has_progress_callback(), "Sin manejador tras el arranque");
+        db.close();
+
+        // Segundo arranque, sin pendientes: tampoco hay ventana.
+        events.clear();
+        SqliteDatabase db2;
+        auto r2 = open_and_migrate_database(db2, opt);
+        TEST_CHECK(r2.ok && !r2.backup_created, "Segundo arranque");
+        for (const auto& e : events) TEST_CHECK(e.phase != StartupPhase::UpdateStarting, "Sin pendientes no hay ventana");
+        TEST_CHECK(!db2.has_progress_callback(), "Sin manejador tras el segundo arranque");
+        db2.close();
+    }
+
+    // c) sin aviso todo funciona igual (ya cubierto por todas las demás pruebas); además, un aviso que
+    //    lanza una excepción no rompe el arranque.
+    {
+        const fs::path dir = g_root / "progreso excepcion";
+        make_db_with_data(dir, m13);
+        auto opt = options_for(dir, real);
+        opt.progress_min_interval_ms = 0;
+        int calls = 0;
+        opt.on_progress = [&](const StartupProgress&) { ++calls; throw std::runtime_error("aviso defectuoso"); };
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, opt);
+        TEST_CHECK(r.ok && r.backup_created && calls > 0, "Un aviso que lanza excepción no interrumpe la actualización");
+        TEST_CHECK(scalar(db, "SELECT MAX(version) FROM schema_migrations;") == N, "Se aplicaron todas las migraciones");
+        db.close();
+    }
+
+    // d) una migración larga no se aborta por el manejador, y los avisos de latido llegan durante ella
+    {
+        const fs::path dir = g_root / "progreso larga";
+        make_db_with_data(dir, m13);
+        const fs::path mlarga = copy_migrations(g_root / "migraciones larga", 13);
+        write_text(mlarga / "014_larga.sql",
+                   "CREATE TABLE larga_b9 (x INTEGER NOT NULL);\n"
+                   "WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < 400000) "
+                   "INSERT INTO larga_b9 SELECT i FROM n;\n");
+        auto opt = options_for(dir, mlarga);
+        opt.progress_min_interval_ms = 0;
+        int migrate_events = 0;
+        opt.on_progress = [&](const StartupProgress& p) { if (p.phase == StartupPhase::Migrate) ++migrate_events; };
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, opt);
+        TEST_CHECK(r.ok, "La migración larga debe terminar: " + r.message_utf8);
+        TEST_CHECK(scalar(db, "SELECT COUNT(*) FROM larga_b9;") == 400000, "La migración larga no se abortó (400000 filas)");
+        TEST_CHECK(migrate_events > 2, "Llegaron avisos de latido durante la migración: " + std::to_string(migrate_events));
+        TEST_CHECK(scalar(db, "SELECT MAX(version) FROM schema_migrations;") == 14, "Versión 14 aplicada");
+        db.close();
+    }
+}
+
+// --- El manejador se quita también en los caminos de error ---
+static void test_handler_removed_on_error_paths() {
+    std::cout << "[TEST] B9: el manejador de progreso se retira en cada camino de error..." << std::endl;
+    const fs::path real = fs::u8path(SOURCE_MIGRATIONS_DIR);
+    const fs::path m13 = copy_migrations(g_root / "migraciones13f", 13);
+    int events = 0;
+    auto with_listener = [&](StartupOptions o) {
+        o.progress_min_interval_ms = 0;
+        o.on_progress = [&](const StartupProgress&) { ++events; };
+        return o;
+    };
+
+    {   // sin espacio
+        const fs::path dir = g_root / "err espacio";
+        make_db_with_data(dir, m13);
+        auto o = with_listener(options_for(dir, real));
+        o.free_space_bytes = [](const fs::path&) { return std::uint64_t(0); };
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, o);
+        TEST_CHECK(!r.ok && r.error == StartupError::NotEnoughSpace && !db.has_progress_callback() && !db.is_open(),
+                   "Sin espacio: manejador retirado");
+    }
+    {   // migración que falla
+        const fs::path dir = g_root / "err migracion";
+        make_db_with_data(dir, m13);
+        const fs::path mrota = copy_migrations(g_root / "migraciones rota b9", 13);
+        write_text(mrota / "014_rota.sql", "INSERT INTO tabla_que_no_existe (x) VALUES (1);\n");
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, with_listener(options_for(dir, mrota)));
+        TEST_CHECK(!r.ok && r.error == StartupError::MigrationFailed && !db.has_progress_callback() && !db.is_open(),
+                   "Migración fallida: manejador retirado");
+    }
+    {   // base dañada
+        const fs::path dir = g_root / "err danada";
+        fs::create_directories(dir);
+        write_text(dir / "cafeteria.db", std::string(5000, 'x') + " no es una base");
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, with_listener(options_for(dir, real)));
+        TEST_CHECK(!r.ok && r.error == StartupError::DatabaseDamaged && !db.has_progress_callback() && !db.is_open(),
+                   "Base dañada: manejador retirado");
+    }
+    {   // no se puede crear la carpeta del respaldo
+        const fs::path dir = g_root / "err carpeta";
+        make_db_with_data(dir, m13);
+        write_text(dir / "backups", "soy un archivo");
+        SqliteDatabase db;
+        auto r = open_and_migrate_database(db, with_listener(options_for(dir, real)));
+        TEST_CHECK(!r.ok && r.error == StartupError::BackupFailed && !db.has_progress_callback() && !db.is_open(),
+                   "Respaldo imposible: manejador retirado");
+    }
+    TEST_CHECK(events > 0, "Los avisos sí llegaron antes de cada error");
+}
+
+// --- Copia por tandas: mismo resultado que la copia de una vez ---
+static void test_backup_in_batches_same_result() {
+    std::cout << "[TEST] B9: copia por tandas igual que la copia de una vez..." << std::endl;
+    const fs::path real = fs::u8path(SOURCE_MIGRATIONS_DIR);
+    const fs::path dir = g_root / "tandas";
+    fs::create_directories(dir);
+    SqliteDatabase db;
+    auto r = open_and_migrate_database(db, options_for(dir, real));
+    TEST_CHECK(r.ok, "Base");
+    SqliteAccountService account(db);
+    TEST_CHECK(account.create_initial_owner("dueno_t", "Dueño T", kOwnerPwd, "dueno@cafeteria-itch.edu.mx").is_success(), "Dueño");
+    TEST_CHECK(db.execute("CREATE TABLE relleno_b9 (x TEXT NOT NULL);").is_success(), "Tabla");
+    TEST_CHECK(db.execute("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i+1 FROM n WHERE i < 60000) "
+                          "INSERT INTO relleno_b9 SELECT hex(randomblob(100)) FROM n;").is_success(), "Relleno de 60000 filas");
+
+    const fs::path one = dir / "una vez.db";
+    const fs::path batches = dir / "tandas.db";
+    const fs::path empty_cb = dir / "callback vacio.db";
+    TEST_CHECK(db.backup_to(one).is_success(), "Copia de una vez");
+    std::vector<std::pair<int, int>> calls;
+    TEST_CHECK(db.backup_to(batches, [&](int remaining, int total) { calls.emplace_back(remaining, total); }).is_success(),
+               "Copia por tandas");
+    TEST_CHECK(db.backup_to(empty_cb, BackupProgress{}).is_success(), "Copia con callback vacío");
+
+    TEST_CHECK(calls.size() > 5, "Varias tandas: " + std::to_string(calls.size()));
+    bool monotonic = true;
+    for (std::size_t i = 1; i < calls.size(); ++i) {
+        if (calls[i].first > calls[i - 1].first) monotonic = false;
+        if (calls[i].second <= 0) monotonic = false;
+    }
+    TEST_CHECK(monotonic && calls.back().first == 0, "Las páginas que faltan no aumentan y terminan en 0");
+
+    for (const auto& f : {one, batches, empty_cb}) {
+        TEST_CHECK(SqliteDatabase::make_single_file(f).is_success(), "Dejar como archivo único");
+        auto info = SqliteDatabase::inspect_file(f);
+        TEST_CHECK(info.is_success() && info.value().integrity_ok && info.value().has_expected_tables &&
+                       info.value().schema_version == max_real_version() && info.value().has_active_owner,
+                   "Copia íntegra y completa: " + f.filename().u8string());
+        SqliteDatabase copy;
+        TEST_CHECK(copy.open(f).is_success(), "Abrir copia");
+        TEST_CHECK(scalar(copy, "SELECT COUNT(*) FROM relleno_b9;") == 60000, "60000 filas en la copia");
+        TEST_CHECK(scalar(copy, "SELECT COUNT(*) FROM users;") == 1, "El Dueño está en la copia");
+        copy.close();
+    }
+    TEST_CHECK(fs::file_size(one) == fs::file_size(batches) && fs::file_size(one) == fs::file_size(empty_cb),
+               "Las tres copias pesan lo mismo");
+    // inspect_file con latido: el resultado no cambia y el aviso nunca interrumpe.
+    int ticks = 0;
+    auto info = SqliteDatabase::inspect_file(batches, [&] { ++ticks; });
+    TEST_CHECK(info.is_success() && info.value().integrity_ok && ticks > 0, "inspect_file con latido (" + std::to_string(ticks) + " avisos)");
+    db.close();
+}
+
 int main() {
     std::error_code ec;
     g_root = fs::temp_directory_path(ec) /
@@ -544,6 +856,10 @@ int main() {
     test_damaged_database_not_opened();
     test_missing_migrations_folder();
     test_self_check_creates_no_backups();
+    test_newer_database_than_program();
+    test_progress_order_and_handler_removed();
+    test_handler_removed_on_error_paths();
+    test_backup_in_batches_same_result();
 
     std::cout << "Pruebas de arranque seguro (B8) correctas. TEST_CHECK ejecutados: " << g_checks << std::endl;
     cleanup_and_exit(0);

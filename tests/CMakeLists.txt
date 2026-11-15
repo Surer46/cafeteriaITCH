@@ -170,7 +170,7 @@ endif()
 
 # Tests B8: arranque seguro (respaldo previo, integridad), límite de intentos de inicio de sesión
 # y autorización en todos los servicios reales.
-foreach(b8_test test_startup test_login_lockout test_authorization test_startup_timing)
+foreach(b8_test test_startup test_login_lockout test_authorization test_startup_timing test_sha256 test_hash_memory)
     add_executable(${b8_test} ${b8_test}.cpp)
     target_link_libraries(${b8_test} PRIVATE
         app_services
@@ -187,3 +187,7 @@ add_test(NAME StartupTest COMMAND test_startup)
 add_test(NAME LoginLockoutTest COMMAND test_login_lockout)
 add_test(NAME AuthorizationTest COMMAND test_authorization)
 add_test(NAME StartupTimingSmokeTest COMMAND test_startup_timing 1500)
+
+target_link_libraries(test_hash_memory PRIVATE psapi)
+add_test(NAME Sha256Test COMMAND test_sha256)
+add_test(NAME HashMemorySmokeTest COMMAND test_hash_memory)
