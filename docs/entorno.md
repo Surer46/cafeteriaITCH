@@ -72,6 +72,17 @@ cmake --build build_be_release --target installer
 
 Instala el componente `app` (sin `portable.flag`) en `build_be_release\installer_stage\CafeteriaITCH` y llama a `ISCC.exe` con la versión de `project(VERSION)`. El instalador queda en `build_be_release\installer_out\CafeteriaITCH-<versión>-instalador-win64.exe`. Falla si ISCC emite advertencias. Instalación silenciosa (la usará la actualización automática): `CafeteriaITCH-<versión>-instalador-win64.exe /VERYSILENT /SUPPRESSMSGBOXES /NORESTART [/REABRIR]`.
 
+## Compilación con ganchos de prueba de actualizaciones (`build_hooks_release`)
+
+Las pruebas de actualizaciones con el ejecutable usan una compilación aparte, **nunca el paquete**: Release con `-DCAFETERIA_TEST_HOOKS=ON`.
+
+```powershell
+cmake -B build_hooks_release -G Ninja -DCMAKE_BUILD_TYPE=Release -DCAFETERIA_TEST_HOOKS=ON "-DwxWidgets_ROOT_DIR=$wx" "-DwxWidgets_LIB_DIR=$wx/lib/gcc1610_x64_dll" -DwxWidgets_CONFIGURATION=mswu
+cmake --build build_hooks_release --parallel 2
+```
+
+Variables que solo existen en esa compilación: `CAFETERIA_UPDATE_TEST_SOURCE=<carpeta>` (lee `manifiesto.json`, `manifiesto.json.sig` y el instalador de esa carpeta en vez de internet; carpeta vacía o inexistente = sin red; además activa la clave pública de prueba), `CAFETERIA_UPDATE_TEST_DELAY_MS` (retraso por bloque de descarga) y `CAFETERIA_UPDATE_TEST_LAUNCH=<archivo>` (escribe lo que habría lanzado en vez de ejecutar el instalador). La carpeta fuente se prepara firmando con la clave de prueba: `tools\publicar_version.ps1 ... -Clave tests\update_test_key.priv -Salida <carpeta>`. `PackageTest` solo corresponde a las compilaciones normales: comprueba que el ejecutable del paquete no contiene estas cadenas ni la clave de prueba. `CAFETERIA_UPDATE_CHECK=0` (en cualquier compilación) apaga la búsqueda automática y la descarga.
+
 ## Escalado de pantalla
 
 El programa y las pruebas GUI se verifican con Windows al **100 %** (96 DPI) y al **125 %** (120 DPI). Con otro escalado las pruebas se detienen con un mensaje. Cambiar el escalado lo hace la persona (Configuración > Pantalla > Escala); los programas que se abren después ya lo usan, sin cerrar sesión. Para verificar un bloque de interfaz, correr la batería GUI en los dos escalados.

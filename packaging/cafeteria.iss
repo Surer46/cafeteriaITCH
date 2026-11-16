@@ -120,6 +120,37 @@ begin
   end;
 end;
 
+// Desinstalar con el programa abierto: mismo cierre NORMAL (taskkill sin /F, nunca forzado) hasta 20 segundos. Si
+// despues sigue abierto, el desinstalador se niega ANTES de borrar nada, asi que no queda nada a medias.
+function InitializeUninstall(): Boolean;
+var
+  ResultCode, Attempt: Integer;
+  StillOpen: Boolean;
+begin
+  Result := True;
+  StillOpen := False;
+  for Attempt := 1 to 40 do
+  begin
+    if not Exec(ExpandConstant('{sys}\taskkill.exe'), '/IM CafeteriaITCH.exe', '', SW_HIDE, ewWaitUntilTerminated, ResultCode) then
+    begin
+      StillOpen := False;          // taskkill no disponible: no se puede comprobar, se continua
+      Break;
+    end;
+    if ResultCode = 128 then
+    begin
+      StillOpen := False;          // ya no hay ningun CafeteriaITCH.exe abierto
+      Break;
+    end;
+    StillOpen := True;
+    Sleep(500);
+  end;
+  if StillOpen then
+  begin
+    MsgBox('Cierre Cafeteria ITCH y vuelva a intentarlo. No se desinstalo nada.', mbError, MB_OK);
+    Result := False;
+  end;
+end;
+
 // Verdadero solo si el instalador corre en modo silencioso Y se le paso /REABRIR.
 function ReopenAfterSilentInstall(): Boolean;
 var

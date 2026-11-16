@@ -3158,9 +3158,17 @@ void test_b4a_permission_titles_migration() {
         TEST_CHECK(!rp_before.empty(), "role_permissions previos no deben estar vacíos");
         TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "21", "21 permisos antes de 009");
 
+        // Línea base de 009: solo 001 a 009. Las migraciones posteriores (p. ej. 017 añade updates.manage) se aplican después.
+        fs::create_directories(base_dir / "mig_009");
+        for (const auto& entry : fs::directory_iterator(mig_dir)) {
+            const std::string name = entry.path().filename().u8string();
+            if (name.size() > 4 && name.substr(name.size() - 4) == ".sql" && name < "010") {
+                fs::copy_file(entry.path(), base_dir / "mig_009" / entry.path().filename());
+            }
+        }
         MigrationRunner runner(db);
-        TEST_CHECK(runner.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migración 009");
-        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == latest_migration_version(), "Última versión del esquema es la de la carpeta de migraciones");
+        TEST_CHECK(runner.run_pending_migrations_from_dir(base_dir / "mig_009").is_success(), "Aplicar migración 009");
+        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == "9", "Línea base en versión 9");
         TEST_CHECK(query_text(rp_sql) == rp_before, "role_permissions (role-owner y role-cashier incluidos) no cambian con 009");
         TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "21", "Siguen existiendo 21 permisos");
         TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions WHERE title <> '' AND section <> '' AND sort_order > 0;") == "21",
@@ -3173,11 +3181,19 @@ void test_b4a_permission_titles_migration() {
                        "Recuperar la información desde una copia. Reemplaza los datos actuales.",
                    "Descripción nueva de backup.restore");
 
+        // Resto de migraciones: solo suman (017: permiso updates.manage solo para role-owner).
+        MigrationRunner runner_rest(db);
+        TEST_CHECK(runner_rest.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migraciones posteriores a 009");
+        TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == latest_migration_version(), "Última versión del esquema es la de la carpeta de migraciones");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "22", "22 permisos con updates.manage");
+        TEST_CHECK(query_text("SELECT group_concat(role_id, ',') FROM role_permissions WHERE permission_id = 'updates.manage';") == "role-owner",
+                   "updates.manage solo para role-owner");
+        const std::string rp_latest = query_text(rp_sql);
         const std::string perm_after_first = query_text(perm_sql);
         MigrationRunner runner2(db);
         TEST_CHECK(runner2.run_pending_migrations_from_dir(mig_dir).is_success(), "Segunda ejecución del runner");
         TEST_CHECK(query_text(perm_sql) == perm_after_first, "Ejecutar el runner dos veces no cambia permissions");
-        TEST_CHECK(query_text(rp_sql) == rp_before, "Segunda ejecución no cambia role_permissions");
+        TEST_CHECK(query_text(rp_sql) == rp_latest, "Segunda ejecución no cambia role_permissions");
         TEST_CHECK(query_text("SELECT COUNT(*) FROM schema_migrations;") == latest_migration_version(), "Segunda ejecución no duplica versiones");
 
         auto account_svc = std::make_shared<SqliteAccountService>(db);
@@ -3187,7 +3203,7 @@ void test_b4a_permission_titles_migration() {
 
         auto list = account_svc->list_permissions();
         TEST_CHECK(list.is_success(), "list_permissions B4a");
-        TEST_CHECK(list.value().size() == 21, "list_permissions devuelve las 21 filas");
+        TEST_CHECK(list.value().size() == 22, "list_permissions devuelve las 22 filas");
         bool ordered = true;
         bool filled = true;
         for (std::size_t i = 0; i < list.value().size(); ++i) {

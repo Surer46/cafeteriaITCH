@@ -222,6 +222,19 @@ target_compile_definitions(test_auto_backup PRIVATE SOURCE_MIGRATIONS_DIR="${CMA
 add_test(NAME AutoBackupTest COMMAND test_auto_backup)
 set_tests_properties(AutoBackupTest PROPERTIES TIMEOUT 900)
 
+# Tests B11: actualizaciones (cliente HTTP falso + criptografía CNG real; sin red).
+if(WIN32)
+    add_executable(test_update test_update.cpp)
+    target_link_libraries(test_update PRIVATE app_services app_storage app_contracts app_crypto sqlite3)
+    target_compile_definitions(test_update PRIVATE
+        SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations"
+        TOOLS_DIR="${CMAKE_SOURCE_DIR}/tools"
+        TEST_PRIVATE_KEY_PATH="${CMAKE_CURRENT_SOURCE_DIR}/update_test_key.priv"
+        TEST_PUBLIC_KEY_HEX="a6660f9e6acff5026f620d6d83244fe3eb7eb19ed4c1e6a9061371d697d736b66e2e12e6e170ac9eb6e3d31ab113fc891eb3a6aadf3f8f413e0e9e069b4bdfea")
+    add_test(NAME UpdateTest COMMAND test_update)
+    set_tests_properties(UpdateTest PROPERTIES TIMEOUT 900)
+endif()
+
 if(WIN32)
     add_executable(test_endsession test_endsession.cpp)
     target_link_libraries(test_endsession PRIVATE app_services app_storage app_contracts app_crypto sqlite3)

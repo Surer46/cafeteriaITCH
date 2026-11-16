@@ -122,10 +122,21 @@ add_library(app_services STATIC
     src/services/data_dir_policy.cpp
     src/services/database_startup.cpp
     src/services/file_fingerprint.cpp
+    src/services/update_signature.cpp
+    src/services/update_manifest.cpp
+    src/services/update_http.cpp
+    src/services/update_public_keys.cpp
+    src/services/sqlite_update_service.cpp
     src/services/package_self_check.cpp
     include/app/services/data_dir_policy.hpp
     include/app/services/database_startup.hpp
     include/app/services/file_fingerprint.hpp
+    include/app/services/update_signature.hpp
+    include/app/services/update_manifest.hpp
+    include/app/services/update_http.hpp
+    include/app/services/update_public_keys.hpp
+    include/app/services/sqlite_update_service.hpp
+    include/app/contracts/update_service.hpp
     include/app/services/package_self_check.hpp
     include/app/services/identifiers.hpp
     include/app/services/stock_ledger.hpp
@@ -150,6 +161,15 @@ target_link_libraries(app_services PUBLIC
     app_storage
     app_crypto
 )
+# Actualizaciones (B11): WinHTTP (HTTPS), CNG (firmas ECDSA) y ShellExecuteEx (lanzar el instalador con elevación).
+if(WIN32)
+    target_link_libraries(app_services PUBLIC winhttp bcrypt shell32)
+endif()
+# Los ganchos de prueba de actualizaciones viven en app_services: se activan con -DCAFETERIA_TEST_HOOKS=ON y nunca
+# existen en el paquete (PackageTest lo comprueba).
+if(CAFETERIA_TEST_HOOKS)
+    target_compile_definitions(app_services PUBLIC CAFETERIA_TEST_HOOKS)
+endif()
 
 # 7. Aplicación de Escritorio wxWidgets (src/frontend/)
 set(wxWidgets_ROOT_DIR "" CACHE PATH "Ruta raíz del SDK wxWidgets (o definir variable de entorno WXWIN, WXWIDGETS_ROOT o WX_DIR)")

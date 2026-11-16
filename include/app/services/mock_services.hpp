@@ -12,6 +12,7 @@
 #include "app/contracts/shift_service.hpp"
 #include "app/contracts/report_service.hpp"
 #include "app/contracts/backup_service.hpp"
+#include "app/contracts/update_service.hpp"
 #include "app/contracts/print_config_service.hpp"
 
 namespace app::storage {
@@ -257,6 +258,20 @@ private:
     contracts::PrinterStationConfig config_;
 };
 
+// Servicio de actualizaciones simulado (solo para desarrollar la interfaz): nunca toca la red.
+class MockUpdateService : public contracts::IUpdateService {
+public:
+    contracts::Result<contracts::UpdateStatusDto> get_update_status() override;
+    contracts::OperationResult check_for_updates() override;
+    contracts::OperationResult accept_update() override;
+    contracts::OperationResult decline_update() override;
+    contracts::OperationResult cancel_download() override;
+    contracts::OperationResult use_update_from_files(const std::string&, const std::string&, const std::string&) override;
+    contracts::OperationResult postpone_install_this_session() override;
+    contracts::Result<contracts::UpdateInstallResultDto> get_last_install_result() override;
+    contracts::OperationResult acknowledge_install_result() override;
+};
+
 struct ServiceRegistry {
     std::shared_ptr<contracts::IAccountService> account_service;
     std::shared_ptr<contracts::ICatalogService> catalog_service;
@@ -267,11 +282,15 @@ struct ServiceRegistry {
     std::shared_ptr<contracts::IReportService> report_service;
     std::shared_ptr<contracts::IBackupService> backup_service;
     std::shared_ptr<contracts::IPrintConfigService> print_config_service;
+    std::shared_ptr<contracts::IUpdateService> update_service;  // B11: actualizaciones del programa
 
     static ServiceRegistry create_mock_registry();
+    // app_version: versión del programa en ejecución (project(VERSION)); is_portable: copia con portable.flag.
     static ServiceRegistry create_sqlite_registry(storage::SqliteDatabase& db,
                                                    const std::string& config_dir = "",
-                                                   const std::string& migrations_dir = "");
+                                                   const std::string& migrations_dir = "",
+                                                   const std::string& app_version = "0.0.0",
+                                                   bool is_portable = false);
 };
 
 } // namespace app::services

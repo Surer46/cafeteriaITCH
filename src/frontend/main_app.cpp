@@ -16,6 +16,7 @@
 #include "app/services/data_dir_policy.hpp"
 #include "app/services/package_self_check.hpp"
 #include "app/services/database_startup.hpp"
+#include "app/services/sqlite_update_service.hpp"
 
 #include <wx/stdpaths.h>
 #include <wx/cmdline.h>
@@ -312,8 +313,16 @@ public:
         // 4. Crear servicios conectados a SQLite, inyectando el directorio efectivo del puesto
         // para que SqlitePrintConfigService use la ruta ya resuelta (respeta --data-dir y
         // CAFETERIA_DATA_DIR) en lugar de releer getenv o usar cwd.
-        auto registry = services::ServiceRegistry::create_sqlite_registry(db_, data_dir.u8string(), mig_dir.u8string());
+        auto registry = services::ServiceRegistry::create_sqlite_registry(
+            db_, data_dir.u8string(), mig_dir.u8string(), CAFETERIA_VERSION,
+            dir_decision.mode == services::DataDirMode::Portable);
         auto account_service = registry.account_service;
+        db_file_ = db_path;
+
+        // Actualizaciones (B11): búsqueda automática en segundo plano (a lo sumo cada 24 h, sin red si no hay clave
+        // pública configurada o CAFETERIA_UPDATE_CHECK=0). Nunca bloquea el inicio de sesión ni una venta.
+        update_service_ = std::dynamic_pointer_cast<services::SqliteUpdateService>(registry.update_service);
+        if (update_service_) update_service_->start_automatic_check();
 
         // 5. Verificar si existe cuenta Dueño (primer inicio obligatorio)
         auto has_owner_res = account_service->has_owner();
@@ -369,13 +378,29 @@ public:
 
     int OnExit() override {
         Theme::cleanup();
+
+        // Instalación de una actualización aceptada, SOLO en un cierre normal (el apagado de Windows termina el
+        // proceso en OnEndSession y nunca llega aquí). Orden: 1) se vuelve a verificar todo y se anota el intento;
+        // 2) se cierra la base; 3) solo si cerró limpia, se lanza el instalador con elevación; 4) el proceso termina.
+        // Sin sesión (p. ej. cierre tras restaurar un respaldo) o con la actualización pospuesta no se lanza nada.
+        services::SqliteUpdateService::InstallLaunchPlan plan;
+        if (update_service_) {
+            plan = update_service_->prepare_install_on_close();
+            if (plan.ok) update_service_->wait_idle(5000);  // que una búsqueda en curso suelte su conexión
+        }
         db_.close();
+        if (plan.ok && services::SqliteUpdateService::database_closed_cleanly(db_file_)) {
+            update_service_->launch_install(plan);
+        }
+        plan = services::SqliteUpdateService::InstallLaunchPlan();  // suelta el archivo del instalador
         return wxApp::OnExit();
     }
 
 private:
     wxString command_data_dir_;
     storage::SqliteDatabase db_;
+    std::filesystem::path db_file_;
+    std::shared_ptr<services::SqliteUpdateService> update_service_;
     bool in_startup_{false};  // true mientras open_and_migrate_database usa la conexión
 };
 
