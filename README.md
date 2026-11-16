@@ -6,7 +6,7 @@ La especificación completa está en [`docs/specs.md`](docs/specs.md); las regla
 
 ## Avance
 
-**Al 2026-11-15: cerca del 57 % hacia la versión 1.0 y del 71 % hacia un piloto en caja.**
+**Al 2026-11-15: cerca del 59 % hacia la versión 1.0 y del 73 % hacia un piloto en caja.**
 
 Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cierra con pruebas del ejecutable real y, donde aplica, revisión humana y hardware.
 
@@ -16,7 +16,7 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 | **I2** Venta, cobro, caja e impresión | 85 % | Software terminado. Faltan la revisión visual humana (0 de 7 casos), la impresora térmica real (55 y 80 mm), el monitor táctil y el escalado de pantalla al 150 y 200 % (100 y 125 % verificados el 2026-11-14). |
 | **I3** Inventario, ingredientes y recetas | 40 % | En desarrollo desde el 2026-11-13, sin esperar la revisión humana de I2. Backend listo: ingredientes, compras, mermas y ajustes, movimientos, avisos de poco inventario, y costo y margen por receta con promedio móvil. Pantalla de Ingredientes lista; faltan Reabastecimiento, Productos y recetas, y Existencias. Sin decidir: combos, promociones y productos por peso. |
 | **I4** Corte de turno y reportes | 35 % | Listos: resumen diario real, pantalla de Caja y turnos, Bitácora. Faltan la conciliación del corte y la pantalla de Reportes. |
-| **I5** Respaldos y restauración | 70 % | Pantalla BackOffice → Respaldos: respaldo manual verificado a la carpeta o USB que elija el Dueño, restauración guiada con copia previa y cierre del programa, limpieza de respaldos antiguos con vista previa; solo el Dueño restaura. En curso: respaldo automático al cerrar turno, copia a USB y lista de respaldos. Servidor externo aplazado por decisión del usuario. |
+| **I5** Respaldos y restauración | 80 % | Pantalla BackOffice → Respaldos: respaldo manual verificado a la carpeta o USB que elija el Dueño, restauración guiada con copia previa y cierre del programa, limpieza de respaldos antiguos con vista previa; solo el Dueño restaura. Listo en el servicio, con pruebas: respaldo automático al cerrar turno (activado por omisión, sin frenar la caja), copia a una segunda carpeta o USB y lista de respaldos; falta mostrarlo en la pantalla. Servidor externo aplazado por decisión del usuario. |
 | **I6** Usuarios, roles y permisos | 95 % | Pantallas de Usuarios y de Roles. Los permisos se muestran con título, descripción e interruptores, agrupados por sección. Falta dar más alto a la lista de permisos y la revisión humana. |
 | **I7** Perfil táctil, instalador y entrega | 65 % | Perfil Táctil elegible en Configuración y en el encabezado; todas las pantallas reales y los diálogos de acceso, usuario, cobro e historial con controles de al menos 48 y filas de 40, vigilado por una prueba sin excepciones, al 100 y al 125 % de escalado. Paquete portable en ZIP con autocomprobación (`--self-check`), carpeta de datos sin cambios silenciosos, ficha de la PC de caja, respaldo antes de actualizar y comprobación de integridad al arrancar. Instalador de Windows (Inno Setup 7) probado en esta PC: instalar, actualizar en silencio conservando los datos y desinstalar. Teclado numérico propio en Táctil para cantidades, efectivo y avisos; el valor se reemplaza al primer toque. Pantalla completa con F11 o desde Configuración, recordada por equipo. Faltan: datos de la PC de caja, prueba en otro Windows, monitor táctil real, icono y actualizaciones. |
 
@@ -56,7 +56,7 @@ ctest --test-dir build_release --output-on-failure
 
 Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
 
-- **CTest (14):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`, `DataDirPolicyTest`, `PackageTest` (solo en Release; en Debug queda omitida), `StartupTest`, `LoginLockoutTest`, `AuthorizationTest`, `StartupTimingSmokeTest`, `Sha256Test`, `HashMemorySmokeTest` e `InstallerTest` (solo en Release con Inno Setup; si no, omitida).
+- **CTest (16):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `TicketPrintingTest`, `DataDirPolicyTest`, `PackageTest` (solo en Release; en Debug queda omitida), `StartupTest`, `LoginLockoutTest`, `AuthorizationTest`, `StartupTimingSmokeTest`, `Sha256Test`, `HashMemorySmokeTest` `InstallerTest` (solo en Release con Inno Setup; si no, omitida), `AutoBackupTest` y `EndSessionTest` (solo en Release).
 - **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`, `test_t2_touch_targets.py`, `test_t4_numeric_keypad.py`, `test_t5_fullscreen.py`, `test_t6_backups.py`. Válidas con Windows al 100 y al 125 % (módulo común `tests/gui_dpi.py`); con otro escalado se detienen. `test_i2_integration.py` ya usa el folio nuevo, pero en un escritorio con el diálogo de impresión moderno de Windows 11 falla al cancelarlo (pendiente).
 - **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
 
