@@ -563,6 +563,7 @@ def run_integration_test_i2(exe_path, work_dir):
     env = os.environ.copy()
     env["PATH"] = work_dir + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = temp_test_dir
+    env["CAFETERIA_UPDATE_CHECK"] = "0"
 
     try:
         # -----------------------------------------------------------------

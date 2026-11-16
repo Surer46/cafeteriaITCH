@@ -355,6 +355,7 @@ def run_suite(label, exe_path, write_audit=False):
     env = os.environ.copy()
     env["PATH"] = work_dir + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = temp_dir
+    env["CAFETERIA_UPDATE_CHECK"] = "0"
 
     procs = []
     audit_lines = []
@@ -642,6 +643,15 @@ def run_suite(label, exe_path, write_audit=False):
         click_button(btn_listo_r)
         time.sleep(0.2)
 
+        # --- 6c. Actualizaciones (inicial NOT_CONFIGURED en Release/Debug) ---
+        click_subnav(hwnd_main, "Actualizaciones")
+        time.sleep(0.4)
+        items_u, overlaps_u, lrows_u = audit_window_touch_targets(hwnd_main, "Actualizaciones", scale)
+        assert any(it["kind"] == "button" and "Actualizar desde un archivo" in it["label"] for it in items_u), (
+            "Falta botón 'Actualizar desde un archivo (USB)' en auditoría táctil de Actualizaciones"
+        )
+        record_audit("Actualizaciones", items_u, overlaps_u, lrows_u)
+
         # --- 7. Ingredientes (inicial/seleccionado + formulario nuevo) ---
         click_sidebar_section(hwnd_main, "Inventario")
         click_subnav(hwnd_main, "Ingredientes")
@@ -753,6 +763,127 @@ def run_suite(label, exe_path, write_audit=False):
             shutil.rmtree(temp_dir, ignore_errors=True)
 
 
+HOOKS_RELEASE_EXE = os.path.join(REPO_ROOT, "build_hooks_release", "app_desktop.exe")
+
+
+def run_updates_hooks_audit():
+    if not os.path.exists(HOOKS_RELEASE_EXE):
+        print(f"[SKIP] No existe {HOOKS_RELEASE_EXE}; omitiendo auditoría de Novedades/Actualizaciones con fuente local.")
+        return
+
+    ensure_no_app_running()
+    temp_dir = tempfile.mkdtemp(prefix="cafeteria_t2_upd_")
+    work_dir = os.path.dirname(HOOKS_RELEASE_EXE)
+    src_dir = os.path.join(temp_dir, "update_src")
+    data_dir = os.path.join(temp_dir, "data")
+    os.makedirs(data_dir, exist_ok=True)
+    procs = []
+    try:
+        inst_path = os.path.join(temp_dir, "CafeteriaITCH-9.9.0-instalador-win64.exe")
+        with open(inst_path, "wb") as f:
+            f.write(b"MZ_FAKE_INSTALLER_T2_" * 1024)
+        notes_path = os.path.join(temp_dir, "notas.txt")
+        with open(notes_path, "w", encoding="utf-8") as f:
+            f.write("Mejoras de prueba táctil\nCorrección menor\n")
+        pub_ps1 = os.path.join(REPO_ROOT, "tools", "publicar_version.ps1")
+        priv_key = os.path.join(REPO_ROOT, "tests", "update_test_key.priv")
+        subprocess.run(
+            [
+                "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", pub_ps1,
+                "-Version", "9.9.0", "-Instalador", inst_path, "-Notas", notes_path,
+                "-Clave", priv_key, "-Salida", src_dir,
+            ],
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+
+        with open(os.path.join(data_dir, "station_profile.cfg"), "w", encoding="utf-8") as f:
+            f.write("touch\n")
+
+        env = os.environ.copy()
+        env["PATH"] = work_dir + ";" + env.get("PATH", "")
+        env["CAFETERIA_DATA_DIR"] = data_dir
+        env["CAFETERIA_UPDATE_TEST_SOURCE"] = src_dir
+        env["CAFETERIA_UPDATE_TEST_DELAY_MS"] = "250"
+
+        print(f"\n=== [HooksRelease] Iniciando auditoría T2 de Actualizaciones y Novedades ({HOOKS_RELEASE_EXE}) ===")
+        p1 = subprocess.Popen([HOOKS_RELEASE_EXE], cwd=work_dir, env=env)
+        procs.append(p1)
+        hwnd_owner, _ = wait_for_window(p1.pid, "Primer Inicio")
+        ctrls_o = [c for c in enum_children(hwnd_owner) if user32.IsWindowVisible(c[0])]
+        o_edits = [h for (h, c, _t) in ctrls_o if c.lower() == "edit"]
+        o_btn = next(h for (h, c, _t) in ctrls_o if c.lower() == "button")
+        set_edit_text(o_edits[0], "Dueño T2 Upd")
+        set_edit_text(o_edits[1], "dueno_t2u")
+        set_edit_text(o_edits[2], "dueno_t2u@itch.edu.mx")
+        set_edit_text(o_edits[3], "ClaveSeguraT2!2026")
+        set_edit_text(o_edits[4], "ClaveSeguraT2!2026")
+        time.sleep(0.15)
+        post_click_button(o_btn)
+
+        hwnd_main, _ = wait_for_window(p1.pid, "Cafetería ITCH II", timeout=15.0, exclude=("Primer Inicio", "Iniciar Sesión"))
+        set_client_logical_size(hwnd_main, 1200, 720, x_log=16, y_log=16)
+        scale = get_window_scale(hwnd_main)
+
+        # Esperar a que la franja muestre "Ver novedades"
+        deadline = time.time() + 12.0
+        btn_ver = None
+        while time.time() < deadline:
+            btn_ver = next(
+                (h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Ver novedades"),
+                None,
+            )
+            if btn_ver is not None:
+                break
+            time.sleep(0.2)
+        assert btn_ver is not None, "Franja de actualización no apareció para auditoría T2"
+
+        # Ir a BackOffice > Actualizaciones con versión disponible visible
+        click_sidebar_section(hwnd_main, "BackOffice")
+        click_subnav(hwnd_main, "Actualizaciones")
+        time.sleep(0.4)
+        items_ua, overlaps_ua, _ = audit_window_touch_targets(hwnd_main, "Actualizaciones (con versión)", scale)
+        assert not overlaps_ua, f"Solapamientos en Actualizaciones (con versión): {overlaps_ua}"
+        for it in items_ua:
+            assert not it["small"], f"Control pequeño en Actualizaciones (con versión): {it}"
+            if it["fit"]:
+                assert it["fit"]["fits"], f"Texto recortado en Actualizaciones: {it}"
+        assert any(it["label"] == "Buscar ahora" for it in items_ua), "Falta botón 'Buscar ahora' en Actualizaciones"
+
+        # Abrir ventana Novedades de la versión 9.9.0 y auditar sus controles
+        post_click_button(btn_ver)
+        hwnd_notes, _ = wait_for_window(p1.pid, "Novedades de la versión", timeout=8.0)
+        time.sleep(0.3)
+        items_n, overlaps_n, _ = audit_window_touch_targets(hwnd_notes, "Ventana Novedades", scale)
+        assert not overlaps_n, f"Solapamientos en Ventana Novedades: {overlaps_n}"
+        for it in items_n:
+            assert not it["small"], f"Control pequeño en Ventana Novedades: {it}"
+            if it["fit"]:
+                assert it["fit"]["fits"], f"Texto recortado en Ventana Novedades: {it}"
+        assert any(it["label"] == "Descargar e instalar al cerrar" for it in items_n), "Falta 'Descargar e instalar al cerrar' en Novedades"
+        assert any(it["label"] == "Ahora no" for it in items_n), "Falta 'Ahora no' en Novedades"
+
+        user32.PostMessageW(hwnd_notes, WM_CLOSE, 0, 0)
+        time.sleep(0.25)
+        user32.PostMessageW(hwnd_main, WM_CLOSE, 0, 0)
+        p1.wait(timeout=6)
+        print("[HooksRelease] Auditoría T2 de Actualizaciones y Ventana Novedades superada.")
+    finally:
+        for pr in procs:
+            if pr.poll() is None:
+                try:
+                    pr.terminate()
+                    pr.wait(timeout=3)
+                except Exception:
+                    try:
+                        pr.kill()
+                    except Exception:
+                        pass
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir, ignore_errors=True)
+
+
 def main():
     enable_per_monitor_dpi()
     sys_dpi, sys_scale = ensure_supported_system_dpi()
@@ -760,6 +891,7 @@ def main():
 
     run_suite("Release", RELEASE_EXE, write_audit=True)
     run_suite("Debug", DEBUG_EXE, write_audit=False)
+    run_updates_hooks_audit()
     print("\n=== PRUEBA T2 OBJETIVOS TACTILES EXITOSA (Release y Debug) ===")
 
 

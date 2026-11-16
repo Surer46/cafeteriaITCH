@@ -170,6 +170,7 @@ def main():
     env_path = build_dir + ";" + os.environ.get("PATH", "")
     os.environ["PATH"] = env_path
     os.environ["CAFETERIA_DATA_DIR"] = temp_dir
+    os.environ["CAFETERIA_UPDATE_CHECK"] = "0"
 
     si = STARTUPINFOW()
     si.cb = ctypes.sizeof(si)

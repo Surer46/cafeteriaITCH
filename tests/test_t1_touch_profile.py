@@ -288,6 +288,7 @@ def run_suite(label, exe_path):
     env = os.environ.copy()
     env["PATH"] = work_dir + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = temp_a
+    env["CAFETERIA_UPDATE_CHECK"] = "0"
 
     owner_name = "Dueño T1 Prueba"
     owner_user = "dueno_t1"
@@ -537,6 +538,7 @@ def run_suite(label, exe_path):
         env_f = os.environ.copy()
         env_f["PATH"] = work_dir + ";" + env_f.get("PATH", "")
         env_f["CAFETERIA_DATA_DIR"] = temp_f
+        env_f["CAFETERIA_UPDATE_CHECK"] = "0"
 
         p_f = subprocess.Popen([exe_path], cwd=work_dir, env=env_f)
         procs.append(p_f)

@@ -611,6 +611,7 @@ def run_suite(build_label, exe_path, sys_scale):
     try:
         env = os.environ.copy()
         env["CAFETERIA_DATA_DIR"] = temp_dir
+        env["CAFETERIA_UPDATE_CHECK"] = "0"
         cfg_profile = os.path.join(temp_dir, "station_profile.cfg")
         with open(cfg_profile, "w", encoding="utf-8") as f:
             f.write("touch\n")

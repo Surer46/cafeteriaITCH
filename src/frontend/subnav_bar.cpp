@@ -9,7 +9,7 @@ SubnavBar::SubnavBar(wxWindow* parent, OnSubsectionChangedCallback callback)
 
     auto* root_sizer = new wxBoxSizer(wxHORIZONTAL);
     buttons_sizer_ = new wxBoxSizer(wxHORIZONTAL);
-    root_sizer->Add(buttons_sizer_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, Theme::get_spacing_md(this));
+    root_sizer->Add(buttons_sizer_, 1, wxALIGN_CENTER_VERTICAL | wxLEFT | wxRIGHT, Theme::get_spacing_sm(this));
     SetSizer(root_sizer);
 
     set_section(SectionId::PointOfSale);
@@ -38,7 +38,7 @@ void SubnavBar::rebuild_buttons() {
             sub_names = {"Caja y turnos", "Bitácora", "Reportes"};
             break;
         case SectionId::BackOffice:
-            sub_names = {"Usuarios y cuentas", "Roles y permisos", "Configuración", "Respaldos"};
+            sub_names = {"Usuarios y cuentas", "Roles y permisos", "Configuración", "Respaldos", "Actualizaciones"};
             if (can_view_dev_server_) {
                 sub_names.push_back("Servidor de respaldos");
             }
@@ -66,7 +66,7 @@ void SubnavBar::rebuild_buttons() {
             on_button_clicked(name);
         });
 
-        buttons_sizer_->Add(btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(6));
+        buttons_sizer_->Add(btn, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(4));
         items_.push_back({btn, name});
     }
 

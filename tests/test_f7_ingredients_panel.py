@@ -496,6 +496,7 @@ def run_suite(label, exe_path):
         env = os.environ.copy()
         env["PATH"] = work_dir + ";" + env.get("PATH", "")
         env["CAFETERIA_DATA_DIR"] = data_dir
+        env["CAFETERIA_UPDATE_CHECK"] = "0"
 
         procs = []
         owner_user = "dueno_f7"

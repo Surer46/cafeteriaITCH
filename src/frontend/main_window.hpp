@@ -4,16 +4,21 @@
 #include <wx/wx.h>
 #include <wx/eventfilter.h>
 #include <wx/listctrl.h>
+#include <wx/timer.h>
+#include <wx/weakref.h>
 #include <memory>
 #include <string>
 #include "src/frontend/header_panel.hpp"
 #include "src/frontend/sidebar_panel.hpp"
 #include "src/frontend/subnav_bar.hpp"
+#include "src/frontend/update_banner_panel.hpp"
 #include "app/services/mock_services.hpp"
 
 namespace app::frontend {
 
 class BackofficeSettingsPanel;
+class BackofficeUpdatesPanel;
+class UpdateNotesDialog;
 
 class MainWindow : public wxFrame {
 public:
@@ -42,18 +47,31 @@ private:
     void update_header_status();
     void apply_profile_refresh();
     void schedule_profile_refresh();
+    void init_update_notifications();
+    void refresh_update_state();
+    void open_update_notes_dialog();
+    void on_update_poll_timer(wxTimerEvent& evt);
+    void on_close(wxCloseEvent& evt);
 
     wxPanel* create_placeholder_view(wxWindow* parent, const std::string& title, const std::string& desc);
 
     services::ServiceRegistry services_;
 
     HeaderPanel* header_panel_{nullptr};
+    UpdateBannerPanel* update_banner_{nullptr};
     SidebarPanel* sidebar_panel_{nullptr};
     SubnavBar* subnav_bar_{nullptr};
     wxPanel* content_container_{nullptr};
     wxBoxSizer* content_sizer_{nullptr};
     wxPanel* current_view_{nullptr};
     BackofficeSettingsPanel* settings_panel_{nullptr};
+    BackofficeUpdatesPanel* updates_panel_{nullptr};
+    wxWeakRef<UpdateNotesDialog> notes_dialog_;
+    wxTimer update_poll_timer_;
+    bool destroying_{false};
+    bool banner_dismissed_this_session_{false};
+    std::string dismissed_version_;
+    bool install_result_visible_{false};
 
     wxRect saved_window_rect_{};
     bool saved_was_maximized_{false};

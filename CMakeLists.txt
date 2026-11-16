@@ -224,6 +224,12 @@ if(wxWidgets_FOUND)
         src/frontend/backoffice_roles_panel.hpp
         src/frontend/backoffice_backups_panel.cpp
         src/frontend/backoffice_backups_panel.hpp
+        src/frontend/backoffice_updates_panel.cpp
+        src/frontend/backoffice_updates_panel.hpp
+        src/frontend/update_banner_panel.cpp
+        src/frontend/update_banner_panel.hpp
+        src/frontend/update_notes_dialog.cpp
+        src/frontend/update_notes_dialog.hpp
         src/frontend/backoffice_print_config_panel.cpp
         src/frontend/backoffice_print_config_panel.hpp
         src/frontend/backoffice_settings_panel.cpp

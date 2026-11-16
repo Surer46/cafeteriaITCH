@@ -398,6 +398,7 @@ def run_t4_suite(exe_path, build_label):
         db_path = os.path.join(tmp_dir, "cafeteria.db")
         env = os.environ.copy()
         env["CAFETERIA_DATA_DIR"] = tmp_dir
+        env["CAFETERIA_UPDATE_CHECK"] = "0"
         procs = []
         try:
             proc = subprocess.Popen([exe_path], cwd=REPO_ROOT, env=env)

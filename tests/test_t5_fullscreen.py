@@ -347,6 +347,7 @@ def run_t5_suite(exe_path, build_label):
         cfg_prof_path = os.path.join(tmp_dir, "station_profile.cfg")
         env = os.environ.copy()
         env["CAFETERIA_DATA_DIR"] = tmp_dir
+        env["CAFETERIA_UPDATE_CHECK"] = "0"
         procs = []
         try:
             # 1. Sin station_fullscreen.cfg: abre en ventana normal (con WS_CAPTION)

@@ -222,6 +222,7 @@ def main():
     env = os.environ.copy()
     env["PATH"] = work_dir + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = temp_dir
+    env["CAFETERIA_UPDATE_CHECK"] = "0"
 
     print(f"=== INICIANDO CAPTURA DE PANTALLAS PARA QA VISUAL ({format_dpi_info(sys_dpi)}) ===")
     proc = subprocess.Popen([exe_path], cwd=work_dir, env=env)
@@ -862,6 +863,127 @@ def main():
                 proc_extra.kill()
             if temp_dir_owner_touch:
                 shutil.rmtree(temp_dir_owner_touch, ignore_errors=True)
+
+        # CAPTURAS 24, 25 y 26: Actualizaciones (franja, Novedades con progreso y pestaña Actualizaciones)
+        hooks_exe = os.path.join(repo_root, "build_hooks_release", "app_desktop.exe")
+        if os.path.exists(hooks_exe):
+            qa_upd_dir = tempfile.mkdtemp(prefix="cafeteria_qa_upd_")
+            proc_upd = None
+            try:
+                upd_src = os.path.join(qa_upd_dir, "source")
+                upd_data = os.path.join(qa_upd_dir, "data")
+                os.makedirs(upd_data, exist_ok=True)
+                inst_qa = os.path.join(qa_upd_dir, "CafeteriaITCH-0.2.0-instalador-win64.exe")
+                with open(inst_qa, "wb") as f_inst:
+                    f_inst.write(b"MZ_QA_INSTALLER_" * (32 * 1024))  # 512 KB -> 8 bloques de 64 KB
+                notes_qa = os.path.join(qa_upd_dir, "notas.txt")
+                with open(notes_qa, "w", encoding="utf-8") as f_n:
+                    f_n.write(
+                        "Ahora las actualizaciones se revisan al abrir sin molestar en caja.\n"
+                        "Puedes descargar en segundo plano mientras sigues vendiendo.\n"
+                        "La instalación se aplica al cerrar el programa y conserva tus datos.\n"
+                    )
+                pub_ps1 = os.path.join(repo_root, "tools", "publicar_version.ps1")
+                priv_key = os.path.join(repo_root, "tests", "update_test_key.priv")
+                subprocess.run(
+                    [
+                        "powershell", "-NoProfile", "-ExecutionPolicy", "Bypass", "-File", pub_ps1,
+                        "-Version", "0.2.0", "-Instalador", inst_qa, "-Notas", notes_qa,
+                        "-Clave", priv_key, "-Salida", upd_src,
+                    ],
+                    check=True,
+                    capture_output=True,
+                    text=True,
+                )
+
+                env_upd = os.environ.copy()
+                env_upd["PATH"] = os.path.dirname(hooks_exe) + ";" + env_upd.get("PATH", "")
+                env_upd["CAFETERIA_DATA_DIR"] = upd_data
+                env_upd["CAFETERIA_UPDATE_TEST_SOURCE"] = upd_src
+                env_upd["CAFETERIA_UPDATE_TEST_DELAY_MS"] = "350"
+
+                proc_upd = subprocess.Popen([hooks_exe], cwd=os.path.dirname(hooks_exe), env=env_upd)
+                hwnd_o_u = None
+                for _ in range(40):
+                    wins_o = find_windows_by_pid(proc_upd.pid, "Primer Inicio")
+                    if wins_o:
+                        hwnd_o_u = wins_o[0][0]
+                        break
+                    time.sleep(0.2)
+                assert hwnd_o_u is not None, "Primer Inicio no apareció para capturas 24-26"
+                o_ctrls_u = get_child_controls(hwnd_o_u)
+                o_ed_u = [h for (h, cls, _t) in o_ctrls_u if cls.lower() == "edit"]
+                o_btn_u = next(h for (h, cls, _t) in o_ctrls_u if cls.lower() == "button")
+                set_text(o_ed_u[0], "Dueño QA")
+                set_text(o_ed_u[1], "dueno_qa_u")
+                set_text(o_ed_u[2], "dueno@qa.local")
+                set_text(o_ed_u[3], "AdminSecure2026!")
+                set_text(o_ed_u[4], "AdminSecure2026!")
+                time.sleep(0.2)
+                post_click_button(o_btn_u)
+
+                hwnd_m_u = None
+                for _ in range(50):
+                    wins_m = [
+                        (h, t) for (h, t) in find_windows_by_pid(proc_upd.pid, "Cafetería ITCH II")
+                        if "Primer Inicio" not in t and "Iniciar Sesión" not in t
+                    ]
+                    if wins_m:
+                        hwnd_m_u = wins_m[0][0]
+                        break
+                    time.sleep(0.2)
+                assert hwnd_m_u is not None, "Ventana principal no abrió para capturas 24-26"
+
+                # Esperar franja con "Ver novedades"
+                btn_ver_nov = None
+                for _ in range(45):
+                    btn_ver_nov = next((h for (h, t) in _f7_list_buttons(hwnd_m_u) if t == "Ver novedades"), None)
+                    if btn_ver_nov is not None:
+                        break
+                    time.sleep(0.2)
+                assert btn_ver_nov is not None, "Franja de actualización no apareció para captura 24"
+                time.sleep(0.35)
+                capture_window(hwnd_m_u, os.path.join(out_dir, "24_update_banner.png"))
+
+                # Captura 26: Pestaña Actualizaciones (con versión disponible visible)
+                btn_bo_u = next((h for (h, t) in _f7_list_buttons(hwnd_m_u) if "BackOffice" in t), None)
+                assert btn_bo_u is not None
+                _f7_click_btn(btn_bo_u)
+                time.sleep(0.35)
+                btn_upd_tab = next((h for (h, t) in _f7_list_buttons(hwnd_m_u) if t == "Actualizaciones"), None)
+                assert btn_upd_tab is not None, "Pestaña Actualizaciones no encontrada para captura 26"
+                _f7_click_btn(btn_upd_tab)
+                time.sleep(0.45)
+                capture_window(hwnd_m_u, os.path.join(out_dir, "26_backoffice_updates_panel.png"))
+
+                # Captura 25: Ventana Novedades con descarga en progreso
+                btn_ver_nov2 = next((h for (h, t) in _f7_list_buttons(hwnd_m_u) if t == "Ver novedades"), None)
+                assert btn_ver_nov2 is not None
+                _f7_click_btn(btn_ver_nov2)
+                hwnd_nov = None
+                for _ in range(40):
+                    wins_nov = find_windows_by_pid(proc_upd.pid, "Novedades de la versión")
+                    if wins_nov:
+                        hwnd_nov = wins_nov[0][0]
+                        break
+                    time.sleep(0.2)
+                assert hwnd_nov is not None, "Ventana Novedades no apareció para captura 25"
+                btn_dl_start = next((h for (h, t) in _f7_list_buttons(hwnd_nov) if t == "Descargar e instalar al cerrar"), None)
+                assert btn_dl_start is not None, "Botón 'Descargar e instalar al cerrar' no encontrado"
+                _f7_click_btn(btn_dl_start)
+                time.sleep(1.3)
+                capture_window(hwnd_nov, os.path.join(out_dir, "25_update_notes_progress.png"))
+                user32.PostMessageW(hwnd_nov, WM_CLOSE, 0, 0)
+                time.sleep(0.25)
+                user32.PostMessageW(hwnd_m_u, WM_CLOSE, 0, 0)
+                proc_upd.wait(timeout=8)
+                proc_upd = None
+            finally:
+                if proc_upd is not None and proc_upd.poll() is None:
+                    proc_upd.kill()
+                shutil.rmtree(qa_upd_dir, ignore_errors=True)
+        else:
+            print(f"  [OMITIDO] No existe {hooks_exe}; capturas 24-26 omitidas.")
 
         print("=== TODAS LAS CAPTURAS DE QA VISUAL COMPLETADAS EXITOSAMENTE ===")
 

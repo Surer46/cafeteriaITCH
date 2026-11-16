@@ -1,9 +1,11 @@
 #include "src/frontend/main_window.hpp"
 #include "src/frontend/backoffice_backups_panel.hpp"
+#include "src/frontend/backoffice_updates_panel.hpp"
 #include "src/frontend/backoffice_users_panel.hpp"
 #include "src/frontend/backoffice_roles_panel.hpp"
 #include "src/frontend/backoffice_print_config_panel.hpp"
 #include "src/frontend/backoffice_settings_panel.hpp"
+#include "src/frontend/update_notes_dialog.hpp"
 #include "src/frontend/pos_panel.hpp"
 #include "src/frontend/cash_shift_panel.hpp"
 #include "src/frontend/audit_log_panel.hpp"
@@ -17,13 +19,16 @@ MainWindow::MainWindow(const services::ServiceRegistry& services)
     : wxFrame(nullptr, wxID_ANY, wxT("Cafetería ITCH II"),
               wxDefaultPosition, wxDefaultSize),
       services_(services),
-      key_filter_(std::make_unique<FullscreenKeyFilter>(this)) {
+      key_filter_(std::make_unique<FullscreenKeyFilter>(this)),
+      update_poll_timer_(this) {
     SetClientSize(FromDIP(wxSize(1200, 720)));
     SetMinClientSize(FromDIP(wxSize(960, 600)));
     setup_ui();
 }
 
 MainWindow::~MainWindow() {
+    destroying_ = true;
+    update_poll_timer_.Stop();
     if (key_filter_installed_ && key_filter_) {
         wxEvtHandler::RemoveFilter(key_filter_.get());
         key_filter_installed_ = false;
@@ -85,6 +90,32 @@ void MainWindow::setup_ui() {
     root_sizer->Add(header_panel_, 0, wxEXPAND);
     update_header_status();
 
+    update_banner_ = new UpdateBannerPanel(
+        this,
+        [this]() { open_update_notes_dialog(); },
+        [this]() {
+            if (services_.update_service) {
+                auto st_res = services_.update_service->get_update_status();
+                if (st_res.is_success()) {
+                    dismissed_version_ = st_res.value().available_version;
+                }
+            }
+            banner_dismissed_this_session_ = true;
+            refresh_update_state();
+        },
+        [this]() {
+            if (services_.update_service) {
+                services_.update_service->decline_update();
+            }
+            refresh_update_state();
+        },
+        [this]() {
+            install_result_visible_ = false;
+            refresh_update_state();
+        }
+    );
+    root_sizer->Add(update_banner_, 0, wxEXPAND);
+
     // 2. Área intermedia horizontal: Sidebar (izquierda) + Contenido (derecha)
     auto* body_sizer = new wxBoxSizer(wxHORIZONTAL);
 
@@ -132,6 +163,10 @@ void MainWindow::setup_ui() {
     if (Theme::get_fullscreen()) {
         set_fullscreen_mode(true);
     }
+
+    Bind(wxEVT_TIMER, &MainWindow::on_update_poll_timer, this, update_poll_timer_.GetId());
+    Bind(wxEVT_CLOSE_WINDOW, &MainWindow::on_close, this);
+    init_update_notifications();
 }
 
 bool MainWindow::has_open_modal_dialog() const {
@@ -216,6 +251,12 @@ void MainWindow::apply_profile_refresh() {
     if (header_panel_) {
         header_panel_->sync_profile_button();
     }
+    if (update_banner_) {
+        update_banner_->refresh_profile();
+    }
+    if (notes_dialog_) {
+        notes_dialog_->refresh_profile();
+    }
     if (sidebar_panel_) {
         sidebar_panel_->refresh_profile();
     }
@@ -244,6 +285,7 @@ void MainWindow::on_subsection_changed(const std::string& sub_name) {
 
 void MainWindow::update_content_view() {
     settings_panel_ = nullptr;
+    updates_panel_ = nullptr;
     content_sizer_->Clear(true);
     current_view_ = nullptr;
 
@@ -291,6 +333,14 @@ void MainWindow::update_content_view() {
         current_view_ = settings_panel_;
     } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Respaldos") {
         current_view_ = new BackofficeBackupsPanel(content_container_, services_);
+    } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Actualizaciones") {
+        updates_panel_ = new BackofficeUpdatesPanel(
+            content_container_,
+            services_,
+            [this]() { open_update_notes_dialog(); },
+            [this]() { refresh_update_state(); }
+        );
+        current_view_ = updates_panel_;
     } else {
         std::string section_label;
         switch (current_section_) {
@@ -334,6 +384,175 @@ wxPanel* MainWindow::create_placeholder_view(wxWindow* parent, const std::string
     sizer->AddStretchSpacer(1);
     panel->SetSizer(sizer);
     return panel;
+}
+
+void MainWindow::init_update_notifications() {
+    if (destroying_ || !services_.update_service || !services_.account_service ||
+        !services_.account_service->has_permission("updates.manage")) {
+        return;
+    }
+
+    const auto inst_res = services_.update_service->get_last_install_result();
+    if (inst_res.is_success() && inst_res.value().has_result) {
+        const auto status_res = services_.update_service->get_update_status();
+        const std::string installed_ver = status_res.is_success() ? status_res.value().installed_version : std::string();
+        services_.update_service->acknowledge_install_result();
+        install_result_visible_ = true;
+        if (update_banner_) {
+            update_banner_->show_install_result(inst_res.value(), installed_ver);
+        }
+    }
+
+    refresh_update_state();
+}
+
+void MainWindow::refresh_update_state() {
+    if (destroying_ || !services_.update_service || !services_.account_service ||
+        !services_.account_service->has_permission("updates.manage")) {
+        update_poll_timer_.Stop();
+        if (update_banner_) {
+            update_banner_->clear_banner();
+        }
+        return;
+    }
+
+    const auto st_res = services_.update_service->get_update_status();
+    if (!st_res.is_success()) {
+        update_poll_timer_.Stop();
+        return;
+    }
+    const auto& st = st_res.value();
+
+    if (!st.available_version.empty() && st.available_version != dismissed_version_) {
+        banner_dismissed_this_session_ = false;
+    }
+
+    if (st.state == "CHECKING" || st.state == "DOWNLOADING") {
+        if (!update_poll_timer_.IsRunning()) {
+            update_poll_timer_.Start(2500);
+        }
+    } else {
+        update_poll_timer_.Stop();
+    }
+
+    if (install_result_visible_ && st.state == "READY" && st.accepted) {
+        install_result_visible_ = false;
+    }
+
+    if (update_banner_ && !install_result_visible_) {
+        update_banner_->show_status(st, banner_dismissed_this_session_);
+    }
+
+    if (updates_panel_) {
+        updates_panel_->refresh_status();
+    }
+    if (notes_dialog_) {
+        notes_dialog_->refresh_status();
+    }
+}
+
+void MainWindow::open_update_notes_dialog() {
+    if (destroying_ || !services_.update_service || !services_.account_service ||
+        !services_.account_service->has_permission("updates.manage")) {
+        return;
+    }
+    if (notes_dialog_) {
+        notes_dialog_->refresh_status();
+        notes_dialog_->Raise();
+        notes_dialog_->SetFocus();
+        return;
+    }
+    auto* dlg = new UpdateNotesDialog(
+        this,
+        services_.update_service,
+        [this]() { refresh_update_state(); },
+        [this]() { notes_dialog_ = nullptr; }
+    );
+    notes_dialog_ = dlg;
+    dlg->Show();
+}
+
+void MainWindow::on_update_poll_timer(wxTimerEvent&) {
+    if (destroying_) {
+        update_poll_timer_.Stop();
+        return;
+    }
+    refresh_update_state();
+}
+
+void MainWindow::on_close(wxCloseEvent& evt) {
+    if (evt.CanVeto() && services_.update_service && services_.account_service &&
+        services_.account_service->is_authenticated() &&
+        services_.account_service->has_permission("updates.manage")) {
+        const auto st_res = services_.update_service->get_update_status();
+        if (st_res.is_success() && st_res.value().will_install_on_close) {
+            const wxString ver_wx = wxString::FromUTF8(st_res.value().available_version.c_str());
+            const bool touch = Theme::is_touch();
+            const int btn_h = touch ? 48 : 38;
+            const int wrap_w = FromDIP(touch ? 560 : 460);
+
+            wxDialog dlg(
+                this,
+                wxID_ANY,
+                wxT("Actualización lista para instalar"),
+                wxDefaultPosition,
+                wxDefaultSize,
+                wxDEFAULT_DIALOG_STYLE
+            );
+            dlg.SetBackgroundColour(Theme::ColorSurface);
+            auto* root = new wxBoxSizer(wxVERTICAL);
+
+            auto* lbl_head = new wxStaticText(&dlg, wxID_ANY, wxT("Actualización lista para instalar"));
+            lbl_head->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
+            lbl_head->SetForegroundColour(Theme::ColorBrandDeep);
+            root->Add(lbl_head, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(20));
+
+            auto* lbl_body = new wxStaticText(
+                &dlg,
+                wxID_ANY,
+                wxString::Format(
+                    wxT("Se instalará la versión %s.\nEl programa se cerrará y Windows pedirá permiso."),
+                    ver_wx
+                )
+            );
+            lbl_body->SetFont(Theme::get_font_body());
+            lbl_body->SetForegroundColour(Theme::ColorText);
+            lbl_body->Wrap(wrap_w);
+            root->Add(lbl_body, 0, wxALL, FromDIP(20));
+
+            auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
+            btn_row->AddStretchSpacer(1);
+
+            auto* btn_skip = new wxButton(&dlg, wxID_NO, wxT("Cerrar sin instalar"));
+            Theme::style_button_secondary(btn_skip, btn_h);
+            Theme::ensure_button_min_size(btn_skip, 180, btn_h);
+            btn_skip->Bind(wxEVT_BUTTON, [&dlg](wxCommandEvent&) { dlg.EndModal(wxID_NO); });
+            btn_row->Add(btn_skip, 0, wxRIGHT, FromDIP(12));
+
+            auto* btn_install = new wxButton(&dlg, wxID_OK, wxT("Cerrar e instalar"));
+            Theme::style_button_primary(btn_install, btn_h);
+            Theme::ensure_button_min_size(btn_install, 180, btn_h);
+            btn_install->Bind(wxEVT_BUTTON, [&dlg](wxCommandEvent&) { dlg.EndModal(wxID_OK); });
+            btn_row->Add(btn_install, 0);
+
+            root->Add(btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(20));
+            dlg.SetSizerAndFit(root);
+            dlg.CentreOnParent();
+
+            const int choice = dlg.ShowModal();
+            if (choice == wxID_CANCEL) {
+                evt.Veto();
+                return;
+            }
+            if (choice == wxID_NO) {
+                services_.update_service->postpone_install_this_session();
+            }
+        }
+    }
+
+    destroying_ = true;
+    update_poll_timer_.Stop();
+    evt.Skip();
 }
 
 } // namespace app::frontend

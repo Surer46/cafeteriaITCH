@@ -292,6 +292,7 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
     env = os.environ.copy()
     env["PATH"] = os.path.dirname(exe_path) + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = test_data_dir
+    env["CAFETERIA_UPDATE_CHECK"] = "0"
 
     try:
         # =============================================================

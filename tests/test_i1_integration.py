@@ -132,6 +132,7 @@ def run_integration_test(exe_path, work_dir):
     env["PATH"] = work_dir + ";" + env.get("PATH", "")
     # Pasar directorio aislado a la aplicación
     env["CAFETERIA_DATA_DIR"] = temp_test_dir
+    env["CAFETERIA_UPDATE_CHECK"] = "0"
 
     spawned_processes = []
 

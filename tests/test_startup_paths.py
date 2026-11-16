@@ -36,6 +36,7 @@ def run(executable):
             env = os.environ.copy()
             env["CAFETERIA_MIGRATIONS_DIR"] = str(migrations)
             env["CAFETERIA_DATA_DIR"] = str(data if mode == "environment" else root / "unused")
+            env["CAFETERIA_UPDATE_CHECK"] = "0"
             args = [str(executable)]
             if mode == "cli-equals":
                 args.append("--data-dir=" + str(data))

@@ -186,6 +186,7 @@ def run_f2b_test_for_binary(exe_path, repo_root, config_name):
     env = os.environ.copy()
     env["PATH"] = os.path.dirname(exe_path) + ";" + env.get("PATH", "")
     env["CAFETERIA_DATA_DIR"] = test_data_dir
+    env["CAFETERIA_UPDATE_CHECK"] = "0"
 
     p1 = None
     p2 = None
@@ -263,7 +264,7 @@ def run_f2b_test_for_binary(exe_path, repo_root, config_name):
             ("Inventario", ["Existencias", "Reabastecimiento", "Productos y recetas",
                             "Ingredientes", "Promociones y combos", "Barra"]),
             ("Caja y Reportes", ["Caja y turnos", "Bitácora", "Reportes"]),
-            ("BackOffice", ["Usuarios y cuentas", "Roles y permisos", "Configuración", "Respaldos"])
+            ("BackOffice", ["Usuarios y cuentas", "Roles y permisos", "Configuración", "Respaldos", "Actualizaciones"])
         ]
 
         def get_subnav_buttons(expected_subs):

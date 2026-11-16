@@ -150,6 +150,7 @@ def run_test_for_binary(exe_path, work_dir, label):
         env = os.environ.copy()
         env["PATH"] = work_dir + ";" + env.get("PATH", "")
         env["CAFETERIA_DATA_DIR"] = test_data_dir
+        env["CAFETERIA_UPDATE_CHECK"] = "0"
 
         # -------------------------------------------------------------
         # SESIÓN 1: Alta inicial del Dueño
