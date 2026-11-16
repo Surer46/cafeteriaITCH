@@ -366,6 +366,23 @@ def run_suite(label, exe_path):
         with open(cfg_path, "r", encoding="utf-8") as f:
             assert f.read().strip().lower() == "touch", "station_profile.cfg debe contener 'touch'"
 
+        # Esperar con condicion (hasta 5 s) a que los 4 botones laterales alcancen altura tactil antes de medir
+        t_sb = time.time() + 5.0
+        sidebar_ready = False
+        while time.time() < t_sb:
+            vis_now = [(h, c, t) for (h, c, t) in enum_children(hwnd_main) if user32.IsWindowVisible(h)]
+            sbs = [
+                next((h for (h, c, t) in vis_now if c.lower() == "button" and t == sec), None)
+                for sec in ("Punto de Venta", "Inventario", "Caja y Reportes", "BackOffice")
+            ]
+            if all(sb is not None for sb in sbs) and all(
+                (get_rect(sb)[3] - get_rect(sb)[1]) >= 56.0 * scale - 0.5 for sb in sbs
+            ):
+                sidebar_ready = True
+                break
+            time.sleep(0.1)
+        assert sidebar_ready, "La barra lateral no alcanzó la altura táctil dentro de 5 s tras cambiar perfil"
+
         # Los 4 botones laterales >= 56 logicos
         vis_after = [(h, c, t) for (h, c, t) in enum_children(hwnd_main) if user32.IsWindowVisible(h)]
         for sec in ("Punto de Venta", "Inventario", "Caja y Reportes", "BackOffice"):

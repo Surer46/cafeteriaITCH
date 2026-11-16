@@ -257,8 +257,16 @@ void CashShiftPanel::on_close_shift_clicked(wxCommandEvent&) {
         return;
     }
 
+    wxString closed_msg = wxT("¡Turno de caja cerrado exitosamente!");
+    if (services_.backup_service) {
+        const auto auto_res = services_.backup_service->get_auto_backup_status();
+        if (auto_res.is_success() && auto_res.value().is_enabled) {
+            closed_msg += wxT("\n\nSe está haciendo un respaldo automático; puedes seguir trabajando.");
+        }
+    }
+
     wxMessageBox(
-        wxT("¡Turno de caja cerrado exitosamente!"),
+        closed_msg,
         wxT("Turno Cerrado"),
         wxOK | wxICON_INFORMATION,
         this

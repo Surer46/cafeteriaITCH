@@ -44,7 +44,10 @@ BM_CLICK = 0x00F5
 BM_GETCHECK = 0x00F0
 LVM_GETITEMCOUNT = 0x1004
 LVM_GETHEADER = 0x101F
+LVM_SETITEMSTATE = 0x102B
 LVM_GETITEMTEXTW = 0x1073
+LVIS_FOCUSED = 0x0001
+LVIS_SELECTED = 0x0002
 HDM_GETITEMCOUNT = 0x1200
 HDM_GETITEMW = 0x120B
 HDI_TEXT = 0x0002
@@ -272,6 +275,37 @@ def assert_sqlite_integrity(path):
     assert str(res).lower() == "ok", f"PRAGMA integrity_check fallo en {path}: {res}"
 
 
+def find_listview_by_header(pid, hwnd_main, first_col):
+    for h, c, _t in enum_children(hwnd_main):
+        if c.lower() == "syslistview32" and user32.IsWindowVisible(h):
+            hdrs = get_listview_headers(pid, h)
+            if hdrs and hdrs[0] == first_col:
+                return h
+    return None
+
+
+def select_listview_row(pid, hwnd_lv, row):
+    h_proc = kernel32.OpenProcess(PROCESS_VM_ALL, False, pid)
+    assert h_proc, "OpenProcess fallo seleccionando fila ListView"
+    remote_item = None
+    try:
+        remote_item = kernel32.VirtualAllocEx(h_proc, None, ctypes.sizeof(LVITEMW), MEM_COMMIT_RESERVE, PAGE_READWRITE)
+        assert remote_item
+        lvi = LVITEMW()
+        lvi.stateMask = LVIS_FOCUSED | LVIS_SELECTED
+        lvi.state = LVIS_FOCUSED | LVIS_SELECTED
+        written = ctypes.c_size_t()
+        ok_w = kernel32.WriteProcessMemory(h_proc, remote_item, ctypes.byref(lvi), ctypes.sizeof(lvi), ctypes.byref(written))
+        assert ok_w
+        res = user32.SendMessageW(hwnd_lv, LVM_SETITEMSTATE, row, remote_item)
+        assert res != 0, f"LVM_SETITEMSTATE fallo en fila {row}"
+        time.sleep(0.15)
+    finally:
+        if remote_item:
+            kernel32.VirtualFreeEx(h_proc, remote_item, 0, MEM_RELEASE)
+        kernel32.CloseHandle(h_proc)
+
+
 def visible_buttons(hwnd):
     return [
         (h, t)
@@ -393,17 +427,125 @@ def accept_file_dialog(pid, title_sub, target_path, expected_default_prefix=None
     if not btn_ok or not user32.IsWindowVisible(btn_ok):
         btn_ok = next(
             (h for (h, c, t) in children if user32.IsWindowVisible(h) and c.lower() == "button"
-             and ("Guardar" in t or "Abrir" in t)),
+             and ("Guardar" in t or "Abrir" in t or "Seleccionar" in t or "Aceptar" in t)),
             None,
         )
     assert btn_ok, f"Botón OK no encontrado en diálogo '{title_sub}'"
     click_hwnd(btn_ok, settle=0.5)
 
 
-def dismiss_messagebox(pid, title_sub):
+def dismiss_yes_messagebox(pid, title_sub):
     hwnd_msg, _ = wait_for_window(pid, title_sub, timeout=10.0)
     time.sleep(0.15)
     texts = [t for (h, _c, t) in enum_children(hwnd_msg) if user32.IsWindowVisible(h) and t]
+    joined = "\n".join(texts)
+    btn_yes = find_button(hwnd_msg, text_contains="Sí")
+    if btn_yes is None:
+        btn_yes = user32.GetDlgItem(hwnd_msg, 6)  # IDYES
+    assert btn_yes is not None, f"Botón Sí no encontrado en '{title_sub}'. Botones={visible_buttons(hwnd_msg)}"
+    click_hwnd(btn_yes, settle=0.35)
+    return joined
+
+
+def open_shift_ui(pid, hwnd_main, initial_cash="500.00"):
+    open_section_and_subnav(hwnd_main, "Caja y Reportes", "Caja y turnos")
+    edits = wait_until(
+        lambda: sorted(
+            [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda h: get_rect(h)[1],
+        ),
+        desc="Campo fondo inicial Caja",
+    )
+    set_edit_text(edits[0], initial_cash)
+    btn_open = wait_until(lambda: find_button(hwnd_main, text_contains="Abrir Turno de Caja"), desc="Botón Abrir Turno")
+    click_hwnd(btn_open, settle=0.35)
+    dismiss_messagebox(pid, "Turno Abierto")
+
+
+def close_shift_ui(pid, hwnd_main, final_cash="500.00"):
+    open_section_and_subnav(hwnd_main, "Caja y Reportes", "Caja y turnos")
+    edits = wait_until(
+        lambda: sorted(
+            [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda h: get_rect(h)[1],
+        ),
+        desc="Campo cierre Caja",
+    )
+    set_edit_text(edits[0], final_cash)
+    btn_close = wait_until(lambda: find_button(hwnd_main, text_contains="Cerrar Turno de Caja"), desc="Botón Cerrar Turno")
+    click_hwnd(btn_close, settle=0.25)
+    dismiss_yes_messagebox(pid, "Confirmar Cierre de Turno")
+    return dismiss_messagebox(pid, "Turno Cerrado")
+
+
+def make_sale_ui(pid, hwnd_main, search_text="Cafe T6", pay_amount="100.00"):
+    btn_pos = wait_until(lambda: find_button(hwnd_main, text_contains="Punto de Venta"), desc="Sidebar Punto de Venta")
+    click_hwnd(btn_pos, settle=0.35)
+    edits = sorted(
+        [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+        key=lambda h: get_rect(h)[1],
+    )
+    assert edits, "Campos de búsqueda no encontrados en POS"
+    set_edit_text(edits[0], search_text)
+    btn_find = find_button(hwnd_main, exact="Buscar")
+    if btn_find:
+        click_hwnd(btn_find, settle=0.2)
+    btn_add = wait_until(lambda: find_button(hwnd_main, text_contains="Agregar al Carrito"), desc="Agregar al Carrito")
+    click_hwnd(btn_add, settle=0.3)
+    btn_chk = wait_until(lambda: find_button(hwnd_main, exact="Cobrar"), desc="Botón Cobrar")
+    click_hwnd(btn_chk, settle=0.3)
+    hwnd_chk, _ = wait_for_window(pid, "Cobro de Venta", timeout=8.0)
+    chk_edits = [h for (h, c, _t) in enum_children(hwnd_chk) if c.lower() == "edit" and user32.IsWindowVisible(h)]
+    if chk_edits:
+        set_edit_text(chk_edits[0], pay_amount)
+    btn_conf = wait_until(lambda: find_button(hwnd_chk, text_contains="Confirmar Venta"), desc="Confirmar Venta")
+    click_hwnd(btn_conf, settle=0.4)
+    # Cerrar diálogo Venta Registrada (TicketPrintDialog) o aviso si aparece
+    hwnd_ticket = wait_until(
+        lambda: (find_windows_by_pid(pid, "Venta Registrada") or find_windows_by_pid(pid, "Ticket") or [None])[0],
+        desc="Diálogo Venta Registrada",
+        timeout=8.0,
+    )
+    btn_cerrar = (
+        find_button(hwnd_ticket[0], text_contains="Ahora no")
+        or find_button(hwnd_ticket[0], text_contains="Cerrar")
+        or find_button(hwnd_ticket[0], text_contains="Aceptar")
+    )
+    if btn_cerrar:
+        click_hwnd(btn_cerrar, settle=0.25)
+    else:
+        user32.PostMessageW(hwnd_ticket[0], WM_CLOSE, 0, 0)
+    wait_until(
+        lambda: not find_windows_by_pid(pid, "Venta Registrada") and not find_windows_by_pid(pid, "Ticket"),
+        desc="Cerrar diálogo Venta Registrada",
+    )
+
+
+def _read_uia_texts(hwnd):
+    try:
+        ps_cmd = (
+            "Add-Type -AssemblyName UIAutomationClient; "
+            f"$el=[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]{int(hwnd)}); "
+            "$el.FindAll([System.Windows.Automation.TreeScope]::Descendants,"
+            "[System.Windows.Automation.Condition]::TrueCondition)"
+            "|ForEach-Object{$_.Current.Name}|Where-Object{$_}"
+        )
+        out = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps_cmd], text=True, timeout=6)
+        return [ln.strip() for ln in out.splitlines() if ln.strip()]
+    except Exception:
+        return []
+
+
+def dismiss_messagebox(pid, title_sub):
+    hwnd_msg, _ = wait_for_window(pid, title_sub, timeout=10.0)
+    time.sleep(0.15)
+    children = enum_children(hwnd_msg)
+    texts = [t for (h, _c, t) in children if user32.IsWindowVisible(h) and t]
+    if any(c == "DirectUIHWND" for (_h, c, _t) in children):
+        uia_texts = _read_uia_texts(hwnd_msg)
+        for ut in uia_texts:
+            if ut not in texts:
+                texts.append(ut)
     joined = "\n".join(texts)
     btn_ok = find_button(hwnd_msg, text_contains="Aceptar")
     if btn_ok is None:
@@ -425,6 +567,7 @@ def run_suite(build_label, exe_path, sys_scale):
     backup_out_dir = os.path.join(temp_dir, "manual_backups")
     os.makedirs(backup_out_dir, exist_ok=True)
     procs = []
+    keep_temp_on_fail = False
 
     try:
         env = os.environ.copy()
@@ -436,50 +579,92 @@ def run_suite(build_label, exe_path, sys_scale):
         p, hwnd_main = create_owner_and_login(exe_path, env, procs)
         open_section_and_subnav(hwnd_main, "BackOffice", "Respaldos")
 
-        # 1. Estado inicial (is_enabled inicia en 0 segun migracion 008)
+        # 1. Estado inicial (desde migracion 016 el respaldo automatico inicia ACTIVADO)
+        db_path = os.path.join(temp_dir, "cafeteria.db")
         texts_init = visible_texts(hwnd_main)
         texts_init_norm = [" ".join(t.split()) for t in texts_init]
-        assert any("Nunca" in t for t in texts_init), f"Falta 'Nunca' en estado inicial: {texts_init}"
-        assert any("Sin respaldos aún" in t for t in texts_init), f"Falta 'Sin respaldos aún': {texts_init}"
-        assert any("Desactivado" in t for t in texts_init), f"Falta estado textual 'Desactivado': {texts_init}"
-        assert not any("Nunca borra" in t for t in texts_init_norm), f"Texto falso en limpieza: {texts_init}"
-        assert any("otra carpeta o en una memoria USB" in t for t in texts_init_norm), (
-            f"Falta aclaración real de limpieza (USB/otras carpetas): {texts_init}"
-        )
-        assert not any("backup_state" in t or "sqlite" in t.lower() or "err_" in t.lower() for t in texts_init), (
-            f"Jerga tecnica visible: {texts_init}"
-        )
-
-        # Verificar medidas Tactil >= 48 log
-        btn_make = find_button(hwnd_main, text_contains="Hacer un respaldo ahora")
-        btn_rest = find_button(hwnd_main, text_contains="Restaurar desde un respaldo")
-        btn_save_pol = find_button(hwnd_main, exact="Guardar")
-        btn_prev_cl = find_button(hwnd_main, text_contains="Revisar qué se borraría")
-        btn_del_cl = find_button(hwnd_main, text_contains="Borrar respaldos antiguos")
-        assert all([btn_make, btn_rest, btn_save_pol, btn_prev_cl, btn_del_cl]), "Faltan botones de Respaldos"
-        assert user32.IsWindowEnabled(btn_del_cl) == 0, "Borrar respaldos antiguos debe iniciar deshabilitado"
-
-        for lbl, bh in [("Hacer respaldo", btn_make), ("Restaurar", btn_rest), ("Guardar", btn_save_pol),
-                        ("Revisar limpieza", btn_prev_cl), ("Borrar limpieza", btn_del_cl)]:
-            l, t, r, b = get_rect(bh)
-            assert (b - t) >= min_px(48, sys_scale), f"{lbl} menor a 48 log: {px_to_logical(b - t, sys_scale):.1f}"
-
-        # Toggle automatico: inicia Desactivado (0) -> activar (1) -> desactivar (0) -> activar (1)
         toggle_hwnd = next(
             (h for (h, _c, t) in enum_children(hwnd_main)
              if user32.IsWindowVisible(h) and "Respaldo automático al cerrar turno" in t and _c.lower() != "static"),
             None,
         )
         assert toggle_hwnd is not None, "Interruptor ToggleSwitch no encontrado"
-        assert user32.SendMessageW(toggle_hwnd, BM_GETCHECK, 0, 0) == 0, "Toggle debe iniciar Desactivado"
-        click_hwnd(toggle_hwnd, settle=0.3)
-        assert wait_until(lambda: any(t == "Activado" for t in visible_texts(hwnd_main)), desc="Toggle Activado")
 
-        db_path = os.path.join(temp_dir, "cafeteria.db")
-        con = sqlite3.connect(db_path)
-        assert con.execute("SELECT is_enabled FROM backup_state WHERE id=1").fetchone()[0] == 1
-        con.close()
+        def _dump_initial_db_and_fail(msg):
+            nonlocal keep_temp_on_fail
+            keep_temp_on_fail = True
+            con_dbg = sqlite3.connect(db_path)
+            st_rows = con_dbg.execute("SELECT * FROM backup_state").fetchall()
+            aud_rows = con_dbg.execute(
+                "SELECT event_type, details, created_at FROM audit_events ORDER BY created_at"
+            ).fetchall()
+            con_dbg.close()
+            print(f"[DIAGNOSTICO 0a] Carpeta temporal conservada: {temp_dir}", file=sys.stderr, flush=True)
+            print(f"[DIAGNOSTICO 0a] backup_state={st_rows}", file=sys.stderr, flush=True)
+            print(f"[DIAGNOSTICO 0a] audit_events={aud_rows}", file=sys.stderr, flush=True)
+            raise AssertionError(msg)
 
+        con_init = sqlite3.connect(db_path)
+        init_row = con_init.execute("SELECT is_enabled FROM backup_state WHERE id=1").fetchone()
+        toggle_aud_cnt = con_init.execute(
+            "SELECT COUNT(*) FROM audit_events WHERE event_type IN ('BACKUP_ENABLED', 'BACKUP_DISABLED')"
+        ).fetchone()[0]
+        con_init.close()
+        if init_row is None or init_row[0] != 1:
+            _dump_initial_db_and_fail(f"backup_state.is_enabled inicial inesperado: {init_row}")
+        if toggle_aud_cnt != 0:
+            _dump_initial_db_and_fail(
+                f"La bitacora inicial no deberia tener BACKUP_ENABLED/BACKUP_DISABLED: count={toggle_aud_cnt}"
+            )
+        if user32.SendMessageW(toggle_hwnd, BM_GETCHECK, 0, 0) != 1:
+            _dump_initial_db_and_fail("Interruptor ToggleSwitch debe iniciar marcado (Activado)")
+        if not any(t == "Activado" for t in texts_init) or any(t == "Desactivado" for t in texts_init):
+            _dump_initial_db_and_fail(
+                f"Texto del interruptor no coincide con is_enabled=1 en SQLite: {texts_init}"
+            )
+
+        assert any("Nunca" in t for t in texts_init), f"Falta 'Nunca' en estado inicial: {texts_init}"
+        assert any("Sin respaldos aún" in t for t in texts_init), f"Falta 'Sin respaldos aún': {texts_init}"
+        assert any("Sin respaldos automáticos aún" in t for t in texts_init), (
+            f"Falta estado inicial del último automático: {texts_init}"
+        )
+        assert any("Sin configurar" in t for t in texts_init), f"Falta 'Sin configurar' en segunda carpeta: {texts_init}"
+        assert not any("Nunca borra" in t for t in texts_init_norm), f"Texto falso en limpieza: {texts_init}"
+        assert any("otra carpeta o en una memoria USB" in t for t in texts_init_norm), (
+            f"Falta aclaración real de limpieza (USB/otras carpetas): {texts_init}"
+        )
+        for bad_tok in ("backup_state", "sqlite", "err_", "idle", "waiting", "running", "secondary", "unavailable", "not_done"):
+            assert not any(bad_tok in t.lower() for t in texts_init if "Respaldo" not in t or bad_tok != "auto"), (
+                f"Jerga tecnica visible ({bad_tok}): {texts_init}"
+            )
+
+        # Verificar medidas Tactil >= 48 log
+        btn_make = find_button(hwnd_main, text_contains="Hacer un respaldo ahora")
+        btn_rest = find_button(hwnd_main, text_contains="Restaurar desde un respaldo")
+        btn_choose_sec = find_button(hwnd_main, exact="Elegir carpeta")
+        btn_clear_sec = find_button(hwnd_main, exact="Quitar")
+        btn_more = find_button(hwnd_main, exact="Ver más")
+        btn_rest_sel = find_button(hwnd_main, exact="Restaurar el seleccionado")
+        btn_save_pol = find_button(hwnd_main, exact="Guardar")
+        btn_prev_cl = find_button(hwnd_main, text_contains="Revisar qué se borraría")
+        btn_del_cl = find_button(hwnd_main, text_contains="Borrar respaldos antiguos")
+        assert all([btn_make, btn_rest, btn_choose_sec, btn_clear_sec, btn_more, btn_rest_sel, btn_save_pol, btn_prev_cl, btn_del_cl]), (
+            "Faltan botones de Respaldos"
+        )
+        assert user32.IsWindowEnabled(btn_clear_sec) == 0, "Quitar segunda carpeta debe iniciar deshabilitado"
+        assert user32.IsWindowEnabled(btn_rest_sel) == 0, "Restaurar el seleccionado debe iniciar deshabilitado"
+        assert user32.IsWindowEnabled(btn_del_cl) == 0, "Borrar respaldos antiguos debe iniciar deshabilitado"
+
+        for lbl, bh in [
+            ("Hacer respaldo", btn_make), ("Restaurar", btn_rest),
+            ("Elegir carpeta", btn_choose_sec), ("Quitar", btn_clear_sec),
+            ("Ver más", btn_more), ("Restaurar el seleccionado", btn_rest_sel),
+            ("Guardar", btn_save_pol), ("Revisar limpieza", btn_prev_cl), ("Borrar limpieza", btn_del_cl),
+        ]:
+            l, t, r, b = get_rect(bh)
+            assert (b - t) >= min_px(48, sys_scale), f"{lbl} menor a 48 log: {px_to_logical(b - t, sys_scale):.1f}"
+
+        # Toggle automatico: inicia Activado (1) -> desactivar (0) -> activar (1)
         click_hwnd(toggle_hwnd, settle=0.3)
         assert wait_until(lambda: any(t == "Desactivado" for t in visible_texts(hwnd_main)), desc="Toggle Desactivado")
         con = sqlite3.connect(db_path)
@@ -488,6 +673,9 @@ def run_suite(build_label, exe_path, sys_scale):
 
         click_hwnd(toggle_hwnd, settle=0.3)
         assert wait_until(lambda: any(t == "Activado" for t in visible_texts(hwnd_main)), desc="Toggle Reactivado")
+        con = sqlite3.connect(db_path)
+        assert con.execute("SELECT is_enabled FROM backup_state WHERE id=1").fetchone()[0] == 1
+        con.close()
 
         # 2. Respaldo manual #1 -> bkp_before.db (probar doble clic rapido -> 1 dialogo, 1 archivo, 1 evento)
         bkp_before = os.path.join(backup_out_dir, "bkp_before.db")
@@ -583,8 +771,7 @@ def run_suite(build_label, exe_path, sys_scale):
         btn_del_cl = find_button(hwnd_main, text_contains="Borrar respaldos antiguos")
         click_hwnd(btn_prev_cl, settle=0.35)
 
-        lv = next((h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)), None)
-        assert lv is not None
+        lv = wait_until(lambda: find_listview_by_header(p.pid, hwnd_main, "Archivo"), desc="Tabla vista previa limpieza")
         assert wait_until(lambda: user32.SendMessageW(lv, LVM_GETITEMCOUNT, 0, 0) == 1, desc="Vista previa 1 archivo a borrar")
         lv_headers = get_listview_headers(p.pid, lv)
         assert lv_headers == ["Archivo", "Carpeta", "Fecha", "Tamaño (MB)"], f"Columnas limpieza inesperadas: {lv_headers}"
@@ -620,7 +807,7 @@ def run_suite(build_label, exe_path, sys_scale):
         btn_rest = find_button(hwnd_main, text_contains="Restaurar desde un respaldo")
         click_hwnd(btn_rest, settle=0.2)
         accept_file_dialog(p.pid, "Elegir archivo de respaldo", corrupt_path)
-        err_corr = dismiss_messagebox(p.pid, "Respaldo inválido o dañado")
+        err_corr = dismiss_messagebox(p.pid, "Este respaldo no se puede restaurar")
         assert "no es una base" in err_corr.lower() or "inválido" in err_corr.lower() or "integridad" in err_corr.lower()
 
         # 6b. Respaldo integro pero sin cuenta Dueno activa -> rechazado en revision antes de confirmaciones
@@ -633,10 +820,10 @@ def run_suite(build_label, exe_path, sys_scale):
 
         click_hwnd(btn_rest, settle=0.2)
         accept_file_dialog(p.pid, "Elegir archivo de respaldo", no_owner_path)
-        err_no = dismiss_messagebox(p.pid, "Respaldo inválido o dañado")
+        err_no = dismiss_messagebox(p.pid, "Este respaldo no se puede restaurar")
         assert "dueño" in err_no.lower(), f"Rechazo por falta de Dueño inesperado: {err_no}"
 
-        # 7. Restaurar version futura -> verifica advertencia + 2a confirmacion y falla sin alterar datos
+        # 7. Restaurar version futura -> rechazado en revision ANTES de las dos confirmaciones (0b/0c)
         future_path = os.path.join(temp_dir, "futuro.db")
         shutil.copy2(bkp_restore_copy, future_path)
         con_f = sqlite3.connect(future_path)
@@ -646,30 +833,15 @@ def run_suite(build_label, exe_path, sys_scale):
 
         click_hwnd(btn_rest, settle=0.2)
         accept_file_dialog(p.pid, "Elegir archivo de respaldo", future_path)
-        hwnd_w1, _ = wait_for_window(p.pid, "Revisar respaldo antes de restaurar", timeout=8.0)
-        w1_texts = " ".join(" ".join(visible_texts(hwnd_w1)).split())
-        assert "reemplazarán todos los datos actuales" in w1_texts
-        assert "se perderá todo lo que se vendió o cambió después de la fecha del respaldo" in w1_texts.lower(), (
-            f"Falta aviso de datos posteriores: {w1_texts}"
+        err_fut = dismiss_messagebox(p.pid, "Este respaldo no se puede restaurar")
+        assert "más nueva" in err_fut.lower() or "versión" in err_fut.lower(), (
+            f"Error de versión futura inesperado en revisión: {err_fut}"
         )
-        assert "carpeta de respaldos de la carpeta de datos" in w1_texts.lower(), (
-            f"Falta ubicación de copia previa: {w1_texts}"
+        assert not find_windows_by_pid(p.pid, "Revisar respaldo antes de restaurar"), (
+            "Versión futura no debió abrir confirmaciones de restauración"
         )
-        assert "revisión " not in w1_texts.lower(), f"No debe mostrar número de revisión: {w1_texts}"
-        assert "cierre" in w1_texts.lower() or "cerrará" in w1_texts.lower()
-        btn_cont = find_button(hwnd_w1, text_contains="Continuar con restauración")
-        assert btn_cont is not None
-        click_hwnd(btn_cont, settle=0.25)
 
-        hwnd_w2, _ = wait_for_window(p.pid, "Confirmación final", timeout=8.0)
-        btn_red = find_button(hwnd_w2, text_contains="Sí, reemplazar y restaurar")
-        assert btn_red is not None
-        click_hwnd(btn_red, settle=0.3)
-
-        err_fut = dismiss_messagebox(p.pid, "Restauración no aplicada")
-        assert "más nueva" in err_fut and "intactos" in err_fut, f"Error de versión futura inesperado: {err_fut}"
-
-        # 7b. Cancelar en paso 1 y cancelar en paso 2 -> datos sin cambios y sin pre_restore
+        # 7b. Verificar advertencia paso 1 + cancelar en paso 1 y en paso 2 -> datos sin cambios y sin pre_restore
         backups_internal_dir = os.path.join(temp_dir, "backups")
         def _count_pre_restore():
             if not os.path.isdir(backups_internal_dir):
@@ -681,6 +853,16 @@ def run_suite(build_label, exe_path, sys_scale):
         click_hwnd(btn_rest, settle=0.2)
         accept_file_dialog(p.pid, "Elegir archivo de respaldo", bkp_restore_copy)
         hwnd_c1, _ = wait_for_window(p.pid, "Revisar respaldo antes de restaurar", timeout=8.0)
+        w1_texts = " ".join(" ".join(visible_texts(hwnd_c1)).split())
+        assert "reemplazarán todos los datos actuales" in w1_texts
+        assert "se perderá todo lo que se vendió o cambió después de la fecha del respaldo" in w1_texts.lower(), (
+            f"Falta aviso de datos posteriores: {w1_texts}"
+        )
+        assert "carpeta de respaldos de la carpeta de datos" in w1_texts.lower(), (
+            f"Falta ubicación de copia previa: {w1_texts}"
+        )
+        assert "revisión " not in w1_texts.lower(), f"No debe mostrar número de revisión: {w1_texts}"
+        assert "cierre" in w1_texts.lower() or "cerrará" in w1_texts.lower()
         btn_cancel_1 = find_button(hwnd_c1, exact="Cancelar")
         assert btn_cancel_1 is not None
         click_hwnd(btn_cancel_1, settle=0.25)
@@ -768,10 +950,209 @@ def run_suite(build_label, exe_path, sys_scale):
         set_edit_text(nu2e[3], "Caj!2026")
         click_hwnd(find_button(hwnd_nu2, text_contains="Guardar Usuario"), settle=0.4)
         wait_until(lambda: not find_windows_by_pid(p_perm.pid, "Nuevo Usuario de Sistema"), desc="Cerrar Nuevo Usuario perm")
+        # Seed de producto simple para probar venta real + cierre de turno + respaldo automatico
+        con_prod = sqlite3.connect(db_path)
+        con_prod.execute(
+            "INSERT OR IGNORE INTO products (id, sku, barcode, name, category, price_cents, is_prepared, is_active, created_at) "
+            "VALUES ('prod-t6-1', 'T6-01', '750100009991', 'Cafe T6', 'Bebidas', 3500, 0, 1, '2026-10-01 08:00:00');"
+        )
+        con_prod.commit()
+        con_prod.close()
+
+        # 9. Respaldo automatico al cerrar turno, segunda carpeta / USB y lista de respaldos (como Dueño)
+        auto_dir = os.path.join(temp_dir, "backups", "automaticos")
+        def _auto_files():
+            if not os.path.isdir(auto_dir):
+                return set()
+            return {fn for fn in os.listdir(auto_dir) if fn.endswith(".db")}
+
+        open_section_and_subnav(hwnd_m_p, "BackOffice", "Respaldos")
+        lv_bkp = wait_until(
+            lambda: find_listview_by_header(p_perm.pid, hwnd_m_p, "Tipo"),
+            desc="ListView Lista de respaldos tras restaurar",
+        )
+        assert wait_until(lambda: user32.SendMessageW(lv_bkp, LVM_GETITEMCOUNT, 0, 0) >= 1, desc="Al menos 1 respaldo en lista inicial"), (
+            "Lista de respaldos vacia tras restaurar"
+        )
+        init_list_tipos = [
+            get_listview_cell(p_perm.pid, lv_bkp, ri, 0)
+            for ri in range(int(user32.SendMessageW(lv_bkp, LVM_GETITEMCOUNT, 0, 0)))
+        ]
+        assert any(t in ("Manual", "Antes de restaurar") for t in init_list_tipos), (
+            f"Se esperaba respaldo previo en la lista tras restaurar: {init_list_tipos}"
+        )
+
+        # 9a. Abrir turno -> vender Cafe T6 -> cerrar turno -> aviso y respaldo automatico en segundo plano
+        before_auto_1 = _auto_files()
+        open_shift_ui(p_perm.pid, hwnd_m_p, initial_cash="500.00")
+        make_sale_ui(p_perm.pid, hwnd_m_p, search_text="Cafe T6", pay_amount="100.00")
+        close_msg_1 = close_shift_ui(p_perm.pid, hwnd_m_p, final_cash="535.00")
+        assert "Se está haciendo un respaldo automático; puedes seguir trabajando." in close_msg_1, (
+            f"Falta aviso de respaldo automático al cerrar turno: {close_msg_1}"
+        )
+        open_section_and_subnav(hwnd_m_p, "BackOffice", "Respaldos")
+        assert wait_until(
+            lambda: any("Correcto" in t for t in visible_texts(hwnd_m_p)),
+            desc="Último automático Correcto tras cerrar turno #1",
+            timeout=60.0,
+        )
+        new_auto_1 = wait_until(lambda: _auto_files() - before_auto_1, desc="Archivo auto #1 en backups/automaticos", timeout=15.0)
+        auto_file_1 = sorted(new_auto_1)[0]
+        auto_path_1 = os.path.join(auto_dir, auto_file_1)
+        assert_sqlite_integrity(auto_path_1)
+        texts_a1 = visible_texts(hwnd_m_p)
+        assert any(auto_file_1 in t for t in texts_a1), f"Nombre de archivo automático no visible ({auto_file_1}): {texts_a1}"
+        for bad_tok in ("waiting", "running", "secondary", "unavailable", "not_done"):
+            assert not any(bad_tok in t.lower() for t in texts_a1), f"Código interno visible ({bad_tok}): {texts_a1}"
+
+        lv_bkp = wait_until(lambda: find_listview_by_header(p_perm.pid, hwnd_m_p, "Tipo"), desc="ListView tras auto #1")
+        assert wait_until(
+            lambda: any(
+                get_listview_cell(p_perm.pid, lv_bkp, ri, 0) == "Automático"
+                and "Esta PC —" in get_listview_cell(p_perm.pid, lv_bkp, ri, 1)
+                and get_listview_cell(p_perm.pid, lv_bkp, ri, 4) == "Disponible"
+                for ri in range(int(user32.SendMessageW(lv_bkp, LVM_GETITEMCOUNT, 0, 0)))
+            ),
+            desc="Fila Automático Disponible en Lista de respaldos",
+        )
+
+        # 9b. Configurar segunda carpeta / memoria USB -> cierre copia a USB/CafeteriaITCH
+        usb_dir = os.path.join(temp_dir, "usb_simulada")
+        os.makedirs(usb_dir, exist_ok=True)
+        btn_choose_p = wait_until(lambda: find_button(hwnd_m_p, exact="Elegir carpeta"), desc="Botón Elegir carpeta")
+        click_hwnd(btn_choose_p, settle=0.25)
+        accept_file_dialog(p_perm.pid, "Elegir segunda carpeta o memoria USB", usb_dir)
+        assert wait_until(
+            lambda: any(usb_dir in t for t in visible_texts(hwnd_m_p)),
+            desc="Ruta USB mostrada en Respaldos",
+        )
+        btn_clear_p = find_button(hwnd_m_p, exact="Quitar")
+        assert btn_clear_p is not None and user32.IsWindowEnabled(btn_clear_p) != 0, (
+            "Botón Quitar debe habilitarse al configurar segunda carpeta"
+        )
+
+        before_auto_2 = _auto_files()
+        open_shift_ui(p_perm.pid, hwnd_m_p, initial_cash="500.00")
+        close_msg_2 = close_shift_ui(p_perm.pid, hwnd_m_p, final_cash="500.00")
+        assert "Se está haciendo un respaldo automático; puedes seguir trabajando." in close_msg_2
+        open_section_and_subnav(hwnd_m_p, "BackOffice", "Respaldos")
+        assert wait_until(
+            lambda: any("También se copió a la USB." in t for t in visible_texts(hwnd_m_p)),
+            desc="Detalle También se copió a la USB tras cerrar turno #2",
+            timeout=60.0,
+        )
+        new_auto_2 = wait_until(lambda: _auto_files() - before_auto_2, desc="Archivo auto #2 local", timeout=15.0)
+        auto_file_2 = sorted(new_auto_2)[0]
+        local_2 = os.path.join(auto_dir, auto_file_2)
+        usb_copy_2 = os.path.join(usb_dir, "CafeteriaITCH", auto_file_2)
+        assert os.path.exists(usb_copy_2), f"Copia en USB no existe: {usb_copy_2}"
+        assert os.path.getsize(usb_copy_2) == os.path.getsize(local_2), (
+            f"Tamaño USB ({os.path.getsize(usb_copy_2)}) != local ({os.path.getsize(local_2)})"
+        )
+
+        # 9c. Desconectar USB (borrar usb_dir) -> aviso amable, copia local conservada -> Quitar carpeta
+        shutil.rmtree(usb_dir)
+        before_auto_3 = _auto_files()
+        open_shift_ui(p_perm.pid, hwnd_m_p, initial_cash="500.00")
+        close_shift_ui(p_perm.pid, hwnd_m_p, final_cash="500.00")
+        open_section_and_subnav(hwnd_m_p, "BackOffice", "Respaldos")
+        assert wait_until(
+            lambda: any("La USB no estaba conectada: la copia se hizo solo en esta PC." in t for t in visible_texts(hwnd_m_p)),
+            desc="Aviso USB no conectada tras cerrar turno #3",
+            timeout=60.0,
+        )
+        new_auto_3 = wait_until(lambda: _auto_files() - before_auto_3, desc="Archivo auto #3 local sin USB", timeout=15.0)
+        auto_file_3 = sorted(new_auto_3)[0]
+        assert_sqlite_integrity(os.path.join(auto_dir, auto_file_3))
+
+        btn_clear_p = wait_until(lambda: find_button(hwnd_m_p, exact="Quitar"), desc="Botón Quitar segunda carpeta")
+        click_hwnd(btn_clear_p, settle=0.35)
+        assert wait_until(lambda: any("Sin configurar" in t for t in visible_texts(hwnd_m_p)), desc="Segunda carpeta quitada -> Sin configurar")
+        assert user32.IsWindowEnabled(find_button(hwnd_m_p, exact="Quitar")) == 0, "Quitar debe deshabilitarse tras limpiar"
+
+        # 9d. Lista de respaldos: Restaurar el seleccionado + Falta el archivo
+        lv_bkp = wait_until(lambda: find_listview_by_header(p_perm.pid, hwnd_m_p, "Tipo"), desc="ListView para selección")
+        avail_row = next(
+            (
+                ri for ri in range(int(user32.SendMessageW(lv_bkp, LVM_GETITEMCOUNT, 0, 0)))
+                if get_listview_cell(p_perm.pid, lv_bkp, ri, 4) == "Disponible"
+                and get_listview_cell(p_perm.pid, lv_bkp, ri, 0) == "Automático"
+                and "Esta PC —" in get_listview_cell(p_perm.pid, lv_bkp, ri, 1)
+            ),
+            None,
+        )
+        assert avail_row is not None, "No se encontró fila Automático Disponible para seleccionar"
+        select_listview_row(p_perm.pid, lv_bkp, avail_row)
+        btn_rest_sel_p = wait_until(
+            lambda: (
+                h := find_button(hwnd_m_p, exact="Restaurar el seleccionado")
+            ) and user32.IsWindowEnabled(h) and h,
+            desc="Restaurar el seleccionado habilitado al elegir Disponible",
+        )
+        click_hwnd(btn_rest_sel_p, settle=0.25)
+        hwnd_sel_w1, _ = wait_for_window(p_perm.pid, "Revisar respaldo antes de restaurar", timeout=8.0)
+        click_hwnd(find_button(hwnd_sel_w1, exact="Cancelar"), settle=0.25)
+        wait_until(lambda: not find_windows_by_pid(p_perm.pid, "Revisar respaldo antes de restaurar"), desc="Cerrar confirmación al cancelar seleccionado")
+
+        # Borrar del disco el archivo local auto_file_3 (más reciente) -> 'Falta el archivo' y botón deshabilitado
+        os.remove(os.path.join(auto_dir, auto_file_3))
+        open_section_and_subnav(hwnd_m_p, "BackOffice", "Usuarios y cuentas")
+        open_section_and_subnav(hwnd_m_p, "BackOffice", "Respaldos")
+        lv_bkp = wait_until(lambda: find_listview_by_header(p_perm.pid, hwnd_m_p, "Tipo"), desc="ListView tras borrar archivo")
+        missing_row = wait_until(
+            lambda: next(
+                (
+                    (ri,) for ri in range(int(user32.SendMessageW(lv_bkp, LVM_GETITEMCOUNT, 0, 0)))
+                    if get_listview_cell(p_perm.pid, lv_bkp, ri, 4) == "Falta el archivo"
+                ),
+                None,
+            ),
+            desc="Estado 'Falta el archivo' en Lista de respaldos",
+        )[0]
+        select_listview_row(p_perm.pid, lv_bkp, missing_row)
+        time.sleep(0.2)
+        btn_rest_sel_p2 = find_button(hwnd_m_p, exact="Restaurar el seleccionado")
+        assert btn_rest_sel_p2 is not None and user32.IsWindowEnabled(btn_rest_sel_p2) == 0, (
+            "Restaurar el seleccionado debe deshabilitarse si falta el archivo"
+        )
+
+        # 9e. Apagar respaldo automatico -> cerrar turno no dispara respaldo ni muestra aviso -> volver a activar
+        tog_p = next(
+            (h for (h, c, t) in enum_children(hwnd_m_p)
+             if user32.IsWindowVisible(h) and "Respaldo automático al cerrar turno" in t and c.lower() != "static"),
+            None,
+        )
+        assert tog_p is not None
+        click_hwnd(tog_p, settle=0.3)
+        assert wait_until(lambda: any(t == "Desactivado" for t in visible_texts(hwnd_m_p)), desc="Toggle OFF antes de cierre sin auto")
+        before_auto_off = _auto_files()
+        open_shift_ui(p_perm.pid, hwnd_m_p, initial_cash="500.00")
+        close_msg_off = close_shift_ui(p_perm.pid, hwnd_m_p, final_cash="500.00")
+        assert "respaldo automático" not in close_msg_off.lower(), (
+            f"Con automático apagado no debe avisar respaldo automático: {close_msg_off}"
+        )
+        time.sleep(1.5)
+        assert _auto_files() == before_auto_off, f"Con automático apagado se creó archivo: {_auto_files() - before_auto_off}"
+
+        open_section_and_subnav(hwnd_m_p, "BackOffice", "Respaldos")
+        tog_p2 = next(
+            (h for (h, c, t) in enum_children(hwnd_m_p)
+             if user32.IsWindowVisible(h) and "Respaldo automático al cerrar turno" in t and c.lower() != "static"),
+            None,
+        )
+        click_hwnd(tog_p2, settle=0.3)
+        assert wait_until(lambda: any(t == "Activado" for t in visible_texts(hwnd_m_p)), desc="Toggle ON restaurado")
+
+        # 9f. Crear respaldo manual actualizado (contiene cajero_norst y producto) para probar Restaurar el seleccionado al final
+        bkp_with_cajero = os.path.join(backup_out_dir, "bkp_with_cajero.db")
+        click_hwnd(wait_until(lambda: find_button(hwnd_m_p, text_contains="Hacer un respaldo ahora"), desc="Hacer respaldo #2"), settle=0.2)
+        accept_file_dialog(p_perm.pid, "Guardar respaldo", bkp_with_cajero, expected_default_prefix="cafeteria-respaldo-")
+        dismiss_messagebox(p_perm.pid, "Respaldo guardado")
+
         user32.PostMessageW(hwnd_m_p, WM_CLOSE, 0, 0)
         p_perm.wait(timeout=8)
 
-        # Login como cajero_norst (sin backup.manage)
+        # 10. Cajero sin backup.manage/backup.restore: cierra turno (el respaldo automatico SI se hace) y BackOffice > Respaldos deniega
         p_c1 = subprocess.Popen([exe_path], cwd=REPO_ROOT, env=env)
         procs.append(p_c1)
         hwnd_lc1, _ = wait_for_window(p_c1.pid, "Iniciar Sesión", timeout=12.0)
@@ -783,15 +1164,55 @@ def run_suite(build_label, exe_path, sys_scale):
         set_edit_text(le1[1], "Caj!2026")
         click_hwnd(find_button(hwnd_lc1, text_contains="Iniciar Sesión"), settle=0.25)
         hwnd_mc1, _ = wait_for_window(p_c1.pid, "Cafetería ITCH II", exclude=("Primer Inicio", "Iniciar Sesión"), timeout=15.0)
+
+        before_auto_caj = _auto_files()
+        open_shift_ui(p_c1.pid, hwnd_mc1, initial_cash="300.00")
+        close_msg_caj = close_shift_ui(p_c1.pid, hwnd_mc1, final_cash="300.00")
+        assert "Se está haciendo un respaldo automático; puedes seguir trabajando." in close_msg_caj, (
+            f"Cajero al cerrar turno debe ver aviso de respaldo automático: {close_msg_caj}"
+        )
+        wait_until(lambda: _auto_files() - before_auto_caj, desc="Respaldo automático creado al cerrar turno como Cajero", timeout=30.0)
+
         open_section_and_subnav(hwnd_mc1, "BackOffice", "Respaldos")
         assert wait_until(lambda: any("Sin permiso para respaldos" in t for t in visible_texts(hwnd_mc1)), desc="Acceso denegado backup.manage")
         assert find_button(hwnd_mc1, text_contains="Hacer un respaldo ahora") is None
         assert find_button(hwnd_mc1, text_contains="Restaurar desde un respaldo") is None
+        assert find_button(hwnd_mc1, exact="Elegir carpeta") is None, "Cajero sin permisos no debe ver segunda carpeta"
+        assert find_listview_by_header(p_c1.pid, hwnd_mc1, "Tipo") is None, "Cajero sin permisos no debe ver Lista de respaldos"
         user32.PostMessageW(hwnd_mc1, WM_CLOSE, 0, 0)
         p_c1.wait(timeout=8)
 
-        # Otorgar backup.manage al rol role-cashier (sin backup.restore) y comprobar que Restaurar queda oculto
+        # 11. Quien tiene ONLY backup.restore (sin backup.manage) ve SOLO Restaurar desde un respaldo + Lista y Restaurar seleccionado
+        con_pr = sqlite3.connect(db_path)
+        con_pr.execute("INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES ('role-cashier', 'backup.restore');")
+        con_pr.commit()
+        con_pr.close()
+
+        p_c2_r = subprocess.Popen([exe_path], cwd=REPO_ROOT, env=env)
+        procs.append(p_c2_r)
+        hwnd_lc2r, _ = wait_for_window(p_c2_r.pid, "Iniciar Sesión", timeout=12.0)
+        le2r = sorted(
+            [h for (h, c, _t) in enum_children(hwnd_lc2r) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda h: get_rect(h)[1],
+        )
+        set_edit_text(le2r[0], "cajero_norst")
+        set_edit_text(le2r[1], "Caj!2026")
+        click_hwnd(find_button(hwnd_lc2r, text_contains="Iniciar Sesión"), settle=0.25)
+        hwnd_mc2r, _ = wait_for_window(p_c2_r.pid, "Cafetería ITCH II", exclude=("Primer Inicio", "Iniciar Sesión"), timeout=15.0)
+        open_section_and_subnav(hwnd_mc2r, "BackOffice", "Respaldos")
+        assert wait_until(lambda: find_button(hwnd_mc2r, text_contains="Restaurar desde un respaldo") is not None, desc="Restaurar visible con solo backup.restore")
+        assert find_listview_by_header(p_c2_r.pid, hwnd_mc2r, "Tipo") is not None, "Lista de respaldos debe verse con backup.restore"
+        assert find_button(hwnd_mc2r, exact="Restaurar el seleccionado") is not None, "Restaurar el seleccionado debe verse con backup.restore"
+        assert find_button(hwnd_mc2r, text_contains="Hacer un respaldo ahora") is None, "Sin backup.manage no debe ver Hacer respaldo"
+        assert find_button(hwnd_mc2r, exact="Elegir carpeta") is None, "Sin backup.manage no debe ver Segunda carpeta"
+        assert find_button(hwnd_mc2r, exact="Guardar") is None, "Sin backup.manage no debe ver Limpieza"
+        assert not any("Estado del respaldo" in t for t in visible_texts(hwnd_mc2r)), "Sin backup.manage no debe ver Estado del respaldo"
+        user32.PostMessageW(hwnd_mc2r, WM_CLOSE, 0, 0)
+        p_c2_r.wait(timeout=8)
+
+        # 12. Otorgar ONLY backup.manage al rol role-cashier (sin backup.restore) -> ve gestión y lista, SIN botones de restaurar
         con_p = sqlite3.connect(db_path)
+        con_p.execute("DELETE FROM role_permissions WHERE role_id='role-cashier' AND permission_id='backup.restore';")
         con_p.execute("INSERT OR IGNORE INTO role_permissions (role_id, permission_id) VALUES ('role-cashier', 'backup.manage');")
         con_p.commit()
         con_p.close()
@@ -809,8 +1230,13 @@ def run_suite(build_label, exe_path, sys_scale):
         hwnd_mc2, _ = wait_for_window(p_c2.pid, "Cafetería ITCH II", exclude=("Primer Inicio", "Iniciar Sesión"), timeout=15.0)
         open_section_and_subnav(hwnd_mc2, "BackOffice", "Respaldos")
         assert wait_until(lambda: find_button(hwnd_mc2, text_contains="Hacer un respaldo ahora") is not None, desc="Hacer respaldo visible con backup.manage")
+        assert find_button(hwnd_mc2, exact="Elegir carpeta") is not None, "Segunda carpeta visible con backup.manage"
+        assert find_listview_by_header(p_c2.pid, hwnd_mc2, "Tipo") is not None, "Lista visible con backup.manage"
         assert find_button(hwnd_mc2, text_contains="Restaurar desde un respaldo") is None, (
             "Restaurar debe ocultarse sin permiso backup.restore"
+        )
+        assert find_button(hwnd_mc2, exact="Restaurar el seleccionado") is None, (
+            "Restaurar el seleccionado debe ocultarse sin permiso backup.restore"
         )
         assert any("Solo el Dueño puede restaurar respaldos" in t for t in visible_texts(hwnd_mc2)), (
             "Falta explicacion de restauracion solo Dueno"
@@ -818,7 +1244,46 @@ def run_suite(build_label, exe_path, sys_scale):
         user32.PostMessageW(hwnd_mc2, WM_CLOSE, 0, 0)
         p_c2.wait(timeout=8)
 
-        print(f"  [OK] {build_label}: backed up -> cleaned old -> rejected invalid/future -> restored ({pre_restore_lines[0]}) -> permissions OK")
+        # 13. Restaurar realmente usando 'Restaurar el seleccionado' como Dueño
+        p_rsel = subprocess.Popen([exe_path], cwd=REPO_ROOT, env=env)
+        procs.append(p_rsel)
+        hwnd_l_rs, _ = wait_for_window(p_rsel.pid, "Iniciar Sesión", timeout=12.0)
+        lers = sorted(
+            [h for (h, c, _t) in enum_children(hwnd_l_rs) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda h: get_rect(h)[1],
+        )
+        set_edit_text(lers[0], "dueno_t6")
+        set_edit_text(lers[1], "CafeT6!2026")
+        click_hwnd(find_button(hwnd_l_rs, text_contains="Iniciar Sesión"), settle=0.25)
+        hwnd_m_rs, _ = wait_for_window(p_rsel.pid, "Cafetería ITCH II", exclude=("Primer Inicio", "Iniciar Sesión"), timeout=15.0)
+        open_section_and_subnav(hwnd_m_rs, "BackOffice", "Respaldos")
+        lv_rs = wait_until(lambda: find_listview_by_header(p_rsel.pid, hwnd_m_rs, "Tipo"), desc="ListView restaurar seleccionado final")
+        row_rs = wait_until(
+            lambda: next(
+                (
+                    (ri,) for ri in range(int(user32.SendMessageW(lv_rs, LVM_GETITEMCOUNT, 0, 0)))
+                    if get_listview_cell(p_rsel.pid, lv_rs, ri, 4) == "Disponible"
+                ),
+                None,
+            ),
+            desc="Fila Disponible para Restaurar el seleccionado",
+        )[0]
+        select_listview_row(p_rsel.pid, lv_rs, row_rs)
+        btn_rs_go = wait_until(
+            lambda: (h := find_button(hwnd_m_rs, exact="Restaurar el seleccionado")) and user32.IsWindowEnabled(h) and h,
+            desc="Botón Restaurar el seleccionado habilitado final",
+        )
+        click_hwnd(btn_rs_go, settle=0.25)
+        hwnd_rsw1, _ = wait_for_window(p_rsel.pid, "Revisar respaldo antes de restaurar", timeout=8.0)
+        click_hwnd(find_button(hwnd_rsw1, text_contains="Continuar con restauración"), settle=0.25)
+        hwnd_rsw2, _ = wait_for_window(p_rsel.pid, "Confirmación final", timeout=8.0)
+        click_hwnd(find_button(hwnd_rsw2, text_contains="Sí, reemplazar y restaurar"), settle=0.35)
+        done_rs = dismiss_messagebox(p_rsel.pid, "Restauración completada")
+        assert "pre_restore_" in done_rs
+        p_rsel.wait(timeout=10)
+        assert_sqlite_integrity(db_path)
+
+        print(f"  [OK] {build_label}: manual/auto/usb/lista/restaurar-seleccionado/permisos OK")
     finally:
         for pr in procs:
             if pr.poll() is None:
@@ -830,7 +1295,8 @@ def run_suite(build_label, exe_path, sys_scale):
                         pr.kill()
                     except Exception:
                         pass
-        shutil.rmtree(temp_dir, ignore_errors=True)
+        if not keep_temp_on_fail:
+            shutil.rmtree(temp_dir, ignore_errors=True)
 
 
 def main():

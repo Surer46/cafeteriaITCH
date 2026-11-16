@@ -711,7 +711,8 @@ def main():
             btn_ok_fd = user32.GetDlgItem(hwnd_fd, 1)
             if not btn_ok_fd:
                 btn_ok_fd = next(
-                    (h for (h, c, t) in children_fd if c.lower() == "button" and user32.IsWindowVisible(h) and ("Guardar" in t or "Abrir" in t)),
+                    (h for (h, c, t) in children_fd if c.lower() == "button" and user32.IsWindowVisible(h)
+                     and ("Guardar" in t or "Abrir" in t or "Seleccionar" in t or "Aceptar" in t)),
                     None,
                 )
             assert btn_ok_fd, "Botón Aceptar/Guardar/Abrir en diálogo de archivos no encontrado"
@@ -750,6 +751,21 @@ def main():
         assert btn_cancel_r is not None, "Botón Cancelar en advertencia de restauración no encontrado"
         _f7_click_btn(btn_cancel_r)
         time.sleep(0.35)
+
+        # Configurar segunda carpeta temporal, desplazar vista y capturar Lista de respaldos + Segunda carpeta (captura 23)
+        qa_usb_dir = os.path.join(temp_dir, "USB_Respaldo_QA")
+        os.makedirs(qa_usb_dir, exist_ok=True)
+        btn_choose_sec = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Elegir carpeta"), None)
+        assert btn_choose_sec is not None, "Botón 'Elegir carpeta' no encontrado"
+        user32.PostMessageW(btn_choose_sec, BM_CLICK, 0, 0)
+        _t6_accept_file_dialog("Elegir segunda carpeta o memoria USB", qa_usb_dir)
+        time.sleep(0.35)
+        hwnd_sc_bkp = user32.GetParent(user32.GetParent(btn_choose_sec))
+        if hwnd_sc_bkp:
+            for _ in range(20):
+                user32.SendMessageW(hwnd_sc_bkp, 0x0115, 1, 0)  # WM_VSCROLL, SB_LINEDOWN
+            time.sleep(0.25)
+        capture_window(hwnd_main, os.path.join(out_dir, "23_backups_list_and_secondary.png"))
 
         # CAPTURA 18 y 19: Teclado numérico integrado en POS (Touch) y Cobro (Touch)
         btn_pos_k = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Punto de Venta" in t), None)

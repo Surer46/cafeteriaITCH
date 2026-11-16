@@ -609,6 +609,19 @@ def run_suite(label, exe_path, write_audit=False):
         click_subnav(hwnd_main, "Respaldos")
         time.sleep(0.4)
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Respaldos", scale)
+        all_res_btns = [
+            (h, t.strip()) for (h, c, t) in enum_children(hwnd_main)
+            if c.lower() == "button" and user32.IsWindowVisible(h)
+        ]
+        for req_btn in ("Elegir carpeta", "Quitar", "Ver más", "Restaurar el seleccionado"):
+            match_h = next((h for (h, t) in all_res_btns if t == req_btn), None)
+            assert match_h is not None, f"Falta botón '{req_btn}' en auditoría táctil de Respaldos"
+            rc_b = get_rect(match_h)
+            w_log_b = (rc_b[2] - rc_b[0]) / scale
+            h_log_b = (rc_b[3] - rc_b[1]) / scale
+            assert w_log_b >= 48.0 - 0.5 and h_log_b >= 48.0 - 0.5, (
+                f"Botón '{req_btn}' menor a 48x48 lógicos: {w_log_b:.1f}x{h_log_b:.1f}"
+            )
         record_audit("Respaldos", items, overlaps, lrows)
 
         res_edits = sorted(

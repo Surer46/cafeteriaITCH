@@ -87,6 +87,30 @@ def get_class(hwnd):
     return buf.value
 
 
+def describe_window_owner(hwnd):
+    if not hwnd:
+        return "hwnd=0x0"
+    hwnd_root = user32.GetAncestor(hwnd, 2) or hwnd
+    wpid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd_root, ctypes.byref(wpid))
+    exe_name = "<desconocido>"
+    if wpid.value:
+        h_proc = kernel32.OpenProcess(0x1000, False, wpid.value)
+        if h_proc:
+            try:
+                sz = wintypes.DWORD(512)
+                buf = ctypes.create_unicode_buffer(512)
+                if kernel32.QueryFullProcessImageNameW(h_proc, 0, buf, ctypes.byref(sz)):
+                    exe_name = os.path.basename(buf.value)
+            finally:
+                kernel32.CloseHandle(h_proc)
+    return (
+        f"hwnd={hwnd:#x} root={hwnd_root:#x} pid={wpid.value} exe='{exe_name}' "
+        f"title='{get_text(hwnd_root)}' class='{get_class(hwnd_root)}' "
+        f"child_title='{get_text(hwnd)}' child_class='{get_class(hwnd)}'"
+    )
+
+
 def get_rect(hwnd):
     rc = wintypes.RECT()
     user32.GetWindowRect(hwnd, ctypes.byref(rc))
@@ -413,7 +437,8 @@ def run_t5_suite(exe_path, build_label):
             cx_dlg, cy_dlg = (chk_rc[0] + chk_rc[2]) // 2, (chk_rc[1] + chk_rc[3]) // 2
             top_at_center = user32.WindowFromPoint(wintypes.POINT(cx_dlg, cy_dlg))
             assert top_at_center == hwnd_chk or user32.IsChild(hwnd_chk, top_at_center), (
-                f"Diálogo Cobro no está encima en ({cx_dlg},{cy_dlg}): {top_at_center:#x} vs {hwnd_chk:#x}"
+                f"Diálogo Cobro no está encima en ({cx_dlg},{cy_dlg}): {top_at_center:#x} vs {hwnd_chk:#x}; "
+                f"ventana encima: {describe_window_owner(top_at_center)}"
             )
 
             send_vk(hwnd_chk, VK_F11)
