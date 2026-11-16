@@ -18,4 +18,5 @@ Ronda 9 — T6d (AntiGravity, Gemini) — auditado el 2026-11-15
   - `test_t6_backups` pasa **dos veces seguidas** (Release y Debug cada vez).
   - Batería GUI: 11 de 11 pasan. `test_t5_fullscreen` falló a la primera porque la ventana de `claude.exe` quedó encima (el mensaje lo identifica) y pasó al repetirla.
 - **Menor:** la captura 23 corta la lista de respaldos (solo se ven los encabezados y el inicio de la primera fila); conviene desplazarla cuando se regenere.
-- **Pendiente:** batería al 100 % (el usuario cambia el escalado). La entrega escrita de T6c y T6d no llegó al orquestador; lo revisado aquí sale del código y de las pruebas.
+- **Verificación al 100 % (96 DPI), el mismo día:** compilación correcta; CTest 16/16 en Release y Debug. `test_t6_backups` pasa dos veces seguidas. Batería GUI: 11 de 11 pasan; `test_t5_fullscreen` otra vez falló a la primera por la ventana de `claude.exe` encima y pasó al repetirla. **T6c y T6d quedan aceptados en los dos escalados.**
+- **Nota:** la entrega escrita de T6c y T6d no llegó al orquestador; lo revisado aquí sale del código y de las pruebas.
