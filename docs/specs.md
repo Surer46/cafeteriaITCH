@@ -217,6 +217,13 @@ La división detallada y ejecutable del trabajo está en [`frontend/plan.md`](..
 3. ¿Qué métodos de pago se deben poder registrar? ¿Se permiten pagos mixtos, impuestos, descuentos manuales y devoluciones? ¿Cómo se redondea? Ninguno de estos métodos implica procesamiento electrónico en esta etapa.
 4. ¿Se permite vender sin existencia o autorizar sobreventa? ¿Cómo se calculan mermas, recetas, combos y productos por peso?
    - **Decidido 2026-11-13:** no se permite sobreventa: sin existencias suficientes la venta se bloquea, como ya hace el servicio de ventas. Siguen abiertas las reglas de mermas, combos y productos por peso.
+   - **Decidido 2026-11-16 (I3):**
+     - **Combos:** un combo es un producto con precio fijo propio; al venderlo descuenta del inventario los ingredientes de cada parte. Sin opciones elegibles por parte.
+     - **Promociones:** descuento en porcentaje, descuento de monto fijo y N×M (por ejemplo 2×1), cada una con vigencia opcional por días y horario. Si a una línea le aplican varias, se aplica solo la de mayor prioridad (la fija quien la crea); nunca se suman y el precio nunca baja de cero.
+     - **Productos por peso:** no se venden; todo producto se vende por pieza. El peso solo existe en los ingredientes.
+     - **Permisos:** crear y cambiar promociones y combos, y registrar mermas, son permisos nuevos solo del Dueño por omisión; el Dueño crea un rol propio (por ejemplo «Encargado») y se los asigna. No se crea un rol de sistema nuevo. El Cajero no registra mermas.
+     - **Mermas:** motivo obligatorio y registro en la bitácora.
+     - **Pestaña Barra:** vista rápida para el personal de barra con las existencias de ingredientes y preparados y el registro de mermas y ajustes con motivo; sin traslados, porque el inventario es uno solo para toda la cafetería (decisión del 2026-11-13).
 5. ¿Qué permisos iniciales y roles adicionales al Dueño se necesitan para empezar? El Dueño podrá configurarlos después. ¿Quién puede cambiar precios, anular ventas, ajustar inventario y cerrar caja?
    - **Decidido 2026-11-08:** el Dueño puede editar los permisos del rol de sistema Cajero (`role-cashier`), pero no renombrarlo ni eliminarlo. El rol Dueño queda en solo lectura y el rol Desarrollador nunca se muestra. Siguen abiertas las preguntas de quién cambia precios, anula ventas, ajusta inventario y cierra caja.
 6. ¿Hay datos existentes para importar y formatos obligatorios de ticket, reportes y corte?
