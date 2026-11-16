@@ -87,6 +87,7 @@ private:
     bool loading_policy_{false};
     bool syncing_toggle_{false};
     bool preview_ready_{false};
+    bool destroying_{false};
     bool auto_was_active_{false};
     bool has_more_backups_{false};
     std::size_t preview_delete_count_{0};

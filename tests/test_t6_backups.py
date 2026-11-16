@@ -34,6 +34,7 @@ REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 RELEASE_EXE = os.path.join(REPO_ROOT, "build_release", "app_desktop.exe")
 DEBUG_EXE = os.path.join(REPO_ROOT, "build_debug", "app_desktop.exe")
 
+WM_NULL = 0x0000
 WM_GETTEXT = 0x000D
 WM_GETTEXTLENGTH = 0x000E
 WM_SETTEXT = 0x000C
@@ -152,6 +153,32 @@ def find_windows_by_pid(pid, title_contains=None, exclude=()):
     return result
 
 
+def _read_uia_texts(hwnd, timeout=6):
+    try:
+        ps_cmd = (
+            "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+            "Add-Type -AssemblyName UIAutomationClient; "
+            f"$el=[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]{int(hwnd)}); "
+            "$el.FindAll([System.Windows.Automation.TreeScope]::Descendants,"
+            "[System.Windows.Automation.Condition]::TrueCondition)"
+            "|ForEach-Object{$_.Current.Name}|Where-Object{$_}"
+        )
+        out = subprocess.check_output(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            text=True,
+            encoding="utf-8",
+            timeout=timeout,
+        )
+        return [ln.strip() for ln in out.splitlines() if ln.strip()]
+    except Exception:
+        return []
+
+
+def sync_ui(hwnd):
+    if hwnd and user32.IsWindow(hwnd):
+        user32.SendMessageW(hwnd, WM_NULL, 0, 0)
+
+
 def wait_for_window(pid, title_contains, exclude=(), timeout=12.0):
     deadline = time.time() + timeout
     while time.time() < deadline:
@@ -163,18 +190,7 @@ def wait_for_window(pid, title_contains, exclude=(), timeout=12.0):
     extra = []
     for wh, wt in all_wins:
         if "Debug Alert" in wt:
-            try:
-                ps_cmd = (
-                    "Add-Type -AssemblyName UIAutomationClient; "
-                    f"$el=[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]{wh}); "
-                    "$el.FindAll([System.Windows.Automation.TreeScope]::Descendants,"
-                    "[System.Windows.Automation.Condition]::TrueCondition)"
-                    "|ForEach-Object{$_.Current.Name}|Where-Object{$_}"
-                )
-                uia = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps_cmd], text=True, timeout=5)
-                extra.append((wt, uia.splitlines()))
-            except Exception as exc:
-                extra.append((wt, repr(exc)))
+            extra.append((wt, _read_uia_texts(wh, timeout=5)))
     raise AssertionError(
         f"Timeout ({timeout}s) esperando ventana '{title_contains}'. Visibles: {[(h, t) for h, t in all_wins]} DebugAlerts={extra}"
     )
@@ -191,7 +207,9 @@ def enum_children(hwnd_parent):
     return items
 
 
-def visible_texts(hwnd):
+def visible_texts(hwnd, sync=True):
+    if sync:
+        sync_ui(hwnd)
     out = []
     for h, _c, t in enum_children(hwnd):
         if user32.IsWindowVisible(h) and t:
@@ -375,11 +393,43 @@ def create_owner_and_login(exe_path, env, procs, db_user="dueno_t6", db_pwd="Caf
     return p1, hwnd_main
 
 
+def _window_diag(hwnd_main):
+    wpid = wintypes.DWORD()
+    user32.GetWindowThreadProcessId(hwnd_main, ctypes.byref(wpid))
+    return (
+        f"IsWindow={user32.IsWindow(hwnd_main)}, "
+        f"Visible={user32.IsWindowVisible(hwnd_main)}, "
+        f"Enabled={user32.IsWindowEnabled(hwnd_main)}, "
+        f"Pid={wpid.value}, "
+        f"Wins={find_windows_by_pid(wpid.value) if wpid.value else []}, "
+        f"Btns={visible_buttons(hwnd_main)}"
+    )
+
+
 def open_section_and_subnav(hwnd_main, section_label, subnav_label):
-    btn_sec = wait_until(lambda: find_button(hwnd_main, text_contains=section_label), desc=f"Sidebar {section_label}")
+    try:
+        btn_sec = wait_until(
+            lambda: (
+                user32.IsWindowEnabled(hwnd_main)
+                and (h := find_button(hwnd_main, text_contains=section_label))
+                and user32.IsWindowEnabled(h)
+                and h
+            ),
+            desc=f"Sidebar {section_label}",
+        )
+    except AssertionError as exc:
+        raise AssertionError(f"{exc} [{_window_diag(hwnd_main)}]") from exc
     click_hwnd(btn_sec, settle=0.3)
-    btn_sub = wait_until(lambda: find_button(hwnd_main, exact=subnav_label), desc=f"Subnav {subnav_label}")
+    sync_ui(hwnd_main)
+    try:
+        btn_sub = wait_until(
+            lambda: (h := find_button(hwnd_main, exact=subnav_label)) and user32.IsWindowEnabled(h) and h,
+            desc=f"Subnav {subnav_label}",
+        )
+    except AssertionError as exc:
+        raise AssertionError(f"{exc} [{_window_diag(hwnd_main)}]") from exc
     click_hwnd(btn_sub, settle=0.35)
+    sync_ui(hwnd_main)
 
 
 def get_edit_text_msg(hwnd):
@@ -481,15 +531,19 @@ def close_shift_ui(pid, hwnd_main, final_cash="500.00"):
 def make_sale_ui(pid, hwnd_main, search_text="Cafe T6", pay_amount="100.00"):
     btn_pos = wait_until(lambda: find_button(hwnd_main, text_contains="Punto de Venta"), desc="Sidebar Punto de Venta")
     click_hwnd(btn_pos, settle=0.35)
-    edits = sorted(
-        [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
-        key=lambda h: get_rect(h)[1],
+    sync_ui(hwnd_main)
+    edits = wait_until(
+        lambda: sorted(
+            [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda h: get_rect(h)[1],
+        ),
+        desc="Campos de búsqueda POS",
     )
-    assert edits, "Campos de búsqueda no encontrados en POS"
     set_edit_text(edits[0], search_text)
     btn_find = find_button(hwnd_main, exact="Buscar")
     if btn_find:
         click_hwnd(btn_find, settle=0.2)
+        sync_ui(hwnd_main)
     btn_add = wait_until(lambda: find_button(hwnd_main, text_contains="Agregar al Carrito"), desc="Agregar al Carrito")
     click_hwnd(btn_add, settle=0.3)
     btn_chk = wait_until(lambda: find_button(hwnd_main, exact="Cobrar"), desc="Botón Cobrar")
@@ -519,21 +573,6 @@ def make_sale_ui(pid, hwnd_main, search_text="Cafe T6", pay_amount="100.00"):
         lambda: not find_windows_by_pid(pid, "Venta Registrada") and not find_windows_by_pid(pid, "Ticket"),
         desc="Cerrar diálogo Venta Registrada",
     )
-
-
-def _read_uia_texts(hwnd):
-    try:
-        ps_cmd = (
-            "Add-Type -AssemblyName UIAutomationClient; "
-            f"$el=[System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]{int(hwnd)}); "
-            "$el.FindAll([System.Windows.Automation.TreeScope]::Descendants,"
-            "[System.Windows.Automation.Condition]::TrueCondition)"
-            "|ForEach-Object{$_.Current.Name}|Where-Object{$_}"
-        )
-        out = subprocess.check_output(["powershell", "-NoProfile", "-Command", ps_cmd], text=True, timeout=6)
-        return [ln.strip() for ln in out.splitlines() if ln.strip()]
-    except Exception:
-        return []
 
 
 def dismiss_messagebox(pid, title_sub):
@@ -581,14 +620,20 @@ def run_suite(build_label, exe_path, sys_scale):
 
         # 1. Estado inicial (desde migracion 016 el respaldo automatico inicia ACTIVADO)
         db_path = os.path.join(temp_dir, "cafeteria.db")
+        toggle_hwnd = wait_until(
+            lambda: next(
+                (h for (h, _c, t) in enum_children(hwnd_main)
+                 if user32.IsWindowVisible(h) and "Respaldo automático al cerrar turno" in t and _c.lower() != "static"),
+                None,
+            ),
+            desc="Interruptor ToggleSwitch en Respaldos",
+        )
+        wait_until(
+            lambda: find_button(hwnd_main, text_contains="Borrar respaldos antiguos") is not None,
+            desc="Construcción completa de Respaldos",
+        )
         texts_init = visible_texts(hwnd_main)
         texts_init_norm = [" ".join(t.split()) for t in texts_init]
-        toggle_hwnd = next(
-            (h for (h, _c, t) in enum_children(hwnd_main)
-             if user32.IsWindowVisible(h) and "Respaldo automático al cerrar turno" in t and _c.lower() != "static"),
-            None,
-        )
-        assert toggle_hwnd is not None, "Interruptor ToggleSwitch no encontrado"
 
         def _dump_initial_db_and_fail(msg):
             nonlocal keep_temp_on_fail
@@ -1092,7 +1137,12 @@ def run_suite(build_label, exe_path, sys_scale):
         click_hwnd(btn_rest_sel_p, settle=0.25)
         hwnd_sel_w1, _ = wait_for_window(p_perm.pid, "Revisar respaldo antes de restaurar", timeout=8.0)
         click_hwnd(find_button(hwnd_sel_w1, exact="Cancelar"), settle=0.25)
-        wait_until(lambda: not find_windows_by_pid(p_perm.pid, "Revisar respaldo antes de restaurar"), desc="Cerrar confirmación al cancelar seleccionado")
+        wait_until(
+            lambda: not find_windows_by_pid(p_perm.pid, "Revisar respaldo antes de restaurar")
+            and user32.IsWindowEnabled(hwnd_m_p) != 0,
+            desc="Cerrar confirmación al cancelar seleccionado",
+        )
+        sync_ui(hwnd_m_p)
 
         # Borrar del disco el archivo local auto_file_3 (más reciente) -> 'Falta el archivo' y botón deshabilitado
         os.remove(os.path.join(auto_dir, auto_file_3))
@@ -1201,8 +1251,12 @@ def run_suite(build_label, exe_path, sys_scale):
         hwnd_mc2r, _ = wait_for_window(p_c2_r.pid, "Cafetería ITCH II", exclude=("Primer Inicio", "Iniciar Sesión"), timeout=15.0)
         open_section_and_subnav(hwnd_mc2r, "BackOffice", "Respaldos")
         assert wait_until(lambda: find_button(hwnd_mc2r, text_contains="Restaurar desde un respaldo") is not None, desc="Restaurar visible con solo backup.restore")
-        assert find_listview_by_header(p_c2_r.pid, hwnd_mc2r, "Tipo") is not None, "Lista de respaldos debe verse con backup.restore"
-        assert find_button(hwnd_mc2r, exact="Restaurar el seleccionado") is not None, "Restaurar el seleccionado debe verse con backup.restore"
+        assert wait_until(lambda: find_listview_by_header(p_c2_r.pid, hwnd_mc2r, "Tipo") is not None, desc="Lista de respaldos visible con backup.restore"), (
+            "Lista de respaldos debe verse con backup.restore"
+        )
+        assert wait_until(lambda: find_button(hwnd_mc2r, exact="Restaurar el seleccionado") is not None, desc="Restaurar el seleccionado visible con backup.restore"), (
+            "Restaurar el seleccionado debe verse con backup.restore"
+        )
         assert find_button(hwnd_mc2r, text_contains="Hacer un respaldo ahora") is None, "Sin backup.manage no debe ver Hacer respaldo"
         assert find_button(hwnd_mc2r, exact="Elegir carpeta") is None, "Sin backup.manage no debe ver Segunda carpeta"
         assert find_button(hwnd_mc2r, exact="Guardar") is None, "Sin backup.manage no debe ver Limpieza"
@@ -1230,17 +1284,22 @@ def run_suite(build_label, exe_path, sys_scale):
         hwnd_mc2, _ = wait_for_window(p_c2.pid, "Cafetería ITCH II", exclude=("Primer Inicio", "Iniciar Sesión"), timeout=15.0)
         open_section_and_subnav(hwnd_mc2, "BackOffice", "Respaldos")
         assert wait_until(lambda: find_button(hwnd_mc2, text_contains="Hacer un respaldo ahora") is not None, desc="Hacer respaldo visible con backup.manage")
-        assert find_button(hwnd_mc2, exact="Elegir carpeta") is not None, "Segunda carpeta visible con backup.manage"
-        assert find_listview_by_header(p_c2.pid, hwnd_mc2, "Tipo") is not None, "Lista visible con backup.manage"
+        assert wait_until(lambda: find_button(hwnd_mc2, exact="Elegir carpeta") is not None, desc="Segunda carpeta visible con backup.manage"), (
+            "Segunda carpeta visible con backup.manage"
+        )
+        assert wait_until(lambda: find_listview_by_header(p_c2.pid, hwnd_mc2, "Tipo") is not None, desc="Lista visible con backup.manage"), (
+            "Lista visible con backup.manage"
+        )
         assert find_button(hwnd_mc2, text_contains="Restaurar desde un respaldo") is None, (
             "Restaurar debe ocultarse sin permiso backup.restore"
         )
         assert find_button(hwnd_mc2, exact="Restaurar el seleccionado") is None, (
             "Restaurar el seleccionado debe ocultarse sin permiso backup.restore"
         )
-        assert any("Solo el Dueño puede restaurar respaldos" in t for t in visible_texts(hwnd_mc2)), (
-            "Falta explicacion de restauracion solo Dueno"
-        )
+        assert wait_until(
+            lambda: any("Solo el Dueño puede restaurar respaldos" in t for t in visible_texts(hwnd_mc2)),
+            desc="Explicacion de restauracion solo Dueno",
+        ), "Falta explicacion de restauracion solo Dueno"
         user32.PostMessageW(hwnd_mc2, WM_CLOSE, 0, 0)
         p_c2.wait(timeout=8)
 

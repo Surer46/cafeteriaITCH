@@ -316,7 +316,15 @@ BackofficeBackupsPanel::BackofficeBackupsPanel(wxWindow* parent, services::Servi
 }
 
 BackofficeBackupsPanel::~BackofficeBackupsPanel() {
+    destroying_ = true;
     auto_poll_timer_.Stop();
+    if (list_backups_) {
+        list_backups_->Unbind(wxEVT_LIST_ITEM_SELECTED, &BackofficeBackupsPanel::on_backup_list_selected, this);
+        list_backups_->Unbind(wxEVT_LIST_ITEM_DESELECTED, &BackofficeBackupsPanel::on_backup_list_selected, this);
+    }
+    // Destruir hijos antes de liberar los vectores y cadenas de miembro
+    // usados por callbacks de lista o tamaño durante el cierre en wxMSW.
+    DestroyChildren();
 }
 
 void BackofficeBackupsPanel::setup_access_denied_ui() {
@@ -891,7 +899,7 @@ void BackofficeBackupsPanel::setup_ui() {
 }
 
 void BackofficeBackupsPanel::update_scroll_layout() {
-    if (!scroll_ || !scroll_sizer_) {
+    if (destroying_ || IsBeingDeleted() || !scroll_ || !scroll_sizer_) {
         return;
     }
     const wxSize client = scroll_->GetClientSize();
@@ -1187,7 +1195,7 @@ void BackofficeBackupsPanel::update_auto_backup_ui(const contracts::AutoBackupSt
 }
 
 void BackofficeBackupsPanel::on_auto_poll_timer(wxTimerEvent&) {
-    if (op_busy_) {
+    if (destroying_ || IsBeingDeleted() || op_busy_) {
         return;
     }
     refresh_auto_status(true);
@@ -1266,7 +1274,7 @@ void BackofficeBackupsPanel::load_backup_list(bool append) {
 }
 
 void BackofficeBackupsPanel::auto_size_backup_list_columns() {
-    if (!list_backups_ || list_backups_->GetColumnCount() < 5) {
+    if (destroying_ || IsBeingDeleted() || !list_backups_ || list_backups_->GetColumnCount() < 5) {
         return;
     }
     int w_kind = list_backups_->GetTextExtent(wxT("Antes de actualizar")).GetWidth();
@@ -1332,7 +1340,7 @@ void BackofficeBackupsPanel::reset_cleanup_preview() {
 }
 
 void BackofficeBackupsPanel::auto_size_cleanup_columns() {
-    if (!list_cleanup_ || list_cleanup_->GetColumnCount() < 4) {
+    if (destroying_ || IsBeingDeleted() || !list_cleanup_ || list_cleanup_->GetColumnCount() < 4) {
         return;
     }
     int w_file = list_cleanup_->GetTextExtent(wxT("cafeteria-respaldo-2026-11-14-2359.db")).GetWidth();
@@ -1362,6 +1370,9 @@ void BackofficeBackupsPanel::auto_size_cleanup_columns() {
 }
 
 void BackofficeBackupsPanel::sync_action_states() {
+    if (destroying_ || IsBeingDeleted()) {
+        return;
+    }
     const bool enable_manage = can_manage_ && !op_busy_;
     if (txt_keep_last_) txt_keep_last_->Enable(enable_manage);
     if (txt_keep_days_) txt_keep_days_->Enable(enable_manage);
@@ -1731,6 +1742,9 @@ void BackofficeBackupsPanel::on_load_more_backups(wxCommandEvent&) {
 }
 
 void BackofficeBackupsPanel::on_backup_list_selected(wxListEvent&) {
+    if (destroying_ || IsBeingDeleted()) {
+        return;
+    }
     sync_action_states();
 }
 
