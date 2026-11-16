@@ -130,6 +130,7 @@ En paralelo con F7 (2026-11-13): **B6** para Claude (rama backend/b6, con plan p
 
 ## Reanudar agentes
 
+- **Pausa del 2026-11-16:** T8 redactado y sin pegar (sección 1 de `prompts-para-pegar.md`); B11 y T7 integrados (`108bcbb`, `9b17b60`), sin subir a GitHub desde `d3c1d12`. Reanudar con las mismas conversaciones: `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend). Al volver: pegar T8 y auditarlo en los dos escalados. Pendiente del usuario: crear las claves de firma y la prueba manual con UAC.
 - **Pausa del 2026-11-15:** T6b (AntiGravity) y B12 (Claude Terminal, plan aprobado con ajustes) quedaron pegados o por pegar; reanudar con `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend). Al volver: auditar T6b (más la batería al 125 %) y B12.
 - AntiGravity (actual): `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c`. Ronda 3: `5cb24680-56c1-4cd1-9621-72c8ef342fbd`. Anteriores: `36c58871-cb3f-45c6-88ad-07be0a8992e5`, `c94b5e25-55b3-490a-b547-abad9fb453b1`, `4c6c3e44-1c0a-40a4-8124-59943158b872`.
 - Claude Code Terminal (actual): `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f`; antes `claude --resume CafeCH`. Se abre en el worktree del backend con el modelo `opusplan`. Estas conversaciones solo existen en la PC original; en otra PC se abre una sesión nueva.
