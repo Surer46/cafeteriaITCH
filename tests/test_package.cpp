@@ -336,6 +336,17 @@ int main() {
     const fs::path exe = portable / "CafeteriaITCH.exe";
     const fs::path report = scratch / "informe autocomprobación.txt";
 
+    // B11: el ejecutable del paquete NO lleva los ganchos de prueba de actualizaciones ni la clave pública de prueba
+    // (el paquete se compila sin CAFETERIA_TEST_HOOKS; el instalador de pruebas nunca confiaría en una clave de prueba).
+    {
+        const std::string exe_bytes = read_text(exe);
+        TEST_CHECK(!exe_bytes.empty(), "Se pudo leer el ejecutable del paquete");
+        TEST_CHECK(exe_bytes.find("CAFETERIA_UPDATE_TEST_") == std::string::npos, "El ejecutable del paquete no contiene CAFETERIA_UPDATE_TEST_*");
+        TEST_CHECK(exe_bytes.find("a6660f9e6acff5026f620d6d83244fe3eb7eb19ed4c1e6a9061371d697d736b6") == std::string::npos,
+                   "El ejecutable del paquete no contiene la clave pública de prueba");
+        TEST_CHECK(exe_bytes.find("CAFETERIA_UPDATE_CHECK") != std::string::npos, "Sí conserva CAFETERIA_UPDATE_CHECK (apagado de la búsqueda automática)");
+    }
+
     rc = run_process(quote(exe.wstring()) + L" --self-check \"--self-check-report=" + report.wstring() + L"\"",
                      reduced_env, {}, 60000);
     TEST_CHECK(rc == 0, "La autocomprobación del paquete debe terminar con 0 (código real: " + std::to_string(rc) +

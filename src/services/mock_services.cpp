@@ -8,6 +8,8 @@
 #include "app/services/sqlite_cart_service.hpp"
 #include "app/services/sqlite_sale_service.hpp"
 #include "app/services/sqlite_print_config_service.hpp"
+#include "app/services/sqlite_update_service.hpp"
+#include "app/services/update_public_keys.hpp"
 #include "app/domain/unit_converter.hpp"
 #include <algorithm>
 #include <limits>
@@ -346,6 +348,7 @@ contracts::Result<std::vector<contracts::PermissionDto>> MockAccountService::lis
         {"config.manage", "Ajustar opciones del negocio, como la impresora y el tamaño del ticket.", "config", "Cambiar la configuración", "BackOffice", 330},
         {"backup.manage", "Activar y ejecutar copias de seguridad de la información.", "backup", "Hacer respaldos", "BackOffice", 340},
         {"backup.restore", "Recuperar la información desde una copia. Reemplaza los datos actuales.", "backup", "Restaurar un respaldo", "BackOffice", 350},
+        {"updates.manage", "Buscar, descargar y aceptar actualizaciones del programa.", "updates", "Actualizar el programa", "BackOffice", 360},
         {"backup.dev_config", "Configuración técnica del servidor remoto (exclusivo Desarrollador).", "backup", "Configurar el servidor de respaldos", "BackOffice", 990}
     };
     return contracts::Result<std::vector<contracts::PermissionDto>>::ok(list);
@@ -1095,12 +1098,36 @@ ServiceRegistry ServiceRegistry::create_mock_registry() {
     reg.report_service = std::make_shared<MockReportService>();
     reg.backup_service = std::make_shared<MockBackupService>();
     reg.print_config_service = std::make_shared<MockPrintConfigService>();
+    reg.update_service = std::make_shared<MockUpdateService>();
     return reg;
 }
 
+contracts::Result<contracts::UpdateStatusDto> MockUpdateService::get_update_status() {
+    contracts::UpdateStatusDto dto;
+    dto.state = "UP_TO_DATE";
+    dto.installed_version = "0.0.0";
+    return contracts::Result<contracts::UpdateStatusDto>::ok(dto);
+}
+contracts::OperationResult MockUpdateService::check_for_updates() { return contracts::OperationResult::ok(); }
+contracts::OperationResult MockUpdateService::accept_update() {
+    return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState, "No hay ninguna actualización disponible para aceptar.");
+}
+contracts::OperationResult MockUpdateService::decline_update() { return contracts::OperationResult::ok(); }
+contracts::OperationResult MockUpdateService::cancel_download() { return contracts::OperationResult::ok(); }
+contracts::OperationResult MockUpdateService::use_update_from_files(const std::string&, const std::string&, const std::string&) {
+    return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState, "Servicio simulado: no hay actualizaciones.");
+}
+contracts::OperationResult MockUpdateService::postpone_install_this_session() { return contracts::OperationResult::ok(); }
+contracts::Result<contracts::UpdateInstallResultDto> MockUpdateService::get_last_install_result() {
+    return contracts::Result<contracts::UpdateInstallResultDto>::ok(contracts::UpdateInstallResultDto{});
+}
+contracts::OperationResult MockUpdateService::acknowledge_install_result() { return contracts::OperationResult::ok(); }
+
 ServiceRegistry ServiceRegistry::create_sqlite_registry(storage::SqliteDatabase& db,
                                                           const std::string& config_dir,
-                                                          const std::string& migrations_dir) {
+                                                          const std::string& migrations_dir,
+                                                          const std::string& app_version,
+                                                          bool is_portable) {
     ServiceRegistry reg;
     auto account_svc = std::make_shared<SqliteAccountService>(db);
     reg.account_service = account_svc;
@@ -1127,6 +1154,14 @@ ServiceRegistry ServiceRegistry::create_sqlite_registry(storage::SqliteDatabase&
     });
     reg.report_service = std::make_shared<SqliteReportService>(db, account_svc);
     reg.print_config_service = std::make_shared<SqlitePrintConfigService>(db, account_svc, config_dir);
+    {
+        UpdateServiceOptions update_options;
+        update_options.data_dir = config_dir;
+        update_options.installed_version = app_version;
+        update_options.is_portable = is_portable;
+        update_options.keys = configured_update_keys();  // vacío hasta que el usuario pegue su clave pública
+        reg.update_service = std::make_shared<SqliteUpdateService>(db, account_svc, std::move(update_options));
+    }
     return reg;
 }
 
