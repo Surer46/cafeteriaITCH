@@ -151,6 +151,18 @@ otas-pc.md`. `ctest` vuelve a estar disponible, pero **no correr `UpdateTest` ha
 
 ## Reanudar agentes
 
+- **Pausa del 2026-11-17 (retomar aquí):**
+  - **`main` en `5731ec1`** (más este registro), con T8 a T11, B13 y B13b integrados. Sin subir a GitHub desde `27e890e`.
+  - **Sin integrar ni auditar, en el worktree del backend:**
+    - B14 (`2204496`, rama `backend/b14`).
+    - B13c (`d9c9126`, rama `backend/b13c`, encima de B14). Según su entrega: 0 detecciones de Defender en tres corridas directas y tres de `ctest` (18/18).
+  - **Al volver:** auditar B14 y B13c juntos con CTest completo en Release y Debug, consultando `Get-MpThreatDetection` antes y después. Revisar en especial:
+    - las reglas de B14 (sin `double`, venta con promoción idempotente, instantánea, reportes cuadrados, rechazo por promoción cambiada, productos directos con existencia);
+    - por qué varían los conteos de `TEST_CHECK` de `UpdateTest` entre corridas (1609 a 1621).
+    - Después integrar `backend/b13c` (que incluye B14) y correr la batería GUI.
+  - **Siguiente para Gemini:** Existencias, y Promociones y combos con el descuento en Venta y Cobro (tras B14); después I4 (Reportes) e I7 (pantalla completa).
+  - **Pendientes del usuario:** claves de firma y prueba manual con UAC.
+  - **Reanudar:** `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend).
 - **Pausa del 2026-11-16:** T8 redactado y sin pegar (sección 1 de `prompts-para-pegar.md`); B11 y T7 integrados (`108bcbb`, `9b17b60`), sin subir a GitHub desde `d3c1d12`. Reanudar con las mismas conversaciones: `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend). Al volver: pegar T8 y auditarlo en los dos escalados. Pendiente del usuario: crear las claves de firma y la prueba manual con UAC.
 - **Pausa del 2026-11-15:** T6b (AntiGravity) y B12 (Claude Terminal, plan aprobado con ajustes) quedaron pegados o por pegar; reanudar con `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend). Al volver: auditar T6b (más la batería al 125 %) y B12.
 - AntiGravity (actual): `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c`. Ronda 3: `5cb24680-56c1-4cd1-9621-72c8ef342fbd`. Anteriores: `36c58871-cb3f-45c6-88ad-07be0a8992e5`, `c94b5e25-55b3-490a-b547-abad9fb453b1`, `4c6c3e44-1c0a-40a4-8124-59943158b872`.
