@@ -678,6 +678,20 @@ def main():
         # CAPTURA 28: Inventario > Barra con formulario de merma y movimientos
         capture_window(hwnd_main, os.path.join(out_dir, "28_inventory_bar.png"))
 
+        # CAPTURA 29: Inventario > Productos y recetas (producto preparado con receta y costo)
+        btn_prod_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Productos y recetas"), None)
+        assert btn_prod_qa is not None, "Subsección Productos y recetas no encontrada para captura 29"
+        _f7_click_btn(btn_prod_qa)
+        time.sleep(0.5)
+        pr_lists_qa = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)],
+            key=lambda x: x[1][0],
+        )
+        assert pr_lists_qa, "Lista de productos no encontrada para captura 29"
+        select_list_row(pr_lists_qa[0][0], 0)
+        time.sleep(0.4)
+        capture_window(hwnd_main, os.path.join(out_dir, "29_inventory_products_recipes.png"))
+
         # Restaurar perfil Touch antes de BackOffice > Configuracion
         btn_to_touch = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Touch" in t), None)
         if btn_to_touch:

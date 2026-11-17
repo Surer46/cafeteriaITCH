@@ -12,6 +12,7 @@
 #include "src/frontend/inventory_ingredients_panel.hpp"
 #include "src/frontend/inventory_restock_panel.hpp"
 #include "src/frontend/inventory_bar_panel.hpp"
+#include "src/frontend/inventory_products_panel.hpp"
 #include "src/frontend/theme.hpp"
 #include <wx/statline.h>
 
@@ -333,6 +334,9 @@ void MainWindow::update_content_view() {
     } else if (current_section_ == SectionId::Inventory && current_subsection_ == "Barra") {
         current_view_ = new InventoryBarPanel(
             content_container_, services_.inventory_service, services_.account_service);
+    } else if (current_section_ == SectionId::Inventory && current_subsection_ == "Productos y recetas") {
+        current_view_ = new InventoryProductsPanel(
+            content_container_, services_.catalog_service, services_.inventory_service, services_.account_service);
     } else if (current_section_ == SectionId::CashAndReports && current_subsection_ == "Caja y turnos") {
         current_view_ = new CashShiftPanel(content_container_, services_, [this]() {
             update_header_status();

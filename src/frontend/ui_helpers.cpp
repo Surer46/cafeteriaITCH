@@ -1,6 +1,8 @@
 #include "src/frontend/ui_helpers.hpp"
 #include "src/frontend/theme.hpp"
 #include <algorithm>
+#include <cctype>
+#include <limits>
 #include <wx/imaglist.h>
 #include <wx/settings.h>
 
@@ -197,6 +199,76 @@ void TouchComboBox::OnDrawItem(wxDC& dc, const wxRect& rect, int item, int flags
     const int y = rect.y + std::max(0, (rect.height - th) / 2);
     const int x = rect.x + ((flags & wxODCB_PAINTING_CONTROL) ? FromDIP(8) : FromDIP(10));
     dc.DrawText(text, x, y);
+}
+
+bool parse_quantity_to_base_units(
+    const std::string& raw_text,
+    const std::string& unit_code,
+    std::int64_t& out_base,
+    std::string& out_error) {
+    std::size_t start = 0;
+    while (start < raw_text.size() && std::isspace(static_cast<unsigned char>(raw_text[start]))) {
+        ++start;
+    }
+    std::size_t end = raw_text.size();
+    while (end > start && std::isspace(static_cast<unsigned char>(raw_text[end - 1]))) {
+        --end;
+    }
+    const std::string trimmed = raw_text.substr(start, end - start);
+    if (trimmed.empty()) {
+        out_error = "Escribe una cantidad mayor que cero.";
+        return false;
+    }
+    if (trimmed[0] == '-') {
+        out_error = "La cantidad debe ser un número entero mayor que cero.";
+        return false;
+    }
+
+    constexpr std::int64_t kMaxInt64 = std::numeric_limits<std::int64_t>::max();
+    std::int64_t value = 0;
+    for (unsigned char ch : trimmed) {
+        if (ch < '0' || ch > '9') {
+            out_error = "La cantidad debe ser un número entero mayor que cero.";
+            return false;
+        }
+        const int digit = static_cast<int>(ch - '0');
+        if (value > (kMaxInt64 - digit) / 10) {
+            out_error = "La cantidad ingresada es demasiado grande.";
+            return false;
+        }
+        value = value * 10 + digit;
+    }
+    if (value <= 0) {
+        out_error = "La cantidad debe ser mayor que cero.";
+        return false;
+    }
+
+    std::string unit_low;
+    unit_low.reserve(unit_code.size());
+    for (unsigned char ch : unit_code) {
+        unit_low.push_back(static_cast<char>(std::tolower(ch)));
+    }
+
+    std::int64_t factor = 1;
+    if (unit_low == "g" || unit_low == "gr" || unit_low == "l" || unit_low == "lt" ||
+        unit_low == "litro" || unit_low == "litros") {
+        factor = 1000;
+    } else if (unit_low == "kg") {
+        factor = 1000000;
+    } else if (unit_low == "ml" || unit_low == "pz" || unit_low == "pieza" ||
+               unit_low == "piezas" || unit_low == "u" || unit_low == "unidades") {
+        factor = 1;
+    } else {
+        out_error = "Elige una unidad válida.";
+        return false;
+    }
+
+    if (value > kMaxInt64 / factor) {
+        out_error = "La cantidad ingresada es demasiado grande para guardarse.";
+        return false;
+    }
+    out_base = value * factor;
+    return true;
 }
 
 } // namespace app::frontend::ui

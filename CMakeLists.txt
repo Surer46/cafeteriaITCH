@@ -254,6 +254,8 @@ if(wxWidgets_FOUND)
         src/frontend/inventory_restock_panel.hpp
         src/frontend/inventory_bar_panel.cpp
         src/frontend/inventory_bar_panel.hpp
+        src/frontend/inventory_products_panel.cpp
+        src/frontend/inventory_products_panel.hpp
         src/frontend/theme.cpp
         src/frontend/theme.hpp
         src/frontend/app.rc

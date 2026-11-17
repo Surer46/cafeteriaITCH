@@ -751,6 +751,35 @@ def run_suite(label, exe_path, write_audit=False):
         assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Barra"
         record_audit("Barra (teclado)", items, overlaps, lrows)
 
+        # --- 7d. Productos y recetas (seleccionado preparado + teclado) ---
+        click_subnav(hwnd_main, "Productos y recetas")
+        time.sleep(0.45)
+        pr_lists = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)],
+            key=lambda x: x[1][0],
+        )
+        if pr_lists and send_msg(pr_lists[0][0], LVM_GETITEMCOUNT, 0, 0) >= 1:
+            select_list_row(pr_lists[0][0], 0)
+            time.sleep(0.35)
+        btn_prep_pr = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Preparado"), None)
+        if btn_prep_pr:
+            click_button(btn_prep_pr)
+            time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Productos y recetas", scale)
+        record_audit("Productos y recetas", items, overlaps, lrows)
+
+        pr_panel = user32.GetParent(user32.GetParent(btn_prep_pr)) if btn_prep_pr else hwnd_main
+        pr_edits = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(pr_panel) if c.lower() == "edit" and user32.IsWindowVisible(h) and get_rect(h)[0] > get_rect(pr_lists[0][0])[2]],
+            key=lambda x: (x[1][1], x[1][0]),
+        )
+        assert len(pr_edits) >= 2, "Campo Precio en Productos y recetas no encontrado"
+        click_control_at(pr_edits[1][0])
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Productos y recetas (teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Productos y recetas"
+        record_audit("Productos y recetas (teclado)", items, overlaps, lrows)
+
         # --- 8. Dialogos de Venta: Cobro, Ticket e Historial de tickets ---
         click_sidebar_section(hwnd_main, "Punto de Venta")
         time.sleep(0.45)

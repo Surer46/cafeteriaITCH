@@ -535,6 +535,92 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Barra (teclado) | button | Registrar ajuste | 268.8x48.0 | OK
   Barra (teclado) | list_row | SysListView32#0 (2 filas) | 620.8x43.2 | OK
 
+=== Productos y recetas (total=33, marcados=0) ===
+  Productos y recetas | button | Estándar | 137.6x48.0 | OK
+  Productos y recetas | button | Punto de Venta | 220.0x56.0 | OK
+  Productos y recetas | button | Inventario | 220.0x56.0 | OK
+  Productos y recetas | button | Caja y Reportes | 220.0x56.0 | OK
+  Productos y recetas | button | BackOffice | 220.0x56.0 | OK
+  Productos y recetas | button | Existencias | 95.2x48.0 | OK
+  Productos y recetas | button | Reabastecimiento | 144.0x48.0 | OK
+  Productos y recetas | button | Productos y recetas | 156.8x48.0 | OK
+  Productos y recetas | button | Ingredientes | 104.0x48.0 | OK
+  Productos y recetas | button | Promociones y combos | 180.0x48.0 | OK
+  Productos y recetas | button | Barra | 64.0x48.0 | OK
+  Productos y recetas | button | Nuevo producto | 139.2x48.0 | OK
+  Productos y recetas | button | Actualizar | 98.4x48.0 | OK
+  Productos y recetas | edit | <edit> | 420.0x48.0 | OK
+  Productos y recetas | switch/combo | comboBox | 262.4x48.0 | OK
+  Productos y recetas | button | Ver dados de baja | 154.4x48.0 | OK
+  Productos y recetas | edit | <edit> | 264.8x48.0 | OK
+  Productos y recetas | edit | <edit> | 182.4x48.0 | OK
+  Productos y recetas | edit | <edit> | 220.0x48.0 | OK
+  Productos y recetas | edit | <edit> | 227.2x48.0 | OK
+  Productos y recetas | switch/combo | comboBox | 221.6x48.0 | OK
+  Productos y recetas | edit | <edit> | 227.2x48.0 | OK
+  Productos y recetas | button | Directo | 217.6x48.0 | OK
+  Productos y recetas | button | Preparado | 223.2x48.0 | OK
+  Productos y recetas | button | Elegir imagen | 123.2x48.0 | OK
+  Productos y recetas | button | Guardar | 221.6x48.0 | OK
+  Productos y recetas | button | Dar de baja | 227.2x48.0 | OK
+  Productos y recetas | switch/combo | comboBox | 235.2x48.0 | OK
+  Productos y recetas | edit | <edit> | 116.0x48.0 | OK
+  Productos y recetas | switch/combo | comboBox | 96.0x48.0 | OK
+  Productos y recetas | button | Añadir o cambiar | 184.0x48.0 | OK
+  Productos y recetas | button | Quitar | 76.0x48.0 | OK
+  Productos y recetas | button | Guardar receta | 187.2x48.0 | OK
+  Productos y recetas | list_row | SysListView32#0 (1 filas) | 417.6x43.2 | OK
+
+=== Productos y recetas (teclado) (total=47, marcados=0) ===
+  Productos y recetas (teclado) | button | Estándar | 137.6x48.0 | OK
+  Productos y recetas (teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Productos y recetas (teclado) | button | Inventario | 220.0x56.0 | OK
+  Productos y recetas (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Productos y recetas (teclado) | button | BackOffice | 220.0x56.0 | OK
+  Productos y recetas (teclado) | button | Existencias | 95.2x48.0 | OK
+  Productos y recetas (teclado) | button | Reabastecimiento | 144.0x48.0 | OK
+  Productos y recetas (teclado) | button | Productos y recetas | 156.8x48.0 | OK
+  Productos y recetas (teclado) | button | Ingredientes | 104.0x48.0 | OK
+  Productos y recetas (teclado) | button | Promociones y combos | 180.0x48.0 | OK
+  Productos y recetas (teclado) | button | Barra | 64.0x48.0 | OK
+  Productos y recetas (teclado) | button | 0 | 136.0x64.0 | OK
+  Productos y recetas (teclado) | button | 1 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | 2 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | 3 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | 4 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | 5 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | 6 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | 7 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | 8 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | 9 | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | . | 64.0x64.0 | OK
+  Productos y recetas (teclado) | button | Borrar | 88.0x64.0 | OK
+  Productos y recetas (teclado) | button | Limpiar | 88.0x64.0 | OK
+  Productos y recetas (teclado) | button | Listo | 88.0x136.0 | OK
+  Productos y recetas (teclado) | button | Nuevo producto | 139.2x48.0 | OK
+  Productos y recetas (teclado) | button | Actualizar | 98.4x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 420.0x48.0 | OK
+  Productos y recetas (teclado) | switch/combo | comboBox | 262.4x48.0 | OK
+  Productos y recetas (teclado) | button | Ver dados de baja | 154.4x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 264.8x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 182.4x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 220.0x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 227.2x48.0 | OK
+  Productos y recetas (teclado) | switch/combo | comboBox | 221.6x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 227.2x48.0 | OK
+  Productos y recetas (teclado) | button | Directo | 217.6x48.0 | OK
+  Productos y recetas (teclado) | button | Preparado | 223.2x48.0 | OK
+  Productos y recetas (teclado) | button | Elegir imagen | 123.2x48.0 | OK
+  Productos y recetas (teclado) | button | Guardar | 221.6x48.0 | OK
+  Productos y recetas (teclado) | button | Dar de baja | 227.2x48.0 | OK
+  Productos y recetas (teclado) | switch/combo | comboBox | 235.2x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 116.0x48.0 | OK
+  Productos y recetas (teclado) | switch/combo | comboBox | 96.0x48.0 | OK
+  Productos y recetas (teclado) | button | Añadir o cambiar | 184.0x48.0 | OK
+  Productos y recetas (teclado) | button | Quitar | 76.0x48.0 | OK
+  Productos y recetas (teclado) | button | Guardar receta | 187.2x48.0 | OK
+  Productos y recetas (teclado) | list_row | SysListView32#0 (1 filas) | 417.6x43.2 | OK
+
 === Dialogo Cobro (total=18, marcados=0) ===
   Dialogo Cobro | switch/combo | comboBox | 380.0x48.0 | OK
   Dialogo Cobro | edit | <edit> | 383.2x48.0 | OK

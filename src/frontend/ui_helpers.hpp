@@ -2,6 +2,8 @@
 #define APP_FRONTEND_UI_HELPERS_HPP
 
 #include <cstddef>
+#include <cstdint>
+#include <string>
 #include <vector>
 #include <wx/wx.h>
 #include <wx/listctrl.h>
@@ -66,6 +68,15 @@ protected:
     wxCoord OnMeasureItem(size_t item) const override;
     void OnDrawItem(wxDC& dc, const wxRect& rect, int item, int flags) const override;
 };
+
+// Convierte una cantidad positiva entera en unidad de pantalla ("g", "kg", "ml", "l", "piezas")
+// a la unidad base entera del contrato (mg, ml o pz). Valida desbordamiento.
+bool parse_quantity_to_base_units(
+    const std::string& raw_text,
+    const std::string& unit_code,
+    std::int64_t& out_base,
+    std::string& out_error
+);
 
 } // namespace app::frontend::ui
 
