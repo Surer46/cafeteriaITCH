@@ -327,10 +327,9 @@ void UpdateNotesDialog::apply_status(const contracts::UpdateStatusDto& st) {
         const bool has_dl_error = !st.error_message.empty() &&
                                   (st.error_kind == "DOWNLOAD" || st.error_kind == "INVALID");
         if (has_dl_error) {
-            wxString err_msg = wxString::FromUTF8(st.error_message.c_str());
-            if (is_verification_rejection(st)) {
-                err_msg = wxT("La descarga no es válida y se descartó. No se instaló nada.\n") + err_msg;
-            }
+            const wxString err_msg = is_verification_rejection(st)
+                ? wxT("La descarga no es válida y se descartó. No se instaló nada.")
+                : wxString::FromUTF8(st.error_message.c_str());
             set_wrapped_static_text(lbl_error_, err_msg, wrap_w - FromDIP(24));
             pnl_error_->Show();
 

@@ -34,10 +34,18 @@ from gui_dpi import (
     WM_SETTEXT,
     WM_CLOSE,
     BM_CLICK,
+    GWL_STYLE,
+    SWP_NOMOVE,
+    SWP_NOZORDER,
     enable_per_monitor_dpi,
     ensure_supported_system_dpi,
     get_window_scale,
+    get_rect,
+    get_client_size,
+    measure_text_extent,
     to_px,
+    min_px,
+    max_px,
     format_dpi_info,
 )
 
@@ -337,7 +345,12 @@ def run_f2b_test_for_binary(exe_path, repo_root, config_name):
             print(f"    [OK Píxel] '{active_sub_name}' activo RGB={detected_rgb}; {len(inactive_found)} botones inactivos correctamente.")
 
         # Recorrer en perfiles Estándar y Touch
+        orig_wr = get_rect(hwnd_main)
+        orig_w, orig_h = orig_wr[2] - orig_wr[0], orig_wr[3] - orig_wr[1]
         for profile_name in ["Estándar", "Touch"]:
+            user32.SetWindowPos(hwnd_main, 0, 0, 0, orig_w, orig_h, SWP_NOMOVE | SWP_NOZORDER)
+            user32.SendMessageW(hwnd_main, 0, 0, 0)
+            time.sleep(0.25)
             print(f"\n--- Verificación en Perfil {profile_name} ---")
 
             if profile_name == "Touch":
@@ -373,6 +386,231 @@ def run_f2b_test_for_binary(exe_path, repo_root, config_name):
                     time.sleep(0.4)
 
                     verify_subnav_state(sub_list, sub_name, f"{profile_name} - Clic en {sub_name}")
+
+            # Verificación geométrica de las 4 secciones en 1200x720 y 960x600 (GetWindowRect + GetTextExtent)
+            is_touch_prof = (profile_name == "Touch")
+            scale = get_window_scale(hwnd_main)
+            for req_cw, req_ch in [(1200, 720), (960, 600)]:
+                wr = get_rect(hwnd_main)
+                cw_cur, ch_cur = get_client_size(hwnd_main)
+                user32.SetWindowPos(
+                    hwnd_main, 0, 0, 0,
+                    to_px(req_cw, scale) + (wr[2] - wr[0] - cw_cur),
+                    to_px(req_ch, scale) + (wr[3] - wr[1] - ch_cur),
+                    SWP_NOMOVE | SWP_NOZORDER,
+                )
+                user32.SendMessageW(hwnd_main, 0, 0, 0)
+                time.sleep(0.35)
+
+                print(f"\n  [Geometría {profile_name} {req_cw}x{req_ch}]")
+                for sec_name, sub_list in SECTIONS_INFO:
+                    ctrls = get_child_controls(hwnd_main)
+                    btn_sec = next((h for (h, cls, t) in ctrls if cls.lower() == "button" and t == sec_name), None)
+                    assert btn_sec is not None, f"Botón '{sec_name}' no encontrado"
+                    send_click_button(btn_sec)
+                    time.sleep(0.35)
+
+                    sub_btns = get_subnav_buttons(sub_list)
+                    hwnd_track = user32.GetParent(sub_btns[0][1])
+                    hwnd_scroll = user32.GetParent(hwnd_track)
+                    hwnd_subnav = user32.GetParent(hwnd_scroll)
+                    sn_l, sn_t, sn_r, sn_b = get_rect(hwnd_subnav)
+                    sc_l, sc_t, sc_r, sc_b = get_rect(hwnd_scroll)
+                    bar_h = sn_b - sn_t
+                    scroll_w = sc_r - sc_l
+
+                    # SubnavBar siempre en una sola fila (nunca roba altura al contenido)
+                    max_bar_h = max_px(58 if is_touch_prof else 46, scale)
+                    assert bar_h <= max_bar_h, (
+                        f"[{profile_name} {req_cw}x{req_ch} {sec_name}] SubnavBar creció a {bar_h}px > {max_bar_h}px"
+                    )
+
+                    # Medir cada botón de pestaña con GetWindowRect + GetTextExtent
+                    prev_r = None
+                    first_t = None
+                    total_btns_w = 0
+                    for idx_b, (sub_name, h_btn) in enumerate(sub_btns):
+                        bl, bt, br, bb = get_rect(h_btn)
+                        bw, bh = br - bl, bb - bt
+                        assert bh >= min_px(48 if is_touch_prof else 36, scale), (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Pestaña '{sub_name}' altura {bh}px baja"
+                        )
+                        assert bt >= sn_t - 1 and bb <= sn_b + 1, (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Pestaña '{sub_name}' fuera verticalmente de SubnavBar"
+                        )
+                        if first_t is None:
+                            first_t = bt
+                        else:
+                            assert abs(bt - first_t) <= 2, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Pestaña '{sub_name}' saltó de fila (y={bt} vs {first_t})"
+                            )
+                        if prev_r is not None:
+                            assert bl >= prev_r - 1, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] '{sub_name}' solapa anterior"
+                            )
+                        prev_r = br
+                        tw, _ = measure_text_extent(h_btn, sub_name)
+                        cw_btn, _ = get_client_size(h_btn)
+                        assert cw_btn >= tw + min_px(10, scale), (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Texto '{sub_name}' recortado: cw={cw_btn} < tw={tw}+pad"
+                        )
+                        total_btns_w += bw + (0 if idx_b + 1 == len(sub_btns) else to_px(4, scale))
+
+                    # Flechas '<' y '>' hijas directas de hwnd_subnav
+                    subnav_children = get_child_controls(hwnd_subnav)
+                    btn_prev = next((h for (h, cls, t) in subnav_children if cls.lower() == "button" and t == "<" and user32.GetParent(h) == hwnd_subnav), None)
+                    btn_next = next((h for (h, cls, t) in subnav_children if cls.lower() == "button" and t == ">" and user32.GetParent(h) == hwnd_subnav), None)
+                    assert btn_prev is not None and btn_next is not None, "Faltan botones de flecha en SubnavBar"
+                    prev_vis = bool(user32.IsWindowVisible(btn_prev))
+                    next_vis = bool(user32.IsWindowVisible(btn_next))
+
+                    # Determinar si caben en el ancho interior de SubnavBar (entre márgenes)
+                    inner_w = (sn_r - sn_l) - 2 * to_px(12 if is_touch_prof else 8, scale)
+                    if total_btns_w <= inner_w:
+                        assert not prev_vis and not next_vis, (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Flechas visibles innecesariamente: btns={total_btns_w}px <= inner={inner_w}px"
+                        )
+                        for sub_name, h_btn in sub_btns:
+                            bl, _, br, _ = get_rect(h_btn)
+                            assert bl >= sc_l - 1 and br <= sc_r + 1, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] '{sub_name}' desborda SubnavBar ({bl}..{br} vs {sc_l}..{sc_r})"
+                            )
+                        print(f"    [OK] {sec_name}: 1 fila sin flechas, bar_h={bar_h}px, btns={total_btns_w}px <= inner={inner_w}px (holgura={inner_w - total_btns_w}px)")
+                    else:
+                        assert prev_vis and next_vis, (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Esperadas flechas visibles al desbordar 1 fila (btns={total_btns_w}px > inner={inner_w}px)"
+                        )
+                        for a_name, h_arr in [("<", btn_prev), (">", btn_next)]:
+                            al, at, ar, ab = get_rect(h_arr)
+                            aw, ah = ar - al, ab - at
+                            min_arr = min_px(48 if is_touch_prof else 36, scale)
+                            assert aw >= min_arr and ah >= min_arr, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Flecha '{a_name}' bajo mínimo: {aw}x{ah}px < {min_arr}px"
+                            )
+                            assert al >= sn_l - 1 and ar <= sn_r + 1 and at >= sn_t - 1 and ab <= sn_b + 1, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Flecha '{a_name}' fuera de SubnavBar"
+                            )
+                        # Probar desplazamiento con '>' (una pestaña por toque) hasta ver completa la última
+                        max_taps = len(sub_btns)
+                        next_taps = 0
+                        while True:
+                            last_l, _, last_r, _ = get_rect(sub_btns[-1][1])
+                            if last_l >= sc_l - 1 and last_r <= sc_r + 1:
+                                break
+                            assert next_taps < max_taps, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Tras {next_taps} toques en '>' la última pestaña '{sub_btns[-1][0]}' sigue fuera ({last_l}..{last_r} vs {sc_l}..{sc_r})"
+                            )
+                            assert user32.IsWindowEnabled(btn_next), (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] '>' deshabilitado antes de mostrar '{sub_btns[-1][0]}' ({last_l}..{last_r} vs {sc_l}..{sc_r})"
+                            )
+                            prev_first_l = get_rect(sub_btns[0][1])[0]
+                            send_click_button(btn_next)
+                            time.sleep(0.2)
+                            next_taps += 1
+                            new_first_l = get_rect(sub_btns[0][1])[0]
+                            assert new_first_l < prev_first_l, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Toque #{next_taps} en '>' no desplazó (first_l={prev_first_l} -> {new_first_l})"
+                            )
+                        assert next_taps >= 1, f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Esperado al menos 1 toque en '>'"
+                        # Al final '>' ya no debe avanzar más
+                        assert not user32.IsWindowEnabled(btn_next), (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] '>' siguió habilitado tras mostrar la última pestaña"
+                        )
+                        end_first_l = get_rect(sub_btns[0][1])[0]
+                        send_click_button(btn_next)
+                        time.sleep(0.15)
+                        assert get_rect(sub_btns[0][1])[0] == end_first_l, (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] '>' siguió desplazando después del final"
+                        )
+
+                        # Regresar con '<' hasta mostrar completa la primera
+                        prev_taps = 0
+                        while True:
+                            first_l, _, first_r, _ = get_rect(sub_btns[0][1])
+                            if first_l >= sc_l - 1 and first_r <= sc_r + 1:
+                                break
+                            assert prev_taps < max_taps, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Tras {prev_taps} toques en '<' la primera pestaña '{sub_btns[0][0]}' sigue fuera ({first_l}..{first_r} vs {sc_l}..{sc_r})"
+                            )
+                            assert user32.IsWindowEnabled(btn_prev), (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] '<' deshabilitado antes de regresar a '{sub_btns[0][0]}'"
+                            )
+                            old_first_l = first_l
+                            send_click_button(btn_prev)
+                            time.sleep(0.2)
+                            prev_taps += 1
+                            assert get_rect(sub_btns[0][1])[0] > old_first_l, (
+                                f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Toque #{prev_taps} en '<' no desplazó hacia la izquierda"
+                            )
+                        assert prev_taps >= 1 and not user32.IsWindowEnabled(btn_prev), (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] '<' siguió habilitado tras regresar al inicio"
+                        )
+
+                        # Al elegir una pestaña parcialmente oculta, ensure_active_visible debe traerla completa a la vista
+                        partial_btn = next(
+                            ((sn, hb) for (sn, hb) in sub_btns if get_rect(hb)[0] < sc_r and get_rect(hb)[2] > sc_r + 1),
+                            None,
+                        )
+                        if partial_btn is None:
+                            partial_btn = next(
+                                ((sn, hb) for (sn, hb) in sub_btns if get_rect(hb)[2] > sc_r + 1),
+                                None,
+                            )
+                        assert partial_btn is not None, f"[{profile_name} {req_cw}x{req_ch} {sec_name}] No se encontró pestaña oculta/parcial para probar ensure_active_visible"
+                        p_name, p_hwnd = partial_btn
+                        send_click_button(p_hwnd)
+                        time.sleep(0.25)
+                        pl, _, pr, _ = get_rect(p_hwnd)
+                        assert pl >= sc_l - 1 and pr <= sc_r + 1, (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Al elegir '{p_name}' parcialmente oculta, ensure_active_visible no la trajo completa ({pl}..{pr} vs {sc_l}..{sc_r})"
+                        )
+                        # Y al volver a elegir la primera (ahora oculta por la izquierda), también vuelve completa a la vista
+                        send_click_button(sub_btns[0][1])
+                        time.sleep(0.25)
+                        f0l, _, f0r, _ = get_rect(sub_btns[0][1])
+                        assert f0l >= sc_l - 1 and f0r <= sc_r + 1, (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Al elegir '{sub_btns[0][0]}' oculta a la izquierda, ensure_active_visible no la trajo completa ({f0l}..{f0r} vs {sc_l}..{sc_r})"
+                        )
+                        print(f"    [OK] {sec_name}: 1 fila con flechas '<'/'>', bar_h={bar_h}px, scroll={scroll_w}px, total_btns={total_btns_w}px, toques_='>'={next_taps}, toques_'<'={prev_taps} (desplazamiento + ensure_active_visible verificados)")
+
+                    # En Inventario -> abrir Ingredientes y verificar botones visibles del contenido sin compresión
+                    if sec_name == "Inventario":
+                        btn_ing = next(h for s, h in sub_btns if s == "Ingredientes")
+                        send_click_button(btn_ing)
+                        time.sleep(0.35)
+                        if prev_vis:
+                            send_click_button(btn_prev)
+                            time.sleep(0.2)
+
+                    all_after = get_child_controls(hwnd_main)
+                    content_btns = []
+                    for h_cb, cls_cb, txt_cb in all_after:
+                        if cls_cb.lower() != "button" or not user32.IsWindowVisible(h_cb):
+                            continue
+                        st_cb = user32.GetWindowLongW(h_cb, GWL_STYLE) & 0xF
+                        if st_cb not in (0, 1, 0xB):  # Solo push buttons (no CheckBox/Radio/GroupBox)
+                            continue
+                        rc_cb = get_rect(h_cb)
+                        if rc_cb[1] >= sn_b - 1 and rc_cb[0] >= sn_l - 5:
+                            content_btns.append((h_cb, txt_cb))
+                    min_content_bh = min_px(48 if is_touch_prof else 28, scale)
+                    for h_cb, txt_cb in content_btns:
+                        cl, ct, cr, cb = get_rect(h_cb)
+                        cbw, cbh = cr - cl, cb - ct
+                        if cbw <= 0 and cbh <= 0:
+                            continue
+                        assert cbh >= min_content_bh, (
+                            f"[{profile_name} {req_cw}x{req_ch} {sec_name}] Control contenido '{txt_cb}' comprimido: h={cbh}px < {min_content_bh}px"
+                        )
+                    if sec_name == "Inventario":
+                        h_save = next((h for h, t in content_btns if t == "Guardar"), None)
+                        assert h_save is not None, f"[{profile_name} {req_cw}x{req_ch}] Botón 'Guardar' de Ingredientes no visible"
+                        sv_l, sv_t, sv_r, sv_b = get_rect(h_save)
+                        sv_h = sv_b - sv_t
+                        min_save_h = min_px(48 if is_touch_prof else 36, scale)
+                        assert sv_h >= min_save_h, (
+                            f"[{profile_name} {req_cw}x{req_ch}] 'Guardar' comprimido: {sv_h}px < {min_save_h}px"
+                        )
 
         user32.PostMessageW(hwnd_main, WM_CLOSE, 0, 0)
         p2.wait(timeout=5.0)

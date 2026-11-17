@@ -6,8 +6,8 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta | button | Inventario | 220.0x56.0 | OK
   Venta | button | Caja y Reportes | 220.0x56.0 | OK
   Venta | button | BackOffice | 220.0x56.0 | OK
-  Venta | button | Venta | 75.2x48.0 | OK
-  Venta | button | Catálogo visual | 138.4x48.0 | OK
+  Venta | button | Venta | 64.0x48.0 | OK
+  Venta | button | Catálogo visual | 124.0x48.0 | OK
   Venta | edit | <edit> | 220.0x48.0 | OK
   Venta | edit | Edit:1 | 64.0x48.0 | OK
   Venta | edit | <edit> | 585.6x48.0 | OK
@@ -26,8 +26,8 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta (con linea) | button | Inventario | 220.0x56.0 | OK
   Venta (con linea) | button | Caja y Reportes | 220.0x56.0 | OK
   Venta (con linea) | button | BackOffice | 220.0x56.0 | OK
-  Venta (con linea) | button | Venta | 75.2x48.0 | OK
-  Venta (con linea) | button | Catálogo visual | 138.4x48.0 | OK
+  Venta (con linea) | button | Venta | 64.0x48.0 | OK
+  Venta (con linea) | button | Catálogo visual | 124.0x48.0 | OK
   Venta (con linea) | edit | <edit> | 220.0x48.0 | OK
   Venta (con linea) | edit | Edit:1 | 64.0x48.0 | OK
   Venta (con linea) | edit | <edit> | 585.6x48.0 | OK
@@ -50,8 +50,8 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta (teclado) | button | Inventario | 220.0x56.0 | OK
   Venta (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
   Venta (teclado) | button | BackOffice | 220.0x56.0 | OK
-  Venta (teclado) | button | Venta | 75.2x48.0 | OK
-  Venta (teclado) | button | Catálogo visual | 138.4x48.0 | OK
+  Venta (teclado) | button | Venta | 64.0x48.0 | OK
+  Venta (teclado) | button | Catálogo visual | 124.0x48.0 | OK
   Venta (teclado) | button | 0 | 208.0x64.0 | OK
   Venta (teclado) | button | 1 | 64.0x64.0 | OK
   Venta (teclado) | button | 2 | 64.0x64.0 | OK
@@ -87,9 +87,9 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos | button | Inventario | 220.0x56.0 | OK
   Caja y turnos | button | Caja y Reportes | 220.0x56.0 | OK
   Caja y turnos | button | BackOffice | 220.0x56.0 | OK
-  Caja y turnos | button | Caja y turnos | 124.8x48.0 | OK
-  Caja y turnos | button | Bitácora | 88.8x48.0 | OK
-  Caja y turnos | button | Reportes | 92.8x48.0 | OK
+  Caja y turnos | button | Caja y turnos | 108.0x48.0 | OK
+  Caja y turnos | button | Bitácora | 74.4x48.0 | OK
+  Caja y turnos | button | Reportes | 79.2x48.0 | OK
   Caja y turnos | edit | <edit> | 140.0x48.0 | OK
   Caja y turnos | button | Abrir Turno de Caja | 238.4x48.0 | OK
 
@@ -99,9 +99,9 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos (teclado) | button | Inventario | 220.0x56.0 | OK
   Caja y turnos (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
   Caja y turnos (teclado) | button | BackOffice | 220.0x56.0 | OK
-  Caja y turnos (teclado) | button | Caja y turnos | 124.8x48.0 | OK
-  Caja y turnos (teclado) | button | Bitácora | 88.8x48.0 | OK
-  Caja y turnos (teclado) | button | Reportes | 92.8x48.0 | OK
+  Caja y turnos (teclado) | button | Caja y turnos | 108.0x48.0 | OK
+  Caja y turnos (teclado) | button | Bitácora | 74.4x48.0 | OK
+  Caja y turnos (teclado) | button | Reportes | 79.2x48.0 | OK
   Caja y turnos (teclado) | button | 0 | 136.0x64.0 | OK
   Caja y turnos (teclado) | button | 1 | 64.0x64.0 | OK
   Caja y turnos (teclado) | button | 2 | 64.0x64.0 | OK
@@ -125,9 +125,9 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos (abierto) | button | Inventario | 220.0x56.0 | OK
   Caja y turnos (abierto) | button | Caja y Reportes | 220.0x56.0 | OK
   Caja y turnos (abierto) | button | BackOffice | 220.0x56.0 | OK
-  Caja y turnos (abierto) | button | Caja y turnos | 124.8x48.0 | OK
-  Caja y turnos (abierto) | button | Bitácora | 88.8x48.0 | OK
-  Caja y turnos (abierto) | button | Reportes | 92.8x48.0 | OK
+  Caja y turnos (abierto) | button | Caja y turnos | 108.0x48.0 | OK
+  Caja y turnos (abierto) | button | Bitácora | 74.4x48.0 | OK
+  Caja y turnos (abierto) | button | Reportes | 79.2x48.0 | OK
   Caja y turnos (abierto) | edit | <edit> | 140.0x48.0 | OK
   Caja y turnos (abierto) | button | Cerrar Turno de Caja | 224.8x48.0 | OK
 
@@ -137,9 +137,9 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos (abierto, teclado) | button | Inventario | 220.0x56.0 | OK
   Caja y turnos (abierto, teclado) | button | Caja y Reportes | 220.0x56.0 | OK
   Caja y turnos (abierto, teclado) | button | BackOffice | 220.0x56.0 | OK
-  Caja y turnos (abierto, teclado) | button | Caja y turnos | 124.8x48.0 | OK
-  Caja y turnos (abierto, teclado) | button | Bitácora | 88.8x48.0 | OK
-  Caja y turnos (abierto, teclado) | button | Reportes | 92.8x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Caja y turnos | 108.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Bitácora | 74.4x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Reportes | 79.2x48.0 | OK
   Caja y turnos (abierto, teclado) | button | 0 | 136.0x64.0 | OK
   Caja y turnos (abierto, teclado) | button | 1 | 64.0x64.0 | OK
   Caja y turnos (abierto, teclado) | button | 2 | 64.0x64.0 | OK
@@ -163,9 +163,9 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Bitácora | button | Inventario | 220.0x56.0 | OK
   Bitácora | button | Caja y Reportes | 220.0x56.0 | OK
   Bitácora | button | BackOffice | 220.0x56.0 | OK
-  Bitácora | button | Caja y turnos | 124.8x48.0 | OK
-  Bitácora | button | Bitácora | 88.8x48.0 | OK
-  Bitácora | button | Reportes | 92.8x48.0 | OK
+  Bitácora | button | Caja y turnos | 108.0x48.0 | OK
+  Bitácora | button | Bitácora | 74.4x48.0 | OK
+  Bitácora | button | Reportes | 79.2x48.0 | OK
   Bitácora | switch/combo | comboBox | 160.0x48.0 | OK
   Bitácora | edit | <edit> | 140.0x48.0 | OK
   Bitácora | button | Buscar | 126.4x48.0 | OK
@@ -180,11 +180,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Usuarios y cuentas | button | Inventario | 220.0x56.0 | OK
   Usuarios y cuentas | button | Caja y Reportes | 220.0x56.0 | OK
   Usuarios y cuentas | button | BackOffice | 220.0x56.0 | OK
-  Usuarios y cuentas | button | Usuarios y cuentas | 166.4x48.0 | OK
-  Usuarios y cuentas | button | Roles y permisos | 149.6x48.0 | OK
-  Usuarios y cuentas | button | Configuración | 128.0x48.0 | OK
-  Usuarios y cuentas | button | Respaldos | 102.4x48.0 | OK
-  Usuarios y cuentas | button | Actualizaciones | 141.6x48.0 | OK
+  Usuarios y cuentas | button | Usuarios y cuentas | 149.6x48.0 | OK
+  Usuarios y cuentas | button | Roles y permisos | 136.0x48.0 | OK
+  Usuarios y cuentas | button | Configuración | 113.6x48.0 | OK
+  Usuarios y cuentas | button | Respaldos | 88.8x48.0 | OK
+  Usuarios y cuentas | button | Actualizaciones | 127.2x48.0 | OK
   Usuarios y cuentas | button | Nuevo Usuario | 180.8x48.0 | OK
   Usuarios y cuentas | button | Actualizar | 110.4x48.0 | OK
   Usuarios y cuentas | button | Cambiar Contraseña | 218.4x48.0 | OK
@@ -207,11 +207,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Roles y permisos | button | Inventario | 220.0x56.0 | OK
   Roles y permisos | button | Caja y Reportes | 220.0x56.0 | OK
   Roles y permisos | button | BackOffice | 220.0x56.0 | OK
-  Roles y permisos | button | Usuarios y cuentas | 166.4x48.0 | OK
-  Roles y permisos | button | Roles y permisos | 149.6x48.0 | OK
-  Roles y permisos | button | Configuración | 128.0x48.0 | OK
-  Roles y permisos | button | Respaldos | 102.4x48.0 | OK
-  Roles y permisos | button | Actualizaciones | 141.6x48.0 | OK
+  Roles y permisos | button | Usuarios y cuentas | 149.6x48.0 | OK
+  Roles y permisos | button | Roles y permisos | 136.0x48.0 | OK
+  Roles y permisos | button | Configuración | 113.6x48.0 | OK
+  Roles y permisos | button | Respaldos | 88.8x48.0 | OK
+  Roles y permisos | button | Actualizaciones | 127.2x48.0 | OK
   Roles y permisos | button | Nuevo rol | 144.8x48.0 | OK
   Roles y permisos | button | Actualizar | 100.8x48.0 | OK
   Roles y permisos | switch/combo | Vender y cobrar | 60.0x48.0 | OK
@@ -244,11 +244,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Configuración | button | Inventario | 220.0x56.0 | OK
   Configuración | button | Caja y Reportes | 220.0x56.0 | OK
   Configuración | button | BackOffice | 220.0x56.0 | OK
-  Configuración | button | Usuarios y cuentas | 166.4x48.0 | OK
-  Configuración | button | Roles y permisos | 149.6x48.0 | OK
-  Configuración | button | Configuración | 128.0x48.0 | OK
-  Configuración | button | Respaldos | 102.4x48.0 | OK
-  Configuración | button | Actualizaciones | 141.6x48.0 | OK
+  Configuración | button | Usuarios y cuentas | 149.6x48.0 | OK
+  Configuración | button | Roles y permisos | 136.0x48.0 | OK
+  Configuración | button | Configuración | 113.6x48.0 | OK
+  Configuración | button | Respaldos | 88.8x48.0 | OK
+  Configuración | button | Actualizaciones | 127.2x48.0 | OK
   Configuración | button | Estándar | 384.8x56.0 | OK
   Configuración | button | Táctil (Activa) | 396.8x56.0 | OK
   Configuración | button | Usar pantalla completa | 240.0x56.0 | OK
@@ -264,11 +264,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Respaldos | button | Inventario | 220.0x56.0 | OK
   Respaldos | button | Caja y Reportes | 220.0x56.0 | OK
   Respaldos | button | BackOffice | 220.0x56.0 | OK
-  Respaldos | button | Usuarios y cuentas | 166.4x48.0 | OK
-  Respaldos | button | Roles y permisos | 149.6x48.0 | OK
-  Respaldos | button | Configuración | 128.0x48.0 | OK
-  Respaldos | button | Respaldos | 102.4x48.0 | OK
-  Respaldos | button | Actualizaciones | 141.6x48.0 | OK
+  Respaldos | button | Usuarios y cuentas | 149.6x48.0 | OK
+  Respaldos | button | Roles y permisos | 136.0x48.0 | OK
+  Respaldos | button | Configuración | 113.6x48.0 | OK
+  Respaldos | button | Respaldos | 88.8x48.0 | OK
+  Respaldos | button | Actualizaciones | 127.2x48.0 | OK
   Respaldos | switch/combo | Respaldo automático al cerrar turno | 60.0x48.0 | OK
   Respaldos | button | Elegir carpeta | 180.0x48.0 | OK
   Respaldos | button | Hacer un respaldo ahora | 252.8x52.0 | OK
@@ -284,11 +284,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Respaldos (teclado) | button | Inventario | 220.0x56.0 | OK
   Respaldos (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
   Respaldos (teclado) | button | BackOffice | 220.0x56.0 | OK
-  Respaldos (teclado) | button | Usuarios y cuentas | 166.4x48.0 | OK
-  Respaldos (teclado) | button | Roles y permisos | 149.6x48.0 | OK
-  Respaldos (teclado) | button | Configuración | 128.0x48.0 | OK
-  Respaldos (teclado) | button | Respaldos | 102.4x48.0 | OK
-  Respaldos (teclado) | button | Actualizaciones | 141.6x48.0 | OK
+  Respaldos (teclado) | button | Usuarios y cuentas | 149.6x48.0 | OK
+  Respaldos (teclado) | button | Roles y permisos | 136.0x48.0 | OK
+  Respaldos (teclado) | button | Configuración | 113.6x48.0 | OK
+  Respaldos (teclado) | button | Respaldos | 88.8x48.0 | OK
+  Respaldos (teclado) | button | Actualizaciones | 127.2x48.0 | OK
   Respaldos (teclado) | button | 0 | 208.0x64.0 | OK
   Respaldos (teclado) | button | 1 | 64.0x64.0 | OK
   Respaldos (teclado) | button | 2 | 64.0x64.0 | OK
@@ -317,11 +317,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Actualizaciones | button | Inventario | 220.0x56.0 | OK
   Actualizaciones | button | Caja y Reportes | 220.0x56.0 | OK
   Actualizaciones | button | BackOffice | 220.0x56.0 | OK
-  Actualizaciones | button | Usuarios y cuentas | 166.4x48.0 | OK
-  Actualizaciones | button | Roles y permisos | 149.6x48.0 | OK
-  Actualizaciones | button | Configuración | 128.0x48.0 | OK
-  Actualizaciones | button | Respaldos | 102.4x48.0 | OK
-  Actualizaciones | button | Actualizaciones | 141.6x48.0 | OK
+  Actualizaciones | button | Usuarios y cuentas | 149.6x48.0 | OK
+  Actualizaciones | button | Roles y permisos | 136.0x48.0 | OK
+  Actualizaciones | button | Configuración | 113.6x48.0 | OK
+  Actualizaciones | button | Respaldos | 88.8x48.0 | OK
+  Actualizaciones | button | Actualizaciones | 127.2x48.0 | OK
   Actualizaciones | button | Actualizar desde un archivo (USB) | 316.8x52.0 | OK
 
 === Ingredientes (total=16, marcados=0) ===
@@ -330,12 +330,12 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Ingredientes | button | Inventario | 220.0x56.0 | OK
   Ingredientes | button | Caja y Reportes | 220.0x56.0 | OK
   Ingredientes | button | BackOffice | 220.0x56.0 | OK
-  Ingredientes | button | Existencias | 112.0x48.0 | OK
-  Ingredientes | button | Reabastecimiento | 157.6x48.0 | OK
-  Ingredientes | button | Productos y recetas | 171.2x48.0 | OK
-  Ingredientes | button | Ingredientes | 118.4x48.0 | OK
-  Ingredientes | button | Promociones y combos | 194.4x48.0 | OK
-  Ingredientes | button | Barra | 75.2x48.0 | OK
+  Ingredientes | button | Existencias | 95.2x48.0 | OK
+  Ingredientes | button | Reabastecimiento | 144.0x48.0 | OK
+  Ingredientes | button | Productos y recetas | 156.8x48.0 | OK
+  Ingredientes | button | Ingredientes | 104.0x48.0 | OK
+  Ingredientes | button | Promociones y combos | 180.0x48.0 | OK
+  Ingredientes | button | Barra | 64.0x48.0 | OK
   Ingredientes | button | Nuevo ingrediente | 166.4x48.0 | OK
   Ingredientes | button | Actualizar | 108.0x48.0 | OK
   Ingredientes | edit | <edit> | 233.6x48.0 | OK
@@ -349,12 +349,12 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Ingredientes (nuevo) | button | Inventario | 220.0x56.0 | OK
   Ingredientes (nuevo) | button | Caja y Reportes | 220.0x56.0 | OK
   Ingredientes (nuevo) | button | BackOffice | 220.0x56.0 | OK
-  Ingredientes (nuevo) | button | Existencias | 112.0x48.0 | OK
-  Ingredientes (nuevo) | button | Reabastecimiento | 157.6x48.0 | OK
-  Ingredientes (nuevo) | button | Productos y recetas | 171.2x48.0 | OK
-  Ingredientes (nuevo) | button | Ingredientes | 118.4x48.0 | OK
-  Ingredientes (nuevo) | button | Promociones y combos | 194.4x48.0 | OK
-  Ingredientes (nuevo) | button | Barra | 75.2x48.0 | OK
+  Ingredientes (nuevo) | button | Existencias | 95.2x48.0 | OK
+  Ingredientes (nuevo) | button | Reabastecimiento | 144.0x48.0 | OK
+  Ingredientes (nuevo) | button | Productos y recetas | 156.8x48.0 | OK
+  Ingredientes (nuevo) | button | Ingredientes | 104.0x48.0 | OK
+  Ingredientes (nuevo) | button | Promociones y combos | 180.0x48.0 | OK
+  Ingredientes (nuevo) | button | Barra | 64.0x48.0 | OK
   Ingredientes (nuevo) | button | Nuevo ingrediente | 166.4x48.0 | OK
   Ingredientes (nuevo) | button | Actualizar | 108.0x48.0 | OK
   Ingredientes (nuevo) | edit | <edit> | 233.6x48.0 | OK
@@ -369,12 +369,12 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Ingredientes (nuevo, teclado) | button | Inventario | 220.0x56.0 | OK
   Ingredientes (nuevo, teclado) | button | Caja y Reportes | 220.0x56.0 | OK
   Ingredientes (nuevo, teclado) | button | BackOffice | 220.0x56.0 | OK
-  Ingredientes (nuevo, teclado) | button | Existencias | 112.0x48.0 | OK
-  Ingredientes (nuevo, teclado) | button | Reabastecimiento | 157.6x48.0 | OK
-  Ingredientes (nuevo, teclado) | button | Productos y recetas | 171.2x48.0 | OK
-  Ingredientes (nuevo, teclado) | button | Ingredientes | 118.4x48.0 | OK
-  Ingredientes (nuevo, teclado) | button | Promociones y combos | 194.4x48.0 | OK
-  Ingredientes (nuevo, teclado) | button | Barra | 75.2x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Existencias | 95.2x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Reabastecimiento | 144.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Productos y recetas | 156.8x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Ingredientes | 104.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Promociones y combos | 180.0x48.0 | OK
+  Ingredientes (nuevo, teclado) | button | Barra | 64.0x48.0 | OK
   Ingredientes (nuevo, teclado) | button | 0 | 208.0x64.0 | OK
   Ingredientes (nuevo, teclado) | button | 1 | 64.0x64.0 | OK
   Ingredientes (nuevo, teclado) | button | 2 | 64.0x64.0 | OK

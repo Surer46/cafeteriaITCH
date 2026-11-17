@@ -525,10 +525,9 @@ void BackofficeUpdatesPanel::apply_status(const contracts::UpdateStatusDto& st) 
             );
             gauge_dl_->Hide();
             if (!st.error_message.empty() && (st.error_kind == "DOWNLOAD" || st.error_kind == "INVALID")) {
-                wxString err_dl = wxString::FromUTF8(st.error_message.c_str());
-                if (is_invalid_dl_error(st)) {
-                    err_dl = wxT("La descarga no es válida y se descartó. No se instaló nada.\n") + err_dl;
-                }
+                const wxString err_dl = is_invalid_dl_error(st)
+                    ? wxT("La descarga no es válida y se descartó. No se instaló nada.")
+                    : wxString::FromUTF8(st.error_message.c_str());
                 lbl_dl_error_->SetLabel(err_dl);
                 pnl_dl_error_->Show();
             } else {

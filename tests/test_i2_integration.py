@@ -109,6 +109,66 @@ user32.SendMessageTimeoutW.restype = wintypes.LPARAM
 user32.PostMessageW.argtypes = [wintypes.HWND, wintypes.UINT, wintypes.WPARAM, wintypes.LPARAM]
 user32.PostMessageW.restype = wintypes.BOOL
 
+user32.ShowWindow.argtypes = [wintypes.HWND, ctypes.c_int]
+user32.ShowWindow.restype = wintypes.BOOL
+
+user32.IsIconic.argtypes = [wintypes.HWND]
+user32.IsIconic.restype = wintypes.BOOL
+
+user32.SetForegroundWindow.argtypes = [wintypes.HWND]
+user32.SetForegroundWindow.restype = wintypes.BOOL
+
+user32.BringWindowToTop.argtypes = [wintypes.HWND]
+user32.BringWindowToTop.restype = wintypes.BOOL
+
+user32.MapVirtualKeyW.argtypes = [wintypes.UINT, wintypes.UINT]
+user32.MapVirtualKeyW.restype = wintypes.UINT
+
+class _MOUSEINPUT(ctypes.Structure):
+    _fields_ = [
+        ("dx", ctypes.c_long),
+        ("dy", ctypes.c_long),
+        ("mouseData", wintypes.DWORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ULONG_PTR),
+    ]
+
+class _KEYBDINPUT(ctypes.Structure):
+    _fields_ = [
+        ("wVk", wintypes.WORD),
+        ("wScan", wintypes.WORD),
+        ("dwFlags", wintypes.DWORD),
+        ("time", wintypes.DWORD),
+        ("dwExtraInfo", ULONG_PTR),
+    ]
+
+class _HARDWAREINPUT(ctypes.Structure):
+    _fields_ = [
+        ("uMsg", wintypes.DWORD),
+        ("wParamL", wintypes.WORD),
+        ("wParamH", wintypes.WORD),
+    ]
+
+class _INPUT_UNION(ctypes.Union):
+    _fields_ = [
+        ("mi", _MOUSEINPUT),
+        ("ki", _KEYBDINPUT),
+        ("hi", _HARDWAREINPUT),
+    ]
+
+class _INPUT(ctypes.Structure):
+    _fields_ = [
+        ("type", wintypes.DWORD),
+        ("u", _INPUT_UNION),
+    ]
+
+user32.SendInput.argtypes = [wintypes.UINT, ctypes.POINTER(_INPUT), ctypes.c_int]
+user32.SendInput.restype = wintypes.UINT
+
+SW_RESTORE = 9
+INPUT_KEYBOARD = 1
+KEYEVENTF_KEYUP = 0x0002
 GW_OWNER = 4
 PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
 WM_SETTEXT = 0x000C
@@ -411,7 +471,120 @@ def _find_system_print_dialog(target_pid, owner_hwnd=None):
 
     return None, None, None
 
-def _send_print_dialog_cancel(hwnd_dialog, mode):
+def get_print_dialog_pids():
+    """Devuelve el conjunto de PIDs activos correspondientes a PrintDialog.exe."""
+    try:
+        out = subprocess.check_output(
+            ["tasklist", "/FI", "IMAGENAME eq PrintDialog.exe", "/FO", "CSV", "/NH"],
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=5,
+        )
+    except Exception:
+        return set()
+    pids = set()
+    for line in out.splitlines():
+        parts = [p.strip('"') for p in line.split(",")]
+        if len(parts) >= 2 and parts[0].lower() == "printdialog.exe":
+            try:
+                pids.add(int(parts[1]))
+            except ValueError:
+                pass
+    return pids
+
+def _find_leftover_print_windows():
+    """Detecta ventanas visibles remanentes del diálogo de impresión (moderno o clásico)."""
+    found = []
+    for hwnd, pid, cls_name, title, visible, _owner, rect in _collect_top_level_windows():
+        if not visible:
+            continue
+        title_l = title.lower()
+        if title_l == "xcp":
+            continue
+        proc_name = get_process_image_name(pid)
+        if proc_name == "printdialog.exe":
+            found.append((hwnd, pid, proc_name, cls_name, title))
+            continue
+        if cls_name in ("ApplicationFrameWindow", "Windows.UI.Core.CoreWindow"):
+            has_pd_child = False
+            def enum_pd(ch, _):
+                nonlocal has_pd_child
+                if get_process_image_name(get_window_pid(ch)) == "printdialog.exe":
+                    has_pd_child = True
+                    return False
+                return True
+            user32.EnumChildWindows(hwnd, WNDENUMPROC(enum_pd), 0)
+            if has_pd_child or ("impres" in title_l and ("cafeter" in title_l or "print" in title_l)):
+                found.append((hwnd, pid, proc_name, cls_name, title))
+            continue
+        if cls_name == "#32770" and proc_name == "app_desktop.exe" and "imprimir" in title_l:
+            found.append((hwnd, pid, proc_name, cls_name, title))
+    return found
+
+def _send_escape_key_input():
+    """Envía pulsación y liberación real de VK_ESCAPE por SendInput (con el diálogo al frente)."""
+    scan = user32.MapVirtualKeyW(VK_ESCAPE, 0)
+    down = _INPUT(type=INPUT_KEYBOARD)
+    down.u.ki = _KEYBDINPUT(wVk=VK_ESCAPE, wScan=scan, dwFlags=0, time=0, dwExtraInfo=0)
+    up = _INPUT(type=INPUT_KEYBOARD)
+    up.u.ki = _KEYBDINPUT(wVk=VK_ESCAPE, wScan=scan, dwFlags=KEYEVENTF_KEYUP, time=0, dwExtraInfo=0)
+    arr = (_INPUT * 2)(down, up)
+    sent = user32.SendInput(2, arr, ctypes.sizeof(_INPUT))
+    return sent == 2
+
+def _uia_invoke_cancel_modern_print_dialog(hwnd_targets):
+    """Busca el botón Cancelar en el diálogo moderno de Windows 11 y lo invoca con UIA InvokePattern."""
+    valid_handles = [int(h) for h in hwnd_targets if h and user32.IsWindow(h)]
+    if not valid_handles:
+        return False
+    handles_ps = ",".join(str(h) for h in valid_handles)
+    ps_cmd = (
+        "[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; "
+        "Add-Type -AssemblyName UIAutomationClient; "
+        "Add-Type -AssemblyName UIAutomationTypes; "
+        f"$handles = @({handles_ps}); "
+        "$condBtn = New-Object System.Windows.Automation.PropertyCondition("
+        "[System.Windows.Automation.AutomationElement]::ControlTypeProperty, "
+        "[System.Windows.Automation.ControlType]::Button); "
+        "foreach ($h in $handles) { "
+        "  try { "
+        "    $el = [System.Windows.Automation.AutomationElement]::FromHandle([IntPtr]$h); "
+        "    if ($null -eq $el) { continue } "
+        "    $btns = $el.FindAll([System.Windows.Automation.TreeScope]::Descendants, $condBtn); "
+        "    foreach ($b in $btns) { "
+        "      $aid = ''; if ($b.Current.AutomationId) { $aid = $b.Current.AutomationId.Trim() } "
+        "      $nm = ''; if ($b.Current.Name) { $nm = $b.Current.Name.Trim() } "
+        "      $aidL = $aid.ToLowerInvariant(); $nmL = $nm.ToLowerInvariant(); "
+        "      $isCancel = ($nmL -eq 'cancelar' -or $nmL -eq 'cancel' -or "
+        "                   $aidL -eq 'cancelbutton' -or $aidL -eq 'cancel' -or "
+        "                   $aidL -eq 'part.cancelbutton' -or $aidL -eq 'btncancel' -or "
+        "                   (($aidL -like '*cancel*') -and ($nmL -notlike '*imprim*') -and ($nmL -notlike '*print*'))); "
+        "      if ($isCancel -and $b.Current.IsEnabled) { "
+        "        $canInv = $b.GetCurrentPropertyValue([System.Windows.Automation.AutomationElement]::IsInvokePatternAvailableProperty); "
+        "        if ($canInv) { "
+        "          $pat = $b.GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern); "
+        "          $pat.Invoke(); "
+        "          Write-Output ('INVOKED:' + $aid + ':' + $nm); "
+        "          exit 0 "
+        "        } "
+        "      } "
+        "    } "
+        "  } catch {} "
+        "}"
+    )
+    try:
+        out = subprocess.check_output(
+            ["powershell", "-NoProfile", "-Command", ps_cmd],
+            text=True,
+            encoding="utf-8",
+            timeout=6,
+        )
+        return "INVOKED:" in out
+    except Exception:
+        return False
+
+def _send_print_dialog_cancel(hwnd_dialog, mode, allow_send_input=True):
     if mode == "classic_32770":
         user32.PostMessageW(hwnd_dialog, WM_COMMAND, 2, 0)  # IDCANCEL
         user32.PostMessageW(hwnd_dialog, WM_CLOSE, 0, 0)
@@ -425,14 +598,18 @@ def _send_print_dialog_cancel(hwnd_dialog, mode):
         return True
     user32.EnumChildWindows(hwnd_dialog, WNDENUMPROC(enum_core), 0)
 
-    key_targets = core_windows if core_windows else [hwnd_dialog]
-    for tgt in key_targets:
-        user32.PostMessageW(tgt, WM_KEYDOWN, VK_ESCAPE, 0x00010001)
-        user32.PostMessageW(tgt, WM_KEYUP, VK_ESCAPE, 0xC0010001)
-    user32.PostMessageW(hwnd_dialog, WM_CLOSE, 0, 0)
-    for tgt in core_windows:
-        if tgt != hwnd_dialog:
-            user32.PostMessageW(tgt, WM_CLOSE, 0, 0)
+    if _uia_invoke_cancel_modern_print_dialog([hwnd_dialog] + core_windows):
+        return
+
+    if allow_send_input:
+        if user32.IsIconic(hwnd_dialog):
+            user32.ShowWindow(hwnd_dialog, SW_RESTORE)
+        user32.SetForegroundWindow(hwnd_dialog)
+        user32.BringWindowToTop(hwnd_dialog)
+        if core_windows:
+            user32.SetForegroundWindow(core_windows[0])
+        time.sleep(0.08)
+        _send_escape_key_input()
 
 def cancel_system_print_dialog_by_pid(target_pid, timeout=6.0, owner_hwnd=None):
     """Detecta, cancela sin imprimir y espera el cierre del diálogo de impresión del sistema (Win32 clásico o Windows 11 moderno)."""
@@ -441,16 +618,16 @@ def cancel_system_print_dialog_by_pid(target_pid, timeout=6.0, owner_hwnd=None):
         hwnd_dialog, mode, desc = _find_system_print_dialog(target_pid, owner_hwnd=owner_hwnd)
         if hwnd_dialog:
             if mode == "modern_uwp":
-                time.sleep(0.2)
-            _send_print_dialog_cancel(hwnd_dialog, mode)
+                time.sleep(0.3)
+            _send_print_dialog_cancel(hwnd_dialog, mode, allow_send_input=False)
             wait_start = time.time()
             resent = False
-            while time.time() - wait_start < 4.0:
+            while time.time() - wait_start < 6.0:
                 dialog_gone = (not user32.IsWindow(hwnd_dialog)) or (not user32.IsWindowVisible(hwnd_dialog))
                 if dialog_gone:
                     return hwnd_dialog, desc
-                if not resent and (time.time() - wait_start) >= 0.5:
-                    _send_print_dialog_cancel(hwnd_dialog, mode)
+                if not resent and (time.time() - wait_start) >= 0.8:
+                    _send_print_dialog_cancel(hwnd_dialog, mode, allow_send_input=True)
                     resent = True
                 time.sleep(0.1)
             raise TimeoutError(
@@ -554,6 +731,7 @@ def run_integration_test_i2(exe_path, work_dir):
     print(f"[OK] Directorio de datos de prueba aislado: {temp_test_dir}", flush=True)
 
     created_processes = []
+    had_exception = False
 
     test_username = "dueno_i2_" + secrets.token_hex(4)
     test_display_name = "Dueno I2 " + secrets.token_hex(2)
@@ -1288,6 +1466,9 @@ def run_integration_test_i2(exe_path, work_dir):
         print(f"EN EL BINARIO REAL: {exe_path}", flush=True)
         print("=======================================================", flush=True)
 
+    except Exception:
+        had_exception = True
+        raise
     finally:
         for p in created_processes:
             if p.poll() is None:
@@ -1300,8 +1481,27 @@ def run_integration_test_i2(exe_path, work_dir):
                         p.wait(timeout=2)
                     except Exception:
                         pass
+        leftover_print_wins = _find_leftover_print_windows()
+        if leftover_print_wins:
+            time.sleep(0.4)
+            leftover_print_wins = _find_leftover_print_windows()
+        pd_pids_after = sorted(get_print_dialog_pids())
+        if pd_pids_after and not leftover_print_wins:
+            print(
+                f"[INFO] PrintDialog.exe activo en caché sin ventanas visibles (PIDs: {pd_pids_after}).",
+                flush=True,
+            )
+        if leftover_print_wins:
+            print(
+                f"[ERROR] Quedaron ventanas visibles de impresión al terminar la prueba: {leftover_print_wins}",
+                flush=True,
+            )
         shutil.rmtree(temp_test_dir, ignore_errors=True)
         print(f"[OK] Limpieza de directorio temporal aislado: {temp_test_dir}", flush=True)
+        if leftover_print_wins and not had_exception:
+            raise RuntimeError(
+                f"Quedaron ventanas visibles de impresión al terminar la prueba: {leftover_print_wins}"
+            )
 
 if __name__ == "__main__":
     enable_per_monitor_dpi()

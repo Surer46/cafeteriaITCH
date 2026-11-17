@@ -2,6 +2,7 @@
 #define APP_FRONTEND_SUBNAV_BAR_HPP
 
 #include <wx/wx.h>
+#include <wx/scrolwin.h>
 #include <functional>
 #include <vector>
 #include <string>
@@ -27,12 +28,21 @@ private:
     void rebuild_buttons();
     void update_button_styles();
     void on_button_clicked(const std::string& name);
+    void update_scroll_controls();
+    void scroll_by_step(int direction);
+    void ensure_active_visible();
 
     OnSubsectionChangedCallback callback_;
     SectionId current_section_{SectionId::PointOfSale};
     bool can_view_dev_server_{false};
     std::string current_subsection_;
+    wxScrolledWindow* scroll_{nullptr};
+    wxPanel* track_{nullptr};
+    wxButton* btn_prev_{nullptr};
+    wxButton* btn_next_{nullptr};
     wxBoxSizer* buttons_sizer_{nullptr};
+    int content_width_px_{0};
+    bool updating_scroll_{false};
     std::vector<SubnavItem> items_;
 };
 

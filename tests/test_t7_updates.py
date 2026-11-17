@@ -32,6 +32,7 @@ from gui_dpi import (
     get_window_scale,
     measure_text_extent,
     min_px,
+    max_px,
 )
 
 HOOKS_EXE = os.path.join(REPO_ROOT, "build_hooks_release", "app_desktop.exe")
@@ -350,16 +351,23 @@ def assert_backoffice_subnav_fits(hwnd_main, label_ctx):
         btns.append((name, h))
     parents = {user32.GetParent(h) for _n, h in btns}
     assert len(parents) == 1, f"Tabs no comparten SubnavBar padre: {parents}"
-    hwnd_sub = next(iter(parents))
-    sl, st, sr, sb = get_rect(hwnd_sub)
+    hwnd_track = next(iter(parents))
+    hwnd_scroll = user32.GetParent(hwnd_track)
+    hwnd_subnav = user32.GetParent(hwnd_scroll)
+    sl, st, sr, sb = get_rect(hwnd_scroll)
+    sn_l, sn_t, sn_r, sn_b = get_rect(hwnd_subnav)
+    sub_w = sr - sl
+    bar_h = sn_b - sn_t
     prev_r = None
+    btn_rects = []
+    text_extents = []
     for name, h in btns:
         bl, bt, br, bb = get_rect(h)
         assert bl >= sl - 1 and br <= sr + 1, (
-            f"[{label_ctx}] Tab '{name}' desborda SubnavBar: btn=({bl},{br}) vs subnav=({sl},{sr})"
+            f"[{label_ctx}] Tab '{name}' desborda scroll de SubnavBar: btn=({bl},{br}) vs scroll=({sl},{sr})"
         )
         assert bt >= st - 1 and bb <= sb + 1, (
-            f"[{label_ctx}] Tab '{name}' desborda verticalmente SubnavBar: btn=({bt},{bb}) vs subnav=({st},{sb})"
+            f"[{label_ctx}] Tab '{name}' desborda verticalmente SubnavBar: btn=({bt},{bb}) vs scroll=({st},{sb})"
         )
         if prev_r is not None:
             assert bl >= prev_r - 1, f"[{label_ctx}] Tab '{name}' solapa con el anterior: bl={bl} < prev_r={prev_r}"
@@ -368,6 +376,52 @@ def assert_backoffice_subnav_fits(hwnd_main, label_ctx):
         cw = get_client_rect(h)[2]
         assert cw >= tw + min_px(10, get_window_scale(hwnd_main)), (
             f"[{label_ctx}] Texto de '{name}' recortado: client_w={cw} < text_w={tw}+pad"
+        )
+        btn_rects.append((bl, bt, br, bb))
+        text_extents.append(tw)
+
+    # Estimación exacta de 6 pestañas (Desarrollador viendo además "Servidor de respaldos")
+    scale = get_window_scale(hwnd_main)
+    is_touch_ctx = "Táctil" in label_ctx
+    max_bar_h = max_px(58 if is_touch_ctx else 46, scale)
+    assert bar_h <= max_bar_h, f"[{label_ctx}] SubnavBar debe mantener altura de 1 fila: {bar_h}px > {max_bar_h}px"
+
+    gaps = [btn_rects[i][0] - btn_rects[i - 1][2] for i in range(1, len(btn_rects))]
+    gap_x = max(0, max(gaps))
+    pads = [(btn_rects[i][2] - btn_rects[i][0]) - text_extents[i] for i in range(len(btns))]
+    btn_pad_x = max(pads)
+    dev_label = "Servidor de respaldos"
+    dev_tw = max(measure_text_extent(h, dev_label)[0] for _n, h in btns)
+    dev_btn_w = dev_tw + btn_pad_x
+    five_end_x = btn_rects[-1][2] - sl
+    six_total_w = five_end_x + gap_x + dev_btn_w
+    holgura_6 = sub_w - six_total_w
+    btn_h_min = min(r[3] - r[1] for r in btn_rects)
+    expected_min_h = min_px(48 if is_touch_ctx else 36, scale)
+    assert btn_h_min >= expected_min_h, (
+        f"[{label_ctx}] Altura de botón subnav {btn_h_min}px < mínimo {expected_min_h}px"
+    )
+    if six_total_w <= sub_w:
+        print(
+            f"  [6 PESTAÑAS 1 FILA SIN FLECHAS][{label_ctx}] scroll_w={sub_w}px, bar_h={bar_h}px, 5_end={five_end_x}px, gap={gap_x}px, "
+            f"pad={btn_pad_x}px, dev_tw={dev_tw}px, dev_btn={dev_btn_w}px, total_6={six_total_w}px, holgura={holgura_6}px",
+            flush=True,
+        )
+    else:
+        # En Táctil 960x600 el texto de 6 pestañas supera 1 fila sin scroll: SubnavBar muestra flechas < / >
+        # en la misma altura de 1 fila sin comprimir contenido.
+        assert is_touch_ctx and "960x600" in label_ctx, (
+            f"[{label_ctx}] Con 6 pestañas ('Servidor de respaldos') desborda 1 fila: "
+            f"requerido={six_total_w}px > scroll_w={sub_w}px (falta={six_total_w - sub_w}px)"
+        )
+        viewport_arrows = sub_w - 2 * (btn_h_min + gap_x)
+        assert dev_btn_w <= viewport_arrows, (
+            f"[{label_ctx}] 'Servidor de respaldos' ({dev_btn_w}px) no cabe entre flechas ({viewport_arrows}px)"
+        )
+        print(
+            f"  [6 PESTAÑAS 1 FILA + FLECHAS][{label_ctx}] scroll_w={sub_w}px, bar_h={bar_h}px, 1_fila_req={six_total_w}px (excede={six_total_w - sub_w}px), "
+            f"viewport_con_flechas={viewport_arrows}px, dev_tw={dev_tw}px, pad={btn_pad_x}px, dev_btn={dev_btn_w}px, holgura_en_viewport={viewport_arrows - dev_btn_w}px, btn_h={btn_h_min}px",
+            flush=True,
         )
 
 
@@ -731,7 +785,11 @@ def run_all_tests():
         p_d5, hwnd_d5 = login_as(HOOKS_EXE, env_020, procs)
         time.sleep(0.5)
         t_d5 = visible_texts(hwnd_d5)
-        assert not any("No se instaló porque no se dio permiso" in t for t in t_d5), (
+        assert not any(
+            "No se instaló porque no se dio permiso en Windows" in t
+            or "La actualización no se completó" in t
+            for t in t_d5
+        ), (
             f"Aviso de resultado de instalación se repitió en segundo arranque: {t_d5}"
         )
         user32.PostMessageW(hwnd_d5, WM_CLOSE, 0, 0)
@@ -782,10 +840,18 @@ def run_all_tests():
         hwnd_n_bdl, _ = wait_for_window(p_bdl.pid, "Novedades de la versión 0.2.1", timeout=8.0)
         click_hwnd(find_button(hwnd_n_bdl, exact="Descargar e instalar al cerrar"), settle=0.25)
         wait_until(
-            lambda: any("La descarga no es válida y se descartó. No se instaló nada." in t for t in visible_texts(hwnd_n_bdl)),
+            lambda: any(
+                " ".join(t.split()) == "La descarga no es válida y se descartó. No se instaló nada."
+                for t in visible_texts(hwnd_n_bdl)
+            ),
             desc="Rechazo de descarga alterada",
             timeout=15.0,
         )
+        bdl_norm = [" ".join(t.split()) for t in visible_texts(hwnd_n_bdl)]
+        assert "La descarga no es válida y se descartó. No se instaló nada." in bdl_norm, (
+            f"Mensaje de descarga inválida debe mostrarse sin texto duplicado del servicio: {bdl_norm}"
+        )
+        assert find_button(hwnd_n_bdl, exact="Reintentar") is not None, "Falta botón Reintentar en descarga alterada"
         con = sqlite3.connect(db_main)
         assert con.execute("SELECT accepted FROM update_state WHERE id=1").fetchone()[0] == 0
         con.close()
