@@ -389,8 +389,12 @@ public:
             if (plan.ok) update_service_->wait_idle(5000);  // que una búsqueda en curso suelte su conexión
         }
         db_.close();
-        if (plan.ok && services::SqliteUpdateService::database_closed_cleanly(db_file_)) {
-            update_service_->launch_install(plan);
+        if (plan.ok) {
+            if (services::SqliteUpdateService::database_closed_cleanly(db_file_)) {
+                update_service_->launch_install(plan);          // guarda su resultado en un archivo (la base ya está cerrada)
+            } else {
+                update_service_->note_launch_not_attempted(plan);
+            }
         }
         plan = services::SqliteUpdateService::InstallLaunchPlan();  // suelta el archivo del instalador
         return wxApp::OnExit();

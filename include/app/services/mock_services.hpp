@@ -267,6 +267,7 @@ public:
     contracts::OperationResult decline_update() override;
     contracts::OperationResult cancel_download() override;
     contracts::OperationResult use_update_from_files(const std::string&, const std::string&, const std::string&) override;
+    contracts::Result<contracts::UpdateFromFilesResultDto> apply_update_from_files(const std::string&, const std::string&, const std::string&) override;
     contracts::OperationResult postpone_install_this_session() override;
     contracts::Result<contracts::UpdateInstallResultDto> get_last_install_result() override;
     contracts::OperationResult acknowledge_install_result() override;

@@ -1117,6 +1117,12 @@ contracts::OperationResult MockUpdateService::cancel_download() { return contrac
 contracts::OperationResult MockUpdateService::use_update_from_files(const std::string&, const std::string&, const std::string&) {
     return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState, "Servicio simulado: no hay actualizaciones.");
 }
+contracts::Result<contracts::UpdateFromFilesResultDto> MockUpdateService::apply_update_from_files(const std::string&, const std::string&, const std::string&) {
+    contracts::UpdateFromFilesResultDto dto;
+    dto.reason = "NOT_CONFIGURED";
+    dto.message = "Servicio simulado: no hay actualizaciones.";
+    return contracts::Result<contracts::UpdateFromFilesResultDto>::ok(dto);
+}
 contracts::OperationResult MockUpdateService::postpone_install_this_session() { return contracts::OperationResult::ok(); }
 contracts::Result<contracts::UpdateInstallResultDto> MockUpdateService::get_last_install_result() {
     return contracts::Result<contracts::UpdateInstallResultDto>::ok(contracts::UpdateInstallResultDto{});

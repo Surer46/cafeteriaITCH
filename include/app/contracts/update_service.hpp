@@ -40,15 +40,49 @@ struct UpdateStatusDto {
     // NO_NETWORK, TIMEOUT, TLS_UNAVAILABLE, TLS_FAILURE, SERVER, INVALID, DOWNLOAD o vacío
     std::string error_kind;
     std::string error_message;               // lenguaje llano; vacío si no hay error
+    // Solo cuando error_kind == "DOWNLOAD": por qué falló la descarga (B13). La interfaz elige el texto con ESTE valor,
+    // nunca buscando palabras en error_message:
+    //   INVALID          la descarga se rechazó por no ser válida (incompleta, dañada o no corresponde): se descartó
+    //   NO_NETWORK       sin conexión a internet
+    //   TIMEOUT          conexión demasiado lenta
+    //   SERVER           el servidor no respondió como se esperaba
+    //   TLS_UNAVAILABLE  este Windows no puede conectarse de forma segura (falta una actualización de Windows)
+    //   TLS_FAILURE      no se pudo comprobar que la conexión sea segura
+    //   STORAGE          no se pudo guardar la descarga en el disco
+    //   vacío            motivo desconocido (filas anteriores a la migración 018): tratarlo como error de conexión y
+    //                    mostrar error_message; NUNCA como "descarga no válida"
+    // Con cualquier valor distinto de INVALID la descarga se puede reintentar tal cual; con INVALID se descartó lo bajado.
+    std::string download_error_kind;
     bool error_from_manual_check{false};     // la búsqueda fallida la pidió una persona (mostrarlo); si no, es silencioso
     std::string info_message;                // texto llano adicional (p. ej. por qué una copia portable no se actualiza)
 };
 
 struct UpdateInstallResultDto {
     bool has_result{false};   // hay un resultado de instalación que todavía no se mostró
-    bool success{false};
+    bool success{false};      // equivale a reason == "INSTALLED"
     std::string version;      // versión objetivo
-    std::string message;      // lenguaje llano
+    std::string message;      // lenguaje llano; coincide con reason
+    // Motivo (B13). Vacío si has_result es falso. La interfaz elige el texto con este valor, no con message:
+    //   INSTALLED          se actualizó a la versión nueva
+    //   PERMISSION_DENIED  Windows no dio permiso (se canceló el aviso de autorización)
+    //   LAUNCH_FAILED      no se pudo iniciar la instalación (el instalador no se abrió o ni siquiera se intentó)
+    //   NOT_COMPLETED      el instalador se abrió, pero al reabrir el programa sigue en la versión anterior
+    // Tras PERMISSION_DENIED, LAUNCH_FAILED y NOT_COMPLETED la versión sigue disponible (AVAILABLE, sin aceptar).
+    std::string reason;
+};
+
+// Resultado de elegir archivos del USB (B13). Mismo orden de uso que use_update_from_files, pero con motivo.
+struct UpdateFromFilesResultDto {
+    bool accepted{false};     // verificó y quedó lista para instalar al cerrar
+    // OK              aceptada
+    // NOT_NEWER       es igual o más vieja que la versión instalada
+    // INVALID         no es auténtica, está dañada o el instalador no corresponde a esos datos
+    // UNREADABLE      no se pudieron leer los archivos (faltan, no se abren o no son los esperados)
+    // STORAGE         no se pudo copiar al disco del equipo
+    // PORTABLE        copia portable: no se actualiza sola
+    // NOT_CONFIGURED  este programa todavía no tiene activadas las actualizaciones
+    std::string reason;
+    std::string message;      // lenguaje llano; coincide con reason
 };
 
 class IUpdateService {
@@ -73,12 +107,23 @@ public:
     // Cancela una descarga en curso: la versión queda AVAILABLE y NO aceptada. Uso: svc->cancel_download();
     virtual OperationResult cancel_download() = 0;
 
-    // Actualización desde archivos (USB): instalador, manifiesto y firma, con la misma verificación completa.
-    // Si verifica, queda aceptada para instalar al cerrar. Uso: svc->use_update_from_files(exe, json, sig);
+    // Actualización desde archivos (USB): instalador, archivo de datos y archivo de verificación, con la misma
+    // verificación completa. Si verifica, queda aceptada para instalar al cerrar. La interfaz debe usar
+    // apply_update_from_files (con motivo); este método se conserva con la misma firma y delega en él, traduciendo el
+    // motivo a OperationResult (NOT_NEWER, PORTABLE y NOT_CONFIGURED = InvalidState; INVALID y UNREADABLE =
+    // InvalidInput; STORAGE = StorageFailure).
     virtual OperationResult use_update_from_files(
         const std::string& installer_path,
         const std::string& manifest_path,
         const std::string& signature_path) = 0;
+
+    // Igual que use_update_from_files pero con motivo explícito (UpdateFromFilesResultDto). El Result solo falla por
+    // falta de sesión o de permiso (Forbidden); cualquier otro rechazo llega con accepted = false y su reason.
+    // Uso: auto r = svc->apply_update_from_files(exe, datos, verificacion).value(); if (!r.accepted) mostrar(r.reason);
+    virtual Result<UpdateFromFilesResultDto> apply_update_from_files(
+        const std::string& installer_path,
+        const std::string& data_path,
+        const std::string& verification_path) = 0;
 
     // "Cerrar sin instalar": ese cierre no lanza nada y la aceptación sigue para el próximo. Solo en memoria.
     // Uso: svc->postpone_install_this_session();
