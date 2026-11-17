@@ -20,16 +20,6 @@ int compute_dl_pct(std::int64_t done, std::int64_t total) {
     return static_cast<int>((done * 100) / total);
 }
 
-bool is_invalid_dl_error(const contracts::UpdateStatusDto& st) {
-    if (st.error_kind == "INVALID") {
-        return true;
-    }
-    return st.error_message.find("dañada") != std::string::npos ||
-           st.error_message.find("descartó") != std::string::npos ||
-           st.error_message.find("auténtica") != std::string::npos ||
-           st.error_message.find("no se pudo comprobar") != std::string::npos;
-}
-
 void show_plain_notice(wxWindow* parent, const wxString& title, const wxString& body, bool is_error) {
     const bool touch = Theme::is_touch();
     const int btn_h = touch ? 48 : 38;
@@ -525,7 +515,7 @@ void BackofficeUpdatesPanel::apply_status(const contracts::UpdateStatusDto& st) 
             );
             gauge_dl_->Hide();
             if (!st.error_message.empty() && (st.error_kind == "DOWNLOAD" || st.error_kind == "INVALID")) {
-                const wxString err_dl = is_invalid_dl_error(st)
+                const wxString err_dl = (st.download_error_kind == "INVALID")
                     ? wxT("La descarga no es válida y se descartó. No se instaló nada.")
                     : wxString::FromUTF8(st.error_message.c_str());
                 lbl_dl_error_->SetLabel(err_dl);
@@ -672,16 +662,27 @@ void BackofficeUpdatesPanel::on_usb_update(wxCommandEvent&) {
     }
     const wxString sig_path = sig_dlg.GetPath();
 
-    const auto res = services_.update_service->use_update_from_files(
+    const auto res = services_.update_service->apply_update_from_files(
         std::string(exe_path.ToUTF8().data()),
         std::string(data_path.ToUTF8().data()),
         std::string(sig_path.ToUTF8().data())
     );
     if (!res.is_success()) {
-        wxString err_wx = wxString::FromUTF8(res.error_message().c_str());
-        if (res.error_message().find("más nueva") != std::string::npos) {
-            err_wx = wxT("Esa versión no es más nueva que la instalada.");
+        const wxString err_wx = wxString::FromUTF8(res.error_message().c_str());
+        show_feedback(FeedbackKind::Error, err_wx);
+        show_plain_notice(this, wxT("No se pudo usar la actualización"), err_wx, true);
+        refresh_status();
+        if (on_state_changed_) {
+            on_state_changed_();
         }
+        return;
+    }
+
+    const auto& usb_res = res.value();
+    if (!usb_res.accepted) {
+        const wxString err_wx = (usb_res.reason == "NOT_NEWER")
+            ? wxT("Esa versión no es más nueva que la instalada.")
+            : wxString::FromUTF8(usb_res.message.c_str());
         show_feedback(FeedbackKind::Error, err_wx);
         show_plain_notice(this, wxT("No se pudo usar la actualización"), err_wx, true);
         refresh_status();

@@ -767,37 +767,105 @@ def run_all_tests():
             f"Contenido inesperado en lanzamiento simulado: {launch_content}"
         )
 
-        # Reabrir tras lanzamiento simulado (sigue en 0.1.0 -> UAC cancelado / no se completó -> mostrar UNA vez)
+        four_result_prefixes = (
+            "Se actualizó a la versión",
+            "No se instaló porque no se dio permiso en Windows",
+            "No se pudo iniciar la instalación",
+            "La actualización no se completó",
+        )
+
+        def assert_no_install_result_shown(hwnd_check, ctx):
+            texts_chk = [" ".join(t.split()) for t in visible_texts(hwnd_check)]
+            assert not any(pref in t for t in texts_chk for pref in four_result_prefixes), (
+                f"Aviso de resultado de instalación se repitió en {ctx}: {texts_chk}"
+            )
+
+        # 4d-1. Reabrir tras lanzamiento simulado LAUNCHED (sigue en 0.1.0 -> NOT_COMPLETED)
         p_d4, hwnd_d4 = login_as(HOOKS_EXE, env_020, procs)
         wait_until(
             lambda: any(
-                "No se instaló porque no se dio permiso en Windows" in t or "no se completó" in t
+                " ".join(t.split()) == "La actualización no se completó; sigues con la versión 0.1.0. Se volverá a ofrecer."
                 for t in visible_texts(hwnd_d4)
             ),
-            desc="Franja resultado al reabrir tras no completarse instalación",
+            desc="Franja resultado NOT_COMPLETED al reabrir tras LAUNCHED",
             timeout=12.0,
         )
         click_hwnd(find_button(hwnd_d4, exact="Entendido"), settle=0.25)
         user32.PostMessageW(hwnd_d4, WM_CLOSE, 0, 0)
         p_d4.wait(timeout=8)
 
-        # Reabrir segunda vez: ese aviso ya NO se repite (solo se muestra una vez)
+        # Reabrir segunda vez: ninguno de los 4 textos se repite
         p_d5, hwnd_d5 = login_as(HOOKS_EXE, env_020, procs)
         time.sleep(0.5)
-        t_d5 = visible_texts(hwnd_d5)
-        assert not any(
-            "No se instaló porque no se dio permiso en Windows" in t
-            or "La actualización no se completó" in t
-            for t in t_d5
-        ), (
-            f"Aviso de resultado de instalación se repitió en segundo arranque: {t_d5}"
-        )
+        assert_no_install_result_shown(hwnd_d5, "reapertura tras NOT_COMPLETED")
         user32.PostMessageW(hwnd_d5, WM_CLOSE, 0, 0)
         p_d5.wait(timeout=8)
 
-        # Simular cierre tras actualización exitosa (versión objetivo 0.1.0 == instalada 0.1.0) -> muestra 'Se actualizó...' una vez
+        # 4d-2. Simular UAC_CANCELLED -> PERMISSION_DENIED (una sola vez)
+        def run_accept_and_close_with_outcome(env_run, tag):
+            p_r, hwnd_r = login_as(HOOKS_EXE, env_run, procs)
+            wait_until(lambda: find_button(hwnd_r, exact="Ver novedades", sync=True) is not None, desc=f"Franja 0.2.0 ({tag})")
+            click_hwnd(find_button(hwnd_r, exact="Ver novedades"), settle=0.25)
+            hwnd_nr, _ = wait_for_window(p_r.pid, "Novedades de la versión 0.2.0", timeout=8.0)
+            click_hwnd(find_button(hwnd_nr, exact="Descargar e instalar al cerrar"), settle=0.25)
+            wait_until(
+                lambda: any("Lista. Se instalará cuando cierres el programa." in t for t in visible_texts(hwnd_nr)),
+                desc=f"Lista 0.2.0 ({tag})",
+                timeout=10.0,
+            )
+            click_hwnd(find_button(hwnd_nr, exact="Cerrar esta ventana"), settle=0.2)
+            wait_until(lambda: not find_windows_by_pid(p_r.pid, "Novedades de la versión"), desc=f"Cerrar Novedades ({tag})")
+            user32.PostMessageW(hwnd_r, WM_CLOSE, 0, 0)
+            hwnd_clr, _ = wait_for_window(p_r.pid, "Actualización lista para instalar", timeout=8.0)
+            click_hwnd(find_button(hwnd_clr, exact="Cerrar e instalar"), settle=0.25)
+            p_r.wait(timeout=10)
+
+        env_uac = env_020.copy()
+        env_uac["CAFETERIA_UPDATE_TEST_LAUNCH_RESULT"] = "UAC_CANCELLED"
+        run_accept_and_close_with_outcome(env_uac, "UAC_CANCELLED")
+        p_uac2, hwnd_uac2 = login_as(HOOKS_EXE, env_020, procs)
+        wait_until(
+            lambda: any(
+                " ".join(t.split()) == "No se instaló porque no se dio permiso en Windows. Se volverá a ofrecer."
+                for t in visible_texts(hwnd_uac2)
+            ),
+            desc="Franja resultado PERMISSION_DENIED tras UAC_CANCELLED",
+            timeout=12.0,
+        )
+        click_hwnd(find_button(hwnd_uac2, exact="Entendido"), settle=0.25)
+        user32.PostMessageW(hwnd_uac2, WM_CLOSE, 0, 0)
+        p_uac2.wait(timeout=8)
+        p_uac3, hwnd_uac3 = login_as(HOOKS_EXE, env_020, procs)
+        time.sleep(0.5)
+        assert_no_install_result_shown(hwnd_uac3, "reapertura tras PERMISSION_DENIED")
+        user32.PostMessageW(hwnd_uac3, WM_CLOSE, 0, 0)
+        p_uac3.wait(timeout=8)
+
+        # 4d-3. Simular FAILED -> LAUNCH_FAILED (una sola vez)
+        env_fail = env_020.copy()
+        env_fail["CAFETERIA_UPDATE_TEST_LAUNCH_RESULT"] = "FAILED"
+        run_accept_and_close_with_outcome(env_fail, "FAILED")
+        p_fl2, hwnd_fl2 = login_as(HOOKS_EXE, env_020, procs)
+        wait_until(
+            lambda: any(
+                " ".join(t.split()) == "No se pudo iniciar la instalación. El programa sigue en la versión 0.1.0 y se volverá a ofrecer."
+                for t in visible_texts(hwnd_fl2)
+            ),
+            desc="Franja resultado LAUNCH_FAILED tras FAILED",
+            timeout=12.0,
+        )
+        click_hwnd(find_button(hwnd_fl2, exact="Entendido"), settle=0.25)
+        user32.PostMessageW(hwnd_fl2, WM_CLOSE, 0, 0)
+        p_fl2.wait(timeout=8)
+        p_fl3, hwnd_fl3 = login_as(HOOKS_EXE, env_020, procs)
+        time.sleep(0.5)
+        assert_no_install_result_shown(hwnd_fl3, "reapertura tras LAUNCH_FAILED")
+        user32.PostMessageW(hwnd_fl3, WM_CLOSE, 0, 0)
+        p_fl3.wait(timeout=8)
+
+        # 4d-4. Simular cierre tras actualización exitosa (INSTALLED) -> muestra 'Se actualizó...' una vez
         con = sqlite3.connect(db_main)
-        con.execute("UPDATE update_state SET install_target_version='0.1.0', last_install_result='NONE', last_install_shown=0;")
+        con.execute("UPDATE update_state SET install_target_version='0.1.0', last_install_result='NONE', last_install_reason='', last_install_shown=0;")
         con.commit()
         con.close()
         p_d6, hwnd_d6 = login_as(HOOKS_EXE, env_020, procs)
@@ -809,7 +877,12 @@ def run_all_tests():
         click_hwnd(find_button(hwnd_d6, exact="Entendido"), settle=0.25)
         user32.PostMessageW(hwnd_d6, WM_CLOSE, 0, 0)
         p_d6.wait(timeout=8)
-        print("  [OK] Flujo completo 0.2.0 (franja, permisos, descarga/cancelar, POS, cierre y resultado único) validado.", flush=True)
+        p_d7, hwnd_d7 = login_as(HOOKS_EXE, env_020, procs)
+        time.sleep(0.5)
+        assert_no_install_result_shown(hwnd_d7, "reapertura tras INSTALLED")
+        user32.PostMessageW(hwnd_d7, WM_CLOSE, 0, 0)
+        p_d7.wait(timeout=8)
+        print("  [OK] Flujo completo 0.2.0 (franja, permisos, descarga/cancelar, POS, cierre y 4 motivos únicos) validado.", flush=True)
 
         # ------------------------------------------------------------------
         # 5. Descarga alterada (1 byte cambiado en el instalador del origen) -> rechazada
@@ -860,6 +933,44 @@ def run_all_tests():
         p_bdl.wait(timeout=8)
         print("  [OK] Descarga alterada rechazada.", flush=True)
 
+        # 5b. Descarga sin red (download_error_kind=NO_NETWORK -> mensaje del servicio, NO descarga no válida)
+        print("  [T7.5b] Probando descarga sin red (fuente vacía)...", flush=True)
+        env_dl_net = env_m.copy()
+        env_dl_net["CAFETERIA_UPDATE_TEST_SOURCE"] = src_empty
+        p_net, hwnd_net = login_as(HOOKS_EXE, env_dl_net, procs)
+        wait_until(lambda: find_button(hwnd_net, exact="Ver novedades", sync=True) is not None, desc="Franja 0.2.1 para prueba sin red")
+        click_hwnd(find_button(hwnd_net, exact="Ver novedades"), settle=0.25)
+        hwnd_n_net, _ = wait_for_window(p_net.pid, "Novedades de la versión 0.2.1", timeout=8.0)
+        btn_dl_net = find_button(hwnd_n_net, exact="Reintentar") or find_button(hwnd_n_net, exact="Descargar e instalar al cerrar")
+        assert btn_dl_net is not None, "Falta botón de descarga/reintentar antes de fallo sin red"
+        click_hwnd(btn_dl_net, settle=0.25)
+        wait_until(
+            lambda: any("conexión" in t.lower() or "internet" in t.lower() for t in visible_texts(hwnd_n_net)),
+            desc="Mensaje de error de conexión en descarga sin red",
+            timeout=12.0,
+        )
+        net_norm = [" ".join(t.split()) for t in visible_texts(hwnd_n_net)]
+        assert not any("La descarga no es válida y se descartó. No se instaló nada." in t for t in net_norm), (
+            f"Error de red en descarga NO debe mostrarse como descarga no válida: {net_norm}"
+        )
+        assert find_button(hwnd_n_net, exact="Reintentar") is not None, "Falta Reintentar tras fallo de conexión"
+        user32.PostMessageW(hwnd_n_net, WM_CLOSE, 0, 0)
+        wait_until(lambda: not find_windows_by_pid(p_net.pid, "Novedades de la versión"), desc="Cerrar Novedades sin red")
+
+        open_section_and_subnav(hwnd_net, "BackOffice", "Actualizaciones")
+        wait_until(
+            lambda: any("conexión" in t.lower() or "internet" in t.lower() for t in visible_texts(hwnd_net)),
+            desc="Mensaje de error de conexión en Actualizaciones tras descarga sin red",
+            timeout=8.0,
+        )
+        panel_net_texts = [" ".join(t.split()) for t in visible_texts(hwnd_net)]
+        assert not any("La descarga no es válida y se descartó. No se instaló nada." in t for t in panel_net_texts), (
+            f"Panel Actualizaciones mostró error de red como descarga no válida: {panel_net_texts}"
+        )
+        user32.PostMessageW(hwnd_net, WM_CLOSE, 0, 0)
+        p_net.wait(timeout=8)
+        print("  [OK] Descarga sin red muestra mensaje del servicio (no descarga inválida).", flush=True)
+
         # ------------------------------------------------------------------
         # 6. Desde archivo (USB): igual/menor rechazada, alterada rechazada, válida 0.3.0 aceptada
         # ------------------------------------------------------------------
@@ -896,7 +1007,7 @@ def run_all_tests():
         accept_file_dialog(p_u.pid, "Elegir archivo de datos", bad_json)
         accept_file_dialog(p_u.pid, "Elegir archivo de verificación", bad_sig)
         msg_bad_u = dismiss_plain_dialog(p_u.pid, "No se pudo usar la actualización")
-        assert "dañado" in msg_bad_u.lower() or "no corresponde" in msg_bad_u.lower(), f"Rechazo USB alterado inesperado: {msg_bad_u}"
+        assert "El instalador elegido no corresponde a esa actualización o está dañado. No se instaló nada." in " ".join(msg_bad_u.split()), f"Rechazo USB alterado inesperado: {msg_bad_u}"
 
         # 6c. Válida 0.3.0 -> aceptada al cerrar
         click_hwnd(btn_usb, settle=0.25)

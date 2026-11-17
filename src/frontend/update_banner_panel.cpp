@@ -134,27 +134,35 @@ void UpdateBannerPanel::show_install_result(
     const std::string& installed_version
 ) {
     mode_ = Mode::InstallResult;
+    const std::string effective_reason = result.reason.empty() ? "NOT_COMPLETED" : result.reason;
     const wxString ver_wx = wxString::FromUTF8(
         (result.version.empty() ? installed_version : result.version).c_str()
     );
     const wxString inst_wx = wxString::FromUTF8(installed_version.c_str());
 
-    wxString msg;
-    if (result.success) {
+    if (effective_reason == "INSTALLED") {
         SetBackgroundColour(Theme::ColorSuccessSoft);
         lbl_message_->SetForegroundColour(Theme::ColorSuccess);
-        msg = wxString::Format(wxT("Se actualizó a la versión %s."), ver_wx);
     } else {
         SetBackgroundColour(warning_banner_bg());
         lbl_message_->SetForegroundColour(Theme::ColorAccentText);
-        if (result.message.find("autorización de Windows") != std::string::npos ||
-            result.message.find("cancelado") != std::string::npos) {
+    }
+
+    wxString msg = wxString::FromUTF8(result.message.c_str());
+    if (msg.empty()) {
+        if (effective_reason == "INSTALLED") {
+            msg = wxString::Format(wxT("Se actualizó a la versión %s."), ver_wx);
+        } else if (effective_reason == "PERMISSION_DENIED") {
             msg = wxT("No se instaló porque no se dio permiso en Windows. Se volverá a ofrecer.");
+        } else if (effective_reason == "LAUNCH_FAILED") {
+            msg = wxString::Format(
+                wxT("No se pudo iniciar la instalación. El programa sigue en la versión %s y se volverá a ofrecer."),
+                inst_wx
+            );
         } else {
             msg = wxString::Format(
-                wxT("La actualización no se completó; sigues con la versión %s. %s"),
-                inst_wx,
-                wxString::FromUTF8(result.message.c_str())
+                wxT("La actualización no se completó; sigues con la versión %s. Se volverá a ofrecer."),
+                inst_wx
             );
         }
     }

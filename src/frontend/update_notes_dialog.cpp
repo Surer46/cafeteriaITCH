@@ -18,16 +18,6 @@ int compute_download_percent(std::int64_t done, std::int64_t total) {
     return static_cast<int>((done * 100) / total);
 }
 
-bool is_verification_rejection(const contracts::UpdateStatusDto& st) {
-    if (st.error_kind == "INVALID") {
-        return true;
-    }
-    return st.error_message.find("dañada") != std::string::npos ||
-           st.error_message.find("descartó") != std::string::npos ||
-           st.error_message.find("no se pudo comprobar") != std::string::npos ||
-           st.error_message.find("auténtica") != std::string::npos;
-}
-
 void set_wrapped_static_text(wxStaticText* lbl, const wxString& text, int wrap_w) {
     if (!lbl) {
         return;
@@ -327,7 +317,7 @@ void UpdateNotesDialog::apply_status(const contracts::UpdateStatusDto& st) {
         const bool has_dl_error = !st.error_message.empty() &&
                                   (st.error_kind == "DOWNLOAD" || st.error_kind == "INVALID");
         if (has_dl_error) {
-            const wxString err_msg = is_verification_rejection(st)
+            const wxString err_msg = (st.download_error_kind == "INVALID")
                 ? wxT("La descarga no es válida y se descartó. No se instaló nada.")
                 : wxString::FromUTF8(st.error_message.c_str());
             set_wrapped_static_text(lbl_error_, err_msg, wrap_w - FromDIP(24));
