@@ -269,11 +269,22 @@ bool decode_signature_file(const std::vector<std::uint8_t>& file_bytes, std::vec
     return true;
 }
 
+bool is_valid_installer_extension(const std::string& extension) {
+    if (extension.size() < 2 || extension.size() > 9 || extension[0] != '.') return false;
+    for (std::size_t i = 1; i < extension.size(); ++i) {
+        const char c = extension[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9'))) return false;
+    }
+    return true;
+}
+
 ManifestResult verify_and_parse_manifest(
     const std::vector<std::uint8_t>& manifest_bytes,
     const std::vector<std::uint8_t>& signature_file_bytes,
     const std::vector<PublicKey64>& keys,
-    const std::string& installed_version) {
+    const std::string& installed_version,
+    const std::string& installer_extension) {
+    const std::string extension = is_valid_installer_extension(installer_extension) ? installer_extension : std::string(".exe");
 
     if (keys.empty()) return fail(ManifestError::NoKeys, "no hay claves públicas configuradas");
     if (manifest_bytes.empty() || manifest_bytes.size() > kMaxManifestBytes) return fail(ManifestError::TooLarge, "tamaño del manifiesto");
@@ -330,7 +341,7 @@ ManifestResult verify_and_parse_manifest(
         return fail(ManifestError::BadFields, "instalador");
     }
     // El nombre está fijado por la versión: nada de rutas ni nombres arbitrarios.
-    if (name->s != "CafeteriaITCH-" + m.version + "-instalador-win64.exe") return fail(ManifestError::BadFields, "nombre del instalador");
+    if (name->s != "CafeteriaITCH-" + m.version + "-instalador-win64" + extension) return fail(ManifestError::BadFields, "nombre del instalador");
     if (size->n == 0 || size->n > kMaxInstallerBytes) return fail(ManifestError::BadFields, "tamaño del instalador");
     if (!is_lower_hex(sha->s, 64)) return fail(ManifestError::BadFields, "hash del instalador");
     m.installer_name = name->s;

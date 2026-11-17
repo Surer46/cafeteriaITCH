@@ -391,6 +391,7 @@ SqliteUpdateService::SqliteUpdateService(storage::SqliteDatabase& db,
     : db_(db), account_service_(std::move(account_service)) {
     ctx_ = std::make_shared<Context>();
     ctx_->opt = std::move(options);
+    if (!is_valid_installer_extension(ctx_->opt.installer_extension)) ctx_->opt.installer_extension = ".exe";
     if (!ctx_->opt.http && !ctx_->opt.keys.empty()) ctx_->opt.http = make_default_update_http_client();
     const char* file = db_.handle() ? sqlite3_db_filename(db_.handle(), "main") : nullptr;
     ctx_->db_file = file ? file : "";
@@ -475,7 +476,7 @@ void SqliteUpdateService::reconcile_install_state() {
             std::vector<std::uint8_t> kept_sig;
             bool file_ok = false;
             if (!row.downloaded_path.empty() && decode_hex(row.manifest_sig, kept_sig)) {
-                auto kept_manifest = verify_and_parse_manifest(row.manifest_bytes, kept_sig, ctx_->opt.keys, "0.0.0");
+                auto kept_manifest = verify_and_parse_manifest(row.manifest_bytes, kept_sig, ctx_->opt.keys, "0.0.0", ctx_->opt.installer_extension);
                 file_ok = kept_manifest.error == ManifestError::None && fs::is_regular_file(kept, ec) &&
                           fs::file_size(kept, ec) == kept_manifest.manifest.installer_size;
             }
@@ -619,7 +620,7 @@ void SqliteUpdateService::start_check_thread(bool manual) {
             }
 
             // 2. Verificación completa.
-            auto verified = verify_and_parse_manifest(manifest.body, sig.body, opt.keys, opt.installed_version);
+            auto verified = verify_and_parse_manifest(manifest.body, sig.body, opt.keys, opt.installed_version, opt.installer_extension);
             Row row;
             load_row(db, row);
             if (verified.error == ManifestError::NotNewer) {
@@ -707,7 +708,7 @@ void SqliteUpdateService::start_download_thread() {
             // La descarga se decide con el manifiesto guardado, VUELTO A VERIFICAR (la base puede ser editada por otros).
             std::vector<std::uint8_t> sig;
             if (!decode_hex(row.manifest_sig, sig)) { fail_download("INVALID", kMsgInvalid); return; }
-            auto verified = verify_and_parse_manifest(row.manifest_bytes, sig, opt.keys, opt.installed_version);
+            auto verified = verify_and_parse_manifest(row.manifest_bytes, sig, opt.keys, opt.installed_version, opt.installer_extension);
             if (verified.error != ManifestError::None) {
                 fail_download("INVALID", kMsgInvalid);
                 write_audit_direct(db, "", "UPDATE_REJECTED", "El manifiesto guardado ya no pasa la verificación");
@@ -854,7 +855,7 @@ contracts::Result<contracts::UpdateFromFilesResultDto> SqliteUpdateService::appl
         !read_small_file(fs::u8path(verification_path), kMaxSignatureFileBytes, sig_file)) {
         return done(false, "UNREADABLE", unreadable);
     }
-    auto verified = verify_and_parse_manifest(manifest, sig_file, ctx_->opt.keys, ctx_->opt.installed_version);
+    auto verified = verify_and_parse_manifest(manifest, sig_file, ctx_->opt.keys, ctx_->opt.installed_version, ctx_->opt.installer_extension);
     if (verified.error == ManifestError::NotNewer) {
         return done(false, "NOT_NEWER", "Esa actualización no es más nueva que la versión instalada.");
     }
@@ -993,7 +994,7 @@ SqliteUpdateService::InstallLaunchPlan SqliteUpdateService::prepare_install_on_c
     // Verificación completa, desde cero: nada de lo guardado en la base se da por bueno.
     std::vector<std::uint8_t> sig;
     if (!decode_hex(row.manifest_sig, sig)) return no("firma guardada ilegible");
-    auto verified = verify_and_parse_manifest(row.manifest_bytes, sig, opt.keys, opt.installed_version);
+    auto verified = verify_and_parse_manifest(row.manifest_bytes, sig, opt.keys, opt.installed_version, opt.installer_extension);
     if (verified.error != ManifestError::None) return no("el manifiesto guardado no verifica o no es más nuevo");
     const auto& m = verified.manifest;
 

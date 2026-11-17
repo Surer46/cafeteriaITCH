@@ -19,6 +19,10 @@ namespace app::services {
 struct UpdateServiceOptions {
     std::string data_dir;                       // carpeta de datos: las descargas van en <datos>\updates
     std::string installed_version{"0.0.0"};     // versión del programa en ejecución (project(VERSION))
+    // Extensión del archivo del instalador (nombre en el manifiesto, archivo descargado, copia desde USB y archivo que
+    // se lanza). El programa real usa ".exe" (main_app no la cambia); las pruebas usan otra para no escribir .exe en
+    // %TEMP% (Windows Defender lo trata como comportamiento sospechoso). Inválida = ".exe".
+    std::string installer_extension{".exe"};
     bool is_portable{false};                    // copia portable: avisa, pero no se actualiza sola
     std::vector<PublicKey64> keys;              // claves públicas de confianza; vacío = no configurado
     std::shared_ptr<IHttpClient> http;          // si es null: make_default_update_http_client()

@@ -115,22 +115,33 @@ std::string sha_hex(const std::vector<std::uint8_t>& data) {
     return hex_of(h.finalize());
 }
 
-// Contenido de prueba de baja entropía y claramente no ejecutable: texto ASCII repetido con un contador (nunca empieza
-// por "MZ"). Bytes pseudoaleatorios en un archivo .exe parecen un ejecutable empaquetado y Windows Defender los
-// detecta por aprendizaje automático. La semilla cambia el texto, así que cada versión tiene su propio contenido y hash.
-std::vector<std::uint8_t> pseudo_bytes(std::size_t n, std::uint32_t seed) {
-    std::vector<std::uint8_t> v;
-    v.reserve(n + 100);
-    for (unsigned line = 1; v.size() < n; ++line) {
-        char buf[100];
-        std::snprintf(buf, sizeof(buf), "CAFETERIA ITCH PRUEBA DE ACTUALIZACION serie %u linea %06u\r\n", seed, line);
-        for (const char* c = buf; *c; ++c) v.push_back(static_cast<std::uint8_t>(*c));
-    }
-    v.resize(n);
+// Contenido de los instaladores de prueba: UNA línea de cabecera en texto ("CAFETERIA ITCH PRUEBA version X.Y.Z variante N")
+// seguida de bytes cero hasta el tamaño pedido. Casi vacío y sin parecido a nada ejecutable (Windows Defender detectó
+// por aprendizaje automático texto repetido y bytes aleatorios). Cada versión y variante tiene su propia cabecera, así
+// que su hash es distinto; un byte o un tamaño alterado cambian el hash o el tamaño como siempre.
+std::vector<std::uint8_t> installer_bytes(std::size_t n, const std::string& version, unsigned variant) {
+    const std::string header = "CAFETERIA ITCH PRUEBA version " + version + " variante " + std::to_string(variant) + "\n";
+    std::vector<std::uint8_t> v(n, 0);
+    for (std::size_t i = 0; i < header.size() && i < n; ++i) v[i] = static_cast<std::uint8_t>(header[i]);
     return v;
 }
 
-std::string installer_name(const std::string& version) { return "CafeteriaITCH-" + version + "-instalador-win64.exe"; }
+// Para los datos que no son instaladores (firmas de prueba, manifiestos): la misma forma, variante = semilla.
+std::vector<std::uint8_t> pseudo_bytes(std::size_t n, std::uint32_t seed) { return installer_bytes(n, "0.0.0", seed); }
+
+// Ninguna prueba escribe archivos .exe: Windows Defender trata como sospechoso a un programa que suelta ejecutables en
+// %TEMP% (detección por comportamiento) y llegó a poner en cuarentena el ctest.exe del toolchain. El servicio acepta una
+// extensión de instalador configurable (UpdateServiceOptions::installer_extension, ".exe" por omisión) y las pruebas
+// usan ".bin". La regla con las opciones por omisión (".exe") se prueba aparte.
+const char* const kTestExt = ".bin";
+
+std::string installer_name(const std::string& version) { return "CafeteriaITCH-" + version + "-instalador-win64" + kTestExt; }
+
+// verify_and_parse_manifest con la extensión de prueba
+ManifestResult vm(const std::vector<std::uint8_t>& manifest, const std::vector<std::uint8_t>& sig, const std::vector<PublicKey64>& keys,
+                  const std::string& installed) {
+    return verify_and_parse_manifest(manifest, sig, keys, installed, kTestExt);
+}
 
 // Manifiesto con el mismo formato que genera tools\publicar_version.ps1.
 std::string manifest_json(const std::string& version, const std::vector<std::string>& notes, const std::vector<std::uint8_t>& installer,
@@ -231,17 +242,12 @@ struct Published {
     std::vector<std::uint8_t> signature;
 };
 
-std::uint32_t version_seed(const std::string& version) {
-    std::uint32_t h = 98765u;
-    for (unsigned char c : version) h = h * 31u + c;  // distinto para cada versión: 0.2.0 y 0.3.0 no comparten contenido
-    return h;
-}
 
-Published make_release(const TestKey& key, const std::string& version, std::size_t installer_size = 300 * 1000,
+Published make_release(const TestKey& key, const std::string& version, std::size_t installer_size = 2000,
                        const std::vector<std::string>& notes = {"Ahora el ticket muestra la hora.", "Se corrigió un error al cobrar."}) {
     Published p;
     p.version = version;
-    p.installer = pseudo_bytes(installer_size, version_seed(version));
+    p.installer = installer_bytes(installer_size, version, 1);
     p.manifest = bytes_of(manifest_json(version, notes, p.installer));
     p.signature = key.sign(p.manifest);
     return p;
@@ -262,6 +268,7 @@ struct UEnv {
     std::shared_ptr<SqliteAccountService> account;
     std::shared_ptr<FakeHttp> http{std::make_shared<FakeHttp>()};
     std::int64_t now_ms{1'800'000'000'000};
+    std::string ext{kTestExt};  // extensión del instalador del servicio (".exe" solo en la prueba de la regla por omisión)
     std::unique_ptr<SqliteUpdateService> svc;
     std::vector<PublicKey64> keys;
 
@@ -289,6 +296,7 @@ struct UEnv {
         UpdateServiceOptions opt;
         opt.data_dir = dir.u8string();
         opt.installed_version = installed_version;
+        opt.installer_extension = ext;
         opt.is_portable = portable;
         opt.keys = keys;
         opt.http = http;
@@ -388,6 +396,61 @@ static void test_signature_and_keys() {
                "Sin configurar: ninguna clave incrustada");
 }
 
+static void test_installer_extension_rules() {
+    std::cout << "[TEST] B13c: la extensión del instalador: \".exe\" por omisión, configurable solo por las opciones..." << std::endl;
+    TestKey key;
+    const auto inst = pseudo_bytes(2000, 5);
+    const std::vector<PublicKey64> keys = {key.pub};
+    const std::vector<std::string> notes = {"Novedad."};
+    auto signed_manifest = [&](const std::string& name) {
+        const auto m = bytes_of(manifest_json("0.2.0", notes, inst, "CafeteriaITCH", "x64", name));
+        return std::make_pair(m, bytes_of(hex_of(key.sign(m))));
+    };
+    const auto exe_m = signed_manifest("CafeteriaITCH-0.2.0-instalador-win64.exe");
+    const auto bin_m = signed_manifest("CafeteriaITCH-0.2.0-instalador-win64.bin");
+    // Con las opciones por omisión (como el programa real) solo vale ".exe"
+    TEST_CHECK(verify_and_parse_manifest(exe_m.first, exe_m.second, keys, "0.1.0").error == ManifestError::None, "Por omisión: .exe se acepta");
+    TEST_CHECK(verify_and_parse_manifest(bin_m.first, bin_m.second, keys, "0.1.0").error == ManifestError::BadFields, "Por omisión: .bin se rechaza");
+    TEST_CHECK(verify_and_parse_manifest(bin_m.first, bin_m.second, keys, "0.1.0", ".exe").error == ManifestError::BadFields, "Explícito .exe: .bin se rechaza");
+    TEST_CHECK(verify_and_parse_manifest(bin_m.first, bin_m.second, keys, "0.1.0", ".bin").error == ManifestError::None, "Con .bin configurado, .bin se acepta");
+    TEST_CHECK(verify_and_parse_manifest(exe_m.first, exe_m.second, keys, "0.1.0", ".bin").error == ManifestError::BadFields, "Con .bin configurado, .exe se rechaza");
+    // Una extensión inválida se trata como ".exe" (nunca abre la puerta a nombres raros)
+    for (const char* bad : {"exe", "", ".", "..", "./x", ".a/b", ".exe ", ".muylargoooo", "bin"}) {
+        TEST_CHECK(!is_valid_installer_extension(bad), std::string("Extensión inválida: '") + bad + "'");
+        TEST_CHECK(verify_and_parse_manifest(bin_m.first, bin_m.second, keys, "0.1.0", bad).error == ManifestError::BadFields, std::string("Inválida '") + bad + "' = .exe: rechaza .bin");
+        TEST_CHECK(verify_and_parse_manifest(exe_m.first, exe_m.second, keys, "0.1.0", bad).error == ManifestError::None, std::string("Inválida '") + bad + "' = .exe: acepta .exe");
+    }
+    TEST_CHECK(is_valid_installer_extension(".exe") && is_valid_installer_extension(".bin") && is_valid_installer_extension(".a1"), "Extensiones válidas");
+
+    // El servicio con las opciones por omisión: un manifiesto .bin firmado por la clave de confianza se ignora; uno .exe se ofrece
+    UEnv env("extension por omision", {key.pub});
+    env.login_owner();
+    TEST_CHECK(UpdateServiceOptions().installer_extension == ".exe", "UpdateServiceOptions: .exe por omisión");
+    env.ext = ".exe";
+    env.make_service(kInstalled, false);
+    env.http->route(kManifestUrl, bin_m.first);
+    env.http->route(kSigUrl, bin_m.second);
+    {
+        const auto st = env.check_and_wait();
+        TEST_CHECK(st.state == "ERROR" && st.error_kind == "INVALID" && st.available_version.empty(), "Servicio por omisión: manifiesto .bin rechazado: " + st.state + "/" + st.error_kind);
+    }
+    env.now_ms += 11LL * 60 * 1000;
+    env.http->route(kManifestUrl, exe_m.first);
+    env.http->route(kSigUrl, exe_m.second);
+    {
+        const auto st = env.check_and_wait();
+        TEST_CHECK(st.state == "AVAILABLE" && st.available_version == "0.2.0", "Servicio por omisión: manifiesto .exe aceptado (solo se anuncia; no se descarga ni se escribe nada)");
+    }
+    TEST_CHECK(!fs::exists(env.dir / "updates" / "0.2.0"), "No se creó ningún archivo de instalador");
+    // Una extensión inválida en las opciones cae en .exe
+    env.ext = "../x";
+    env.make_service(kInstalled, false);
+    env.now_ms += 11LL * 60 * 1000;
+    env.http->route(kManifestUrl, bin_m.first);
+    env.http->route(kSigUrl, bin_m.second);
+    TEST_CHECK(env.check_and_wait().state == "AVAILABLE", "Con una extensión inválida en las opciones se usa .exe (el .bin ya no se ofrece, queda lo anterior)");
+}
+
 static void test_versions() {
     std::cout << "[TEST] B11: versiones a.b.c..." << std::endl;
     UpdateVersion a, b;
@@ -412,7 +475,7 @@ static void test_manifest_verification() {
     auto verify = [&](const std::string& json, const TestKey& signer, const std::string& installed = "0.1.0",
                       const std::vector<PublicKey64>& use_keys = {}) {
         const auto m = bytes_of(json);
-        return verify_and_parse_manifest(m, bytes_of(hex_of(signer.sign(m))), use_keys.empty() ? keys : use_keys, installed);
+        return vm(m, bytes_of(hex_of(signer.sign(m))), use_keys.empty() ? keys : use_keys, installed);
     };
     const std::string good = manifest_json("0.2.0", notes, inst);
 
@@ -424,22 +487,22 @@ static void test_manifest_verification() {
     {
         const auto m = bytes_of(good);
         const auto s = key.sign(m);
-        TEST_CHECK(verify_and_parse_manifest(m, s, keys, "0.1.0").error == ManifestError::None, "Firma cruda de 64 bytes");
-        TEST_CHECK(verify_and_parse_manifest(m, bytes_of("  " + hex_of(s) + " \r\n"), keys, "0.1.0").error == ManifestError::None, "Firma hexadecimal con espacios");
-        TEST_CHECK(verify_and_parse_manifest(m, bytes_of("zz" + hex_of(s).substr(2)), keys, "0.1.0").error == ManifestError::BadSignature, "Hexadecimal con basura");
-        TEST_CHECK(verify_and_parse_manifest(m, {}, keys, "0.1.0").error == ManifestError::BadSignature, "Sin firma");
+        TEST_CHECK(vm(m, s, keys, "0.1.0").error == ManifestError::None, "Firma cruda de 64 bytes");
+        TEST_CHECK(vm(m, bytes_of("  " + hex_of(s) + " \r\n"), keys, "0.1.0").error == ManifestError::None, "Firma hexadecimal con espacios");
+        TEST_CHECK(vm(m, bytes_of("zz" + hex_of(s).substr(2)), keys, "0.1.0").error == ManifestError::BadSignature, "Hexadecimal con basura");
+        TEST_CHECK(vm(m, {}, keys, "0.1.0").error == ManifestError::BadSignature, "Sin firma");
     }
     TEST_CHECK(verify(good, other).error == ManifestError::BadSignature, "Firma de OTRA clave");
-    TEST_CHECK(verify_and_parse_manifest(bytes_of(good), bytes_of(hex_of(key.sign(bytes_of(good)))), {}, "0.1.0").error == ManifestError::NoKeys,
+    TEST_CHECK(vm(bytes_of(good), bytes_of(hex_of(key.sign(bytes_of(good)))), {}, "0.1.0").error == ManifestError::NoKeys,
                "Sin claves configuradas se rechaza todo");
     {   // manifiesto alterado un byte DESPUÉS de firmar
         auto m = bytes_of(good);
         const auto sig = key.sign(m);
         m[m.size() / 2] ^= 1;
-        TEST_CHECK(verify_and_parse_manifest(m, bytes_of(hex_of(sig)), keys, "0.1.0").error == ManifestError::BadSignature, "Manifiesto alterado");
+        TEST_CHECK(vm(m, bytes_of(hex_of(sig)), keys, "0.1.0").error == ManifestError::BadSignature, "Manifiesto alterado");
         auto n2 = bytes_of(good);
         n2.push_back(' ');
-        TEST_CHECK(verify_and_parse_manifest(n2, bytes_of(hex_of(sig)), keys, "0.1.0").error == ManifestError::BadSignature, "Un byte de más");
+        TEST_CHECK(vm(n2, bytes_of(hex_of(sig)), keys, "0.1.0").error == ManifestError::BadSignature, "Un byte de más");
     }
     // Versiones: igual y menor se ignoran; mayor sí
     TEST_CHECK(verify(good, key, "0.2.0").error == ManifestError::NotNewer, "Versión igual a la instalada");
@@ -484,7 +547,7 @@ static void test_manifest_verification() {
     // Manifiesto enorme
     {
         std::vector<std::uint8_t> huge(kMaxManifestBytes + 1, ' ');
-        TEST_CHECK(verify_and_parse_manifest(huge, bytes_of(hex_of(key.sign(huge))), keys, "0.1.0").error == ManifestError::TooLarge, "Manifiesto demasiado grande");
+        TEST_CHECK(vm(huge, bytes_of(hex_of(key.sign(huge))), keys, "0.1.0").error == ManifestError::TooLarge, "Manifiesto demasiado grande");
     }
 }
 
@@ -880,8 +943,8 @@ static void test_prepare_install_never_trusts_unverified() {
         std::error_code ec;
         fs::remove(plan.installer, ec);
         TEST_CHECK(fs::exists(plan.installer), "No se puede borrar");
-        fs::rename(plan.installer, plan.installer.parent_path() / "otro.exe", ec);
-        TEST_CHECK(fs::exists(plan.installer) && !fs::exists(plan.installer.parent_path() / "otro.exe"), "No se puede renombrar");
+        fs::rename(plan.installer, plan.installer.parent_path() / "otro.bin", ec);
+        TEST_CHECK(fs::exists(plan.installer) && !fs::exists(plan.installer.parent_path() / "otro.bin"), "No se puede renombrar");
         TEST_CHECK(env.count("event_type = 'UPDATE_INSTALL_LAUNCHED'") == 1, "Bitácora: instalación lanzada");
     }
     {   // soltado el plan, el archivo vuelve a poder modificarse: se altera UN byte y ya no verifica
@@ -995,13 +1058,13 @@ static void test_use_update_from_files() {
     TEST_CHECK(r.error_code() == ErrorCode::InvalidInput, "Manifiesto alterado");
     auto altered_installer = rel.installer;
     altered_installer[100] ^= 1;
-    r = env.svc->use_update_from_files(write("malo.exe", altered_installer), manifest, sig);
+    r = env.svc->use_update_from_files(write("malo.bin", altered_installer), manifest, sig);
     TEST_CHECK(r.error_code() == ErrorCode::InvalidInput && !has_jargon(r.error_message()), "Instalador alterado: " + r.error_message());
     auto short_installer = rel.installer;
     short_installer.resize(short_installer.size() - 5);
-    r = env.svc->use_update_from_files(write("corto.exe", short_installer), manifest, sig);
+    r = env.svc->use_update_from_files(write("corto.bin", short_installer), manifest, sig);
     TEST_CHECK(r.error_code() == ErrorCode::InvalidInput, "Tamaño distinto");
-    r = env.svc->use_update_from_files((usb / "no-existe.exe").u8string(), manifest, sig);
+    r = env.svc->use_update_from_files((usb / "no-existe.bin").u8string(), manifest, sig);
     TEST_CHECK(r.error_code() == ErrorCode::InvalidInput, "Instalador inexistente");
     r = env.svc->use_update_from_files(installer, (usb / "no-existe.json").u8string(), sig);
     TEST_CHECK(r.error_code() == ErrorCode::InvalidInput, "Manifiesto inexistente");
@@ -1104,7 +1167,7 @@ static void test_winhttp_client_without_network() {
     const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(Clock::now() - t0).count();
     TEST_CHECK(r.error != HttpError::None && r.error != HttpError::NotHttps, "Conexión rechazada: error (" + std::to_string(static_cast<int>(r.error)) + ")");
     TEST_CHECK(ms < 8000, "Con tiempo acotado (" + std::to_string(ms) + " ms)");
-    const auto dl = client->download("http://example.com/x.exe", g_root / "x.part", 0, nullptr, 2000);
+    const auto dl = client->download("http://example.com/x.bin", g_root / "x.part", 0, nullptr, 2000);
     TEST_CHECK(dl.error == HttpError::NotHttps && !fs::exists(g_root / "x.part"), "La descarga también exige https");
 }
 
@@ -1138,6 +1201,21 @@ static int run_powershell(const std::wstring& args, const fs::path& log) {
     return result;
 }
 
+// Copia tools\publicar_version.ps1 (y su archivo común) a `dir` cambiando SOLO la extensión del instalador a la de prueba,
+// para ejercer la misma lógica de publicación sin crear ningún .exe. Devuelve la ruta de la copia.
+static std::wstring patched_publish_script(const fs::path& dir) {
+    auto read = [](const fs::path& f) { std::ifstream in(f, std::ios::binary); std::ostringstream ss; ss << in.rdbuf(); return ss.str(); };
+    auto write = [](const fs::path& f, const std::string& text) { std::ofstream out(f, std::ios::binary | std::ios::trunc); out << text; };
+    fs::create_directories(dir);
+    const fs::path tools = fs::u8path(TOOLS_DIR);
+    std::string text = read(tools / "publicar_version.ps1");
+    const std::string from = "instalador-win64.exe", to = std::string("instalador-win64") + kTestExt;
+    for (std::size_t pos = text.find(from); pos != std::string::npos; pos = text.find(from, pos + to.size())) text.replace(pos, from.size(), to);
+    write(dir / "publicar_version.ps1", text);
+    write(dir / "actualizaciones_comun.ps1", read(tools / "actualizaciones_comun.ps1"));
+    return (dir / "publicar_version.ps1").wstring();
+}
+
 static std::string read_text_file(const fs::path& p) {
     std::ifstream in(p, std::ios::binary);
     std::ostringstream ss;
@@ -1160,7 +1238,7 @@ static void test_publish_tool_interoperates() {
     const fs::path notes = work / "notas.txt";
     { std::ofstream out(notes, std::ios::binary); out << "\xEF\xBB\xBF" << u8"Se corrigió el cobro con tarjeta.\r\nAhora el ticket muestra la hora «exacta».\r\n"; }
     const fs::path out_dir = work / "salida";
-    const std::wstring script = fs::u8path(TOOLS_DIR).wstring() + L"\\publicar_version.ps1";
+    const std::wstring script = patched_publish_script(work / "guion");
     const std::wstring args = L"-File \"" + script + L"\" -Version 0.2.0 -Instalador \"" + installer_file.wstring() + L"\" -Notas \"" +
                               notes.wstring() + L"\" -Clave \"" + fs::u8path(TEST_PRIVATE_KEY_PATH).wstring() + L"\" -Salida \"" + out_dir.wstring() + L"\"";
     const int rc = run_powershell(args, work / "publicar.log");
@@ -1174,13 +1252,13 @@ static void test_publish_tool_interoperates() {
     TEST_CHECK(parse_public_key_hex(TEST_PUBLIC_KEY_HEX, test_pub), "Clave pública de prueba");
     const auto manifest = bytes_of(read_text_file(out_dir / "manifiesto.json"));
     const auto sig = bytes_of(read_text_file(out_dir / "manifiesto.json.sig"));
-    auto v = verify_and_parse_manifest(manifest, sig, {test_pub}, "0.1.0");
+    auto v = vm(manifest, sig, {test_pub}, "0.1.0");
     TEST_CHECK(v.error == ManifestError::None && v.manifest.version == "0.2.0" && v.manifest.installer_size == installer.size() &&
                    v.manifest.installer_sha256 == sha_hex(installer), "El programa verifica lo que firmó la herramienta (" + v.detail + ")");
     TEST_CHECK(v.manifest.notes.size() == 2 && v.manifest.notes[0] == u8"Se corrigió el cobro con tarjeta." &&
                    v.manifest.notes[1] == u8"Ahora el ticket muestra la hora «exacta».", "Notas con tildes y comillas latinas");
     TestKey stranger;
-    TEST_CHECK(verify_and_parse_manifest(manifest, sig, {stranger.pub}, "0.1.0").error == ManifestError::BadSignature, "Otra clave no lo acepta");
+    TEST_CHECK(vm(manifest, sig, {stranger.pub}, "0.1.0").error == ManifestError::BadSignature, "Otra clave no lo acepta");
     // La herramienta rechaza lo que no debe
     TEST_CHECK(run_powershell(L"-File \"" + script + L"\" -Version 0.2.0 -Instalador \"" + installer_file.wstring() + L"\" -Notas \"" + notes.wstring() +
                                   L"\" -Clave \"" + fs::u8path(TEST_PRIVATE_KEY_PATH).wstring() + L"\" -Salida \"" + out_dir.wstring() + L"\"", work / "otra.log") != 0,
@@ -1210,7 +1288,7 @@ static void test_hooks_or_their_absence() {
     { std::ofstream out(notes, std::ios::binary); out << "Novedad de prueba.\r\n"; }
     std::error_code ec;
     if (fs::exists(fs::path(env_get("SystemRoot")) / "System32" / "WindowsPowerShell" / "v1.0" / "powershell.exe", ec)) {
-        const std::wstring script = fs::u8path(TOOLS_DIR).wstring() + L"\\publicar_version.ps1";
+        const std::wstring script = patched_publish_script(work / "guion");
         TEST_CHECK(run_powershell(L"-File \"" + script + L"\" -Version 0.2.0 -Instalador \"" + installer_file.wstring() + L"\" -Notas \"" + notes.wstring() +
                                       L"\" -Clave \"" + fs::u8path(TEST_PRIVATE_KEY_PATH).wstring() + L"\" -Salida \"" + source.wstring() + L"\"", work / "p.log") == 0,
                    "Preparar la fuente local con la clave de prueba");
@@ -1228,6 +1306,7 @@ static void test_hooks_or_their_absence() {
         UpdateServiceOptions opt;
         opt.data_dir = env.dir.u8string();
         opt.installed_version = "0.1.0";
+        opt.installer_extension = kTestExt;
         opt.keys = configured_update_keys();
         opt.now_ms = [&env] { return env.now_ms; };
         env.svc.reset();
@@ -1286,6 +1365,7 @@ static void test_hooks_or_their_absence() {
         UpdateServiceOptions opt;
         opt.data_dir = env2.dir.u8string();
         opt.installed_version = "0.1.0";
+        opt.installer_extension = kTestExt;
         opt.keys = configured_update_keys();
         env2.svc.reset();
         env2.svc = std::make_unique<SqliteUpdateService>(env2.db, env2.account, std::move(opt));
@@ -1546,7 +1626,7 @@ static void test_apply_update_from_files_reasons() {
         seen(r.value().message);
         return r.value();
     };
-    expect("instalador inexistente", (usb / "no-existe.exe").u8string(), data, verif, "UNREADABLE");
+    expect("instalador inexistente", (usb / "no-existe.bin").u8string(), data, verif, "UNREADABLE");
     expect("datos inexistentes", installer, (usb / "no-existe.json").u8string(), verif, "UNREADABLE");
     expect("verificación inexistente", installer, data, (usb / "no-existe.sig").u8string(), "UNREADABLE");
     expect("instalador es una carpeta", usb.u8string(), data, verif, "UNREADABLE");
@@ -1559,10 +1639,10 @@ static void test_apply_update_from_files_reasons() {
     expect("datos alterados", installer, write("alterado.json", altered_data), verif, "INVALID");
     auto altered_inst = rel.installer;
     altered_inst[100] ^= 1;
-    expect("instalador alterado", write("malo.exe", altered_inst), data, verif, "INVALID");
+    expect("instalador alterado", write("malo.bin", altered_inst), data, verif, "INVALID");
     auto short_inst = rel.installer;
     short_inst.resize(short_inst.size() - 5);
-    expect("instalador incompleto", write("corto.exe", short_inst), data, verif, "INVALID");
+    expect("instalador incompleto", write("corto.bin", short_inst), data, verif, "INVALID");
     const auto same = make_release(key, "0.1.0");
     expect("misma versión", write(installer_name("0.1.0"), same.installer), write("igual.json", same.manifest), write("igual.sig", bytes_of(hex_of(same.signature))), "NOT_NEWER");
     const auto older = make_release(key, "0.0.9");
@@ -1578,7 +1658,7 @@ static void test_apply_update_from_files_reasons() {
     std::error_code ec;
     fs::remove_all(block, ec);
     TEST_CHECK(env.svc->use_update_from_files(installer, data, (usb / "no-existe.sig").u8string()).error_code() == ErrorCode::InvalidInput, "El método anterior: UNREADABLE = InvalidInput");
-    TEST_CHECK(env.svc->use_update_from_files(write("a.exe", same.installer), write("a.json", same.manifest), write("a.sig", bytes_of(hex_of(same.signature)))).error_code() == ErrorCode::InvalidState,
+    TEST_CHECK(env.svc->use_update_from_files(write("a.bin", same.installer), write("a.json", same.manifest), write("a.sig", bytes_of(hex_of(same.signature)))).error_code() == ErrorCode::InvalidState,
                "El método anterior: NOT_NEWER = InvalidState");
 
     // Aceptada
@@ -1698,6 +1778,7 @@ int main() {
     fs::create_directories(g_root, ec);
 
     test_signature_and_keys();
+    test_installer_extension_rules();
     test_versions();
     test_manifest_verification();
     test_check_flow_and_limits();
