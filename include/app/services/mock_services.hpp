@@ -13,6 +13,7 @@
 #include "app/contracts/report_service.hpp"
 #include "app/contracts/backup_service.hpp"
 #include "app/contracts/update_service.hpp"
+#include "app/contracts/promotion_service.hpp"
 #include "app/contracts/print_config_service.hpp"
 
 namespace app::storage {
@@ -103,6 +104,7 @@ public:
 
     contracts::Result<contracts::RecipeDto> get_recipe(const std::string& product_id) override;
     contracts::Result<contracts::RecipeCostingDto> get_recipe_costing(const std::string& product_id) override;
+    contracts::OperationResult enable_stock_for_direct_product(const std::string& product_id, const std::string& link_ingredient_id = "") override;
     contracts::OperationResult set_recipe(
         const std::string& product_id,
         const std::vector<contracts::RecipeItemDto>& items
@@ -258,6 +260,26 @@ private:
     contracts::PrinterStationConfig config_;
 };
 
+// Promociones y combos simulados (solo para desarrollar la interfaz): en memoria, sin reglas de descuento.
+class MockPromotionService : public contracts::IPromotionService {
+public:
+    contracts::Result<std::vector<contracts::PromotionDto>> list_promotions(const contracts::PromotionFilterDto& filter) override;
+    contracts::Result<contracts::PromotionDto> get_promotion(const std::string& promotion_id) override;
+    contracts::Result<contracts::PromotionDto> create_promotion(const contracts::CreatePromotionDto& input) override;
+    contracts::Result<contracts::PromotionDto> update_promotion(const contracts::UpdatePromotionDto& input) override;
+    contracts::OperationResult set_promotion_active(const std::string& promotion_id, bool active) override;
+    contracts::Result<std::vector<contracts::ComboDto>> list_combos(bool include_inactive) override;
+    contracts::Result<contracts::ComboDto> get_combo(const std::string& product_id) override;
+    contracts::Result<contracts::ComboDto> create_combo(const contracts::CreateComboDto& input) override;
+    contracts::Result<contracts::ComboDto> update_combo(const contracts::UpdateComboDto& input) override;
+    contracts::Result<contracts::ComboCostingDto> get_combo_costing(const std::string& product_id) override;
+
+private:
+    std::vector<contracts::PromotionDto> promotions_;
+    std::vector<contracts::ComboDto> combos_;
+    int next_id_{1};
+};
+
 // Servicio de actualizaciones simulado (solo para desarrollar la interfaz): nunca toca la red.
 class MockUpdateService : public contracts::IUpdateService {
 public:
@@ -284,6 +306,7 @@ struct ServiceRegistry {
     std::shared_ptr<contracts::IBackupService> backup_service;
     std::shared_ptr<contracts::IPrintConfigService> print_config_service;
     std::shared_ptr<contracts::IUpdateService> update_service;  // B11: actualizaciones del programa
+    std::shared_ptr<contracts::IPromotionService> promotion_service;  // B14: promociones y combos
 
     static ServiceRegistry create_mock_registry();
     // app_version: versión del programa en ejecución (project(VERSION)); is_portable: copia con portable.flag.

@@ -646,6 +646,7 @@ static void test_sale_while_auto_backup_copies() {
     std::cout << "[TEST] B12: confirmar una venta mientras el automático copia (base grande)..." << std::endl;
     Env env("venta durante auto", 400000);
     CreateProductDto p;
+    p.track_stock = false;  // B14: se vende sin existencia controlada, como antes
     p.sku = "B12-V"; p.name = "Café"; p.category = "Bebidas"; p.price = Money::from_cents(3000);
     auto prod = env.reg.catalog_service->create_product(p);
     TEST_CHECK(prod.is_success(), "Producto: " + prod.error_message());

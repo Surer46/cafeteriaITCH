@@ -9,6 +9,7 @@
 #include "app/contracts/account_service.hpp"
 #include "app/contracts/cart_service.hpp"
 #include "app/contracts/shift_service.hpp"
+#include "app/services/promotion_engine.hpp"
 #include "app/storage/sqlite_database.hpp"
 
 namespace app::services {
@@ -19,7 +20,8 @@ public:
         storage::SqliteDatabase& db,
         std::shared_ptr<contracts::IAccountService> account_service,
         std::shared_ptr<contracts::ICartService> cart_service,
-        std::shared_ptr<contracts::IShiftService> shift_service
+        std::shared_ptr<contracts::IShiftService> shift_service,
+        LocalClock clock = {}   // hora local para la vigencia de las promociones; por omisión la del sistema
     );
 
     contracts::Result<contracts::SaleConfirmationDto> confirm_sale(
@@ -45,6 +47,7 @@ private:
     std::shared_ptr<contracts::IAccountService> account_service_;
     std::shared_ptr<contracts::ICartService> cart_service_;
     std::shared_ptr<contracts::IShiftService> shift_service_;
+    LocalClock clock_;
 
     mutable std::mutex in_flight_mutex_;
     std::unordered_set<std::string> in_flight_keys_;

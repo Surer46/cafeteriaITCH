@@ -6,6 +6,7 @@
 #include "app/contracts/cart_service.hpp"
 #include "app/contracts/account_service.hpp"
 #include "app/contracts/catalog_service.hpp"
+#include "app/services/promotion_engine.hpp"
 #include "app/storage/sqlite_database.hpp"
 
 namespace app::services {
@@ -15,7 +16,8 @@ public:
     SqliteCartService(
         storage::SqliteDatabase& db,
         std::shared_ptr<contracts::IAccountService> account_service,
-        std::shared_ptr<contracts::ICatalogService> catalog_service
+        std::shared_ptr<contracts::ICatalogService> catalog_service,
+        LocalClock clock = {}   // hora local para la vigencia de las promociones; por omisión la del sistema
     );
 
     contracts::Result<contracts::CartSummaryDto> get_cart() override;
@@ -46,6 +48,7 @@ private:
     storage::SqliteDatabase& db_;
     std::shared_ptr<contracts::IAccountService> account_service_;
     std::shared_ptr<contracts::ICatalogService> catalog_service_;
+    LocalClock clock_;
 };
 
 } // namespace app::services

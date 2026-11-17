@@ -79,20 +79,25 @@ contracts::Result<contracts::DailySalesReportDto> SqliteReportService::get_daily
 
     // Ventas del día: [start, end) sobre sales.created_at.
     {
-        auto prep = db_.prepare("SELECT total_cents FROM sales WHERE created_at >= ? AND created_at < ?;");
+        auto prep = db_.prepare("SELECT total_cents, discount_cents FROM sales WHERE created_at >= ? AND created_at < ?;");
         if (!prep.is_success()) return R::fail(prep.error_code(), prep.error_message());
         auto stmt = std::move(prep.value());
         stmt.bind_text(1, start);
         stmt.bind_text(2, end);
-        std::int64_t total = 0, count = 0;
+        std::int64_t total = 0, count = 0, discount = 0;
         while (true) {
             auto step = stmt.step();
             if (!step.is_success()) return R::fail(step.error_code(), step.error_message());
             if (!step.value()) break;
-            if (!checked_add(total, stmt.get_int64(0), total) || !checked_add(count, 1, count)) return overflow_error();
+            if (!checked_add(total, stmt.get_int64(0), total) || !checked_add(count, 1, count) ||
+                !checked_add(discount, stmt.get_int64(1), discount)) return overflow_error();
         }
         report.total_sales_count = count;
         report.total_amount = contracts::Money::from_cents(total);
+        std::int64_t gross = 0;
+        if (!checked_add(total, discount, gross)) return overflow_error();
+        report.gross_amount = contracts::Money::from_cents(gross);
+        report.discount_amount = contracts::Money::from_cents(discount);
     }
 
     // Pagos: atribuidos al día de su venta (JOIN); un pago sin venta no entra en ningún día.

@@ -91,6 +91,7 @@ struct Env {
 
     std::string make_product(const std::string& sku, const std::string& barcode, std::int64_t cents) {
         CreateProductDto p;
+        p.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         p.sku = sku;
         p.barcode = barcode;
         p.name = "Producto " + sku;

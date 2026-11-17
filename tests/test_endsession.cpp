@@ -259,6 +259,7 @@ Expected prepare_db(const std::string& state, const fs::path& dir) {
     if (state == "principal_con_turno") {
         TEST_CHECK(reg.shift_service->open_shift("reg-01", Money::from_cents(50000)).is_success(), "Abrir turno");
         CreateProductDto p;
+        p.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         p.sku = "B12-1"; p.name = "Café B12"; p.category = "Bebidas"; p.price = Money::from_cents(3000);
         auto prod = reg.catalog_service->create_product(p);
         TEST_CHECK(prod.is_success(), "Producto: " + prod.error_message());

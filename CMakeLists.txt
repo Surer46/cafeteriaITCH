@@ -114,6 +114,8 @@ add_library(app_services STATIC
     src/services/sqlite_backup_service.cpp
     src/services/sqlite_report_service.cpp
     src/services/sqlite_catalog_service.cpp
+    src/services/promotion_engine.cpp
+    src/services/sqlite_promotion_service.cpp
     src/services/sqlite_inventory_service.cpp
     src/services/sqlite_shift_service.cpp
     src/services/sqlite_cart_service.cpp
@@ -146,6 +148,9 @@ add_library(app_services STATIC
     include/app/services/sqlite_backup_service.hpp
     include/app/services/sqlite_report_service.hpp
     include/app/services/sqlite_catalog_service.hpp
+    include/app/services/promotion_engine.hpp
+    include/app/services/sqlite_promotion_service.hpp
+    include/app/contracts/promotion_service.hpp
     include/app/services/sqlite_inventory_service.hpp
     include/app/services/sqlite_shift_service.hpp
     include/app/services/sqlite_cart_service.hpp

@@ -82,8 +82,9 @@ private:
 SqliteCartService::SqliteCartService(
     storage::SqliteDatabase& db,
     std::shared_ptr<contracts::IAccountService> account_service,
-    std::shared_ptr<contracts::ICatalogService> catalog_service
-) : db_(db), account_service_(std::move(account_service)), catalog_service_(std::move(catalog_service)) {}
+    std::shared_ptr<contracts::ICatalogService> catalog_service,
+    LocalClock clock
+) : db_(db), account_service_(std::move(account_service)), catalog_service_(std::move(catalog_service)), clock_(std::move(clock)) {}
 
 contracts::OperationResult SqliteCartService::check_permission_or_fail(std::string_view perm) const {
     if (!account_service_) {
@@ -279,7 +280,43 @@ contracts::Result<contracts::CartSummaryDto> SqliteCartService::get_cart() {
         summary.items.push_back(std::move(item));
     }
 
+    // Promociones (B14): vista previa con la hora local actual. Al cobrar, confirm_sale vuelve a calcular y compara
+    // con el total neto que se guarda aquí.
+    {
+        std::vector<PromoLineIn> promo_in;
+        promo_in.reserve(summary.items.size());
+        for (const auto& it : summary.items) {
+            promo_in.push_back(PromoLineIn{it.product_id, it.quantity, it.unit_price.cents()});
+        }
+        std::vector<PromoLineOut> promo_out;
+        std::string promo_error;
+        if (!compute_line_discounts(db_, clock_ ? clock_() : system_local_now(), promo_in, promo_out, promo_error)) {
+            return contracts::Result<contracts::CartSummaryDto>::fail(contracts::ErrorCode::InvalidInput, promo_error);
+        }
+        std::int64_t total_discount = 0;
+        for (std::size_t i = 0; i < summary.items.size(); ++i) {
+            auto& it = summary.items[i];
+            it.line_discount = contracts::Money::from_cents(promo_out[i].discount_cents);
+            it.line_total = it.subtotal - it.line_discount;
+            it.promotion_name = promo_out[i].promotion_name;
+            if (!safe_add(total_discount, promo_out[i].discount_cents, total_discount)) {
+                return contracts::Result<contracts::CartSummaryDto>::fail(
+                    contracts::ErrorCode::InvalidInput, "Desbordamiento numérico al calcular el descuento total");
+            }
+        }
+        summary.discount = contracts::Money::from_cents(total_discount);
+    }
+
     summary.total = summary.subtotal - summary.discount;
+    {
+        auto prep_prev = db_.prepare("UPDATE carts SET last_preview_total_cents = ? WHERE id = ?;");
+        if (prep_prev.is_success()) {
+            auto stmt_prev = std::move(prep_prev.value());
+            stmt_prev.bind_int64(1, summary.total.cents());
+            stmt_prev.bind_text(2, cart_id);
+            stmt_prev.step();
+        }
+    }
     return contracts::Result<contracts::CartSummaryDto>::ok(summary);
 }
 

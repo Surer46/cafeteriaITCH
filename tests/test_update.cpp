@@ -1032,6 +1032,7 @@ static void test_slow_client_never_delays_sales_or_login() {
     auto reg = ServiceRegistry::create_sqlite_registry(env.db, env.dir.u8string(), SOURCE_MIGRATIONS_DIR);
     TEST_CHECK(reg.account_service->login("dueno_b11", kOwnerPwd).is_success(), "Dueño");
     CreateProductDto p;
+    p.track_stock = false;  // B14: se vende sin existencia controlada, como antes
     p.sku = "B11-V"; p.name = "Café"; p.category = "Bebidas"; p.price = Money::from_cents(3000);
     auto prod = reg.catalog_service->create_product(p);
     TEST_CHECK(prod.is_success(), "Producto");

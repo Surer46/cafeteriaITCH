@@ -3,6 +3,7 @@
 #include "app/services/stock_ledger.hpp"
 #include "app/services/operating_context.hpp"
 #include "app/domain/clock.hpp"
+#include "app/services/promotion_engine.hpp"
 #include <chrono>
 #include <iomanip>
 #include <sstream>
@@ -10,6 +11,8 @@
 #include <limits>
 #include <cstdio>
 #include <unordered_map>
+#include <algorithm>
+#include <vector>
 
 namespace app::services {
 
@@ -43,11 +46,13 @@ SqliteSaleService::SqliteSaleService(
     storage::SqliteDatabase& db,
     std::shared_ptr<contracts::IAccountService> account_service,
     std::shared_ptr<contracts::ICartService> cart_service,
-    std::shared_ptr<contracts::IShiftService> shift_service
+    std::shared_ptr<contracts::IShiftService> shift_service,
+    LocalClock clock
 ) : db_(db),
     account_service_(std::move(account_service)),
     cart_service_(std::move(cart_service)),
-    shift_service_(std::move(shift_service)) {}
+    shift_service_(std::move(shift_service)),
+    clock_(std::move(clock)) {}
 
 contracts::OperationResult SqliteSaleService::check_permission_or_fail(std::string_view perm) const {
     if (!account_service_) {
@@ -332,6 +337,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         std::int64_t unit_price_cents;
         std::int64_t subtotal_cents;
         std::string notes;
+        bool is_combo{false};
+        std::int64_t discount_cents{0};
+        std::string promotion_id, promotion_name, promotion_kind, promotion_params;
     };
     std::vector<ItemToConfirm> items;
 
@@ -383,7 +391,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
             );
         }
 
-        auto prep_p = db_.prepare("SELECT name, price_cents, is_active FROM products WHERE id = ?;");
+        auto prep_p = db_.prepare("SELECT name, price_cents, is_active, is_combo FROM products WHERE id = ?;");
         if (!prep_p.is_success()) {
             db_.execute("ROLLBACK;");
             return contracts::Result<contracts::SaleConfirmationDto>::fail(prep_p.error_code(), prep_p.error_message());
@@ -402,6 +410,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         it.product_name = stmt_p.get_text(0);
         std::int64_t catalog_price = stmt_p.get_int64(1);
         std::int64_t is_active = stmt_p.get_int64(2);
+        it.is_combo = stmt_p.get_int64(3) != 0;
         stmt_p.reset();
 
         if (is_active != 1) {
@@ -439,6 +448,52 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         }
     }
 
+    // 7b. Promociones (B14): el descuento se calcula AQUÍ, con la hora local de este momento y dentro de la transacción;
+    // el carrito solo mostró una vista previa. Si el total neto no es el que el carrito mostró por última vez (una
+    // promoción venció, empezó o se editó), no se guarda nada: el cajero ve el total nuevo y vuelve a cobrar.
+    std::int64_t discount_total_cents = 0;
+    {
+        std::vector<PromoLineIn> promo_in;
+        promo_in.reserve(items.size());
+        for (const auto& it : items) promo_in.push_back(PromoLineIn{it.product_id, it.quantity, it.unit_price_cents});
+        std::vector<PromoLineOut> promo_out;
+        std::string promo_error;
+        if (!compute_line_discounts(db_, clock_ ? clock_() : system_local_now(), promo_in, promo_out, promo_error)) {
+            db_.execute("ROLLBACK;");
+            return contracts::Result<contracts::SaleConfirmationDto>::fail(contracts::ErrorCode::InvalidInput, promo_error);
+        }
+        for (std::size_t i = 0; i < items.size(); ++i) {
+            items[i].discount_cents = promo_out[i].discount_cents;
+            items[i].promotion_id = promo_out[i].promotion_id;
+            items[i].promotion_name = promo_out[i].promotion_name;
+            items[i].promotion_kind = promo_out[i].kind;
+            items[i].promotion_params = promo_out[i].params;
+            if (!safe_add(discount_total_cents, promo_out[i].discount_cents, discount_total_cents)) {
+                db_.execute("ROLLBACK;");
+                return contracts::Result<contracts::SaleConfirmationDto>::fail(
+                    contracts::ErrorCode::InvalidInput, "Desbordamiento numérico al calcular el descuento total de la venta");
+            }
+        }
+    }
+    const std::int64_t gross_total_cents = calculated_total_cents;
+    calculated_total_cents = gross_total_cents - discount_total_cents;
+    {
+        auto prep_prev = db_.prepare("SELECT last_preview_total_cents FROM carts WHERE id = ?;");
+        if (prep_prev.is_success()) {
+            auto stmt_prev = std::move(prep_prev.value());
+            stmt_prev.bind_text(1, cart_id);
+            auto step_prev = stmt_prev.step();
+            if (step_prev.is_success() && step_prev.value() && !stmt_prev.is_null(0) &&
+                stmt_prev.get_int64(0) != calculated_total_cents) {
+                db_.execute("ROLLBACK;");
+                return contracts::Result<contracts::SaleConfirmationDto>::fail(
+                    contracts::ErrorCode::Conflict,
+                    "Las promociones cambiaron desde que se armó la cuenta. Revise el total antes de cobrar."
+                );
+            }
+        }
+    }
+
     contracts::Money total = contracts::Money::from_cents(calculated_total_cents);
     contracts::Money change = contracts::Money::zero();
 
@@ -446,7 +501,10 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     std::unordered_map<std::string, std::int64_t> ingredient_needed;
     std::unordered_map<std::string, std::string> ingredient_names;
 
-    for (const auto& it : items) {
+    // Suma al consumo total lo que gasta la receta vigente de un producto (preparado, o directo con existencia
+    // enlazada), multiplicado por `multiplier` piezas. Un producto sin receta no descuenta nada, como siempre.
+    auto add_recipe_consumption = [&](const std::string& product_id, std::int64_t multiplier,
+                                      contracts::ErrorCode& err_code, std::string& err_msg) -> bool {
         const char* sql_rec =
             "SELECT ri.ingredient_id, ri.quantity_base_units, i.name "
             "FROM recipes r "
@@ -455,21 +513,13 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
             "WHERE r.id = ("
             "    SELECT id FROM recipes WHERE product_id = ? ORDER BY version DESC LIMIT 1"
             ");";
-
         auto prep_rec = db_.prepare(sql_rec);
-        if (!prep_rec.is_success()) {
-            db_.execute("ROLLBACK;");
-            return contracts::Result<contracts::SaleConfirmationDto>::fail(prep_rec.error_code(), prep_rec.error_message());
-        }
-
+        if (!prep_rec.is_success()) { err_code = prep_rec.error_code(); err_msg = prep_rec.error_message(); return false; }
         auto stmt_rec = std::move(prep_rec.value());
-        stmt_rec.bind_text(1, it.product_id);
+        stmt_rec.bind_text(1, product_id);
         while (true) {
             auto step_rec = stmt_rec.step();
-            if (!step_rec.is_success()) {
-                db_.execute("ROLLBACK;");
-                return contracts::Result<contracts::SaleConfirmationDto>::fail(step_rec.error_code(), step_rec.error_message());
-            }
+            if (!step_rec.is_success()) { err_code = step_rec.error_code(); err_msg = step_rec.error_message(); return false; }
             if (!step_rec.value()) break;
 
             std::string ing_id = stmt_rec.get_text(0);
@@ -477,23 +527,71 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
             std::string ing_name = stmt_rec.get_text(2);
 
             std::int64_t consumed = 0;
-            if (!safe_multiply(qty_per_portion, it.quantity, consumed)) {
-                db_.execute("ROLLBACK;");
-                return contracts::Result<contracts::SaleConfirmationDto>::fail(
-                    contracts::ErrorCode::InvalidInput,
-                    "Desbordamiento numérico en consumo de ingrediente: " + ing_name
-                );
+            if (!safe_multiply(qty_per_portion, multiplier, consumed)) {
+                err_code = contracts::ErrorCode::InvalidInput;
+                err_msg = "Desbordamiento numérico en consumo de ingrediente: " + ing_name;
+                return false;
             }
-
             std::int64_t cur_needed = ingredient_needed[ing_id];
             if (!safe_add(cur_needed, consumed, ingredient_needed[ing_id])) {
-                db_.execute("ROLLBACK;");
-                return contracts::Result<contracts::SaleConfirmationDto>::fail(
-                    contracts::ErrorCode::InvalidInput,
-                    "Desbordamiento numérico en consumo total de ingrediente: " + ing_name
-                );
+                err_code = contracts::ErrorCode::InvalidInput;
+                err_msg = "Desbordamiento numérico en consumo total de ingrediente: " + ing_name;
+                return false;
             }
             ingredient_names[ing_id] = ing_name;
+        }
+        return true;
+    };
+
+    for (const auto& it : items) {
+        contracts::ErrorCode err_code = contracts::ErrorCode::InvalidInput;
+        std::string err_msg;
+        bool ok = true;
+        if (it.is_combo) {
+            // Un combo descuenta lo de cada parte (receta vigente de cada producto) por su cantidad.
+            struct Part { std::string product_id, name; std::int64_t qty; bool active; };
+            std::vector<Part> parts;
+            {
+                auto prep_c = db_.prepare(
+                    "SELECT ci.component_product_id, p.name, ci.quantity, p.is_active "
+                    "FROM combo_items ci JOIN products p ON p.id = ci.component_product_id "
+                    "WHERE ci.combo_product_id = ? ORDER BY ci.rowid ASC;");
+                if (!prep_c.is_success()) { db_.execute("ROLLBACK;"); return contracts::Result<contracts::SaleConfirmationDto>::fail(prep_c.error_code(), prep_c.error_message()); }
+                auto stmt_c = std::move(prep_c.value());
+                stmt_c.bind_text(1, it.product_id);
+                while (true) {
+                    auto step_c = stmt_c.step();
+                    if (!step_c.is_success()) { db_.execute("ROLLBACK;"); return contracts::Result<contracts::SaleConfirmationDto>::fail(step_c.error_code(), step_c.error_message()); }
+                    if (!step_c.value()) break;
+                    parts.push_back(Part{stmt_c.get_text(0), stmt_c.get_text(1), stmt_c.get_int64(2), stmt_c.get_int64(3) != 0});
+                }
+            }
+            if (parts.empty()) {
+                db_.execute("ROLLBACK;");
+                return contracts::Result<contracts::SaleConfirmationDto>::fail(
+                    contracts::ErrorCode::Conflict, "El combo '" + it.product_name + "' no tiene productos y no se puede vender.");
+            }
+            for (const auto& part : parts) {
+                if (!part.active) {
+                    db_.execute("ROLLBACK;");
+                    return contracts::Result<contracts::SaleConfirmationDto>::fail(
+                        contracts::ErrorCode::Conflict,
+                        "El combo '" + it.product_name + "' incluye '" + part.name + "', que está dado de baja en el catálogo.");
+                }
+                std::int64_t multiplier = 0;
+                if (!safe_multiply(part.qty, it.quantity, multiplier)) {
+                    db_.execute("ROLLBACK;");
+                    return contracts::Result<contracts::SaleConfirmationDto>::fail(
+                        contracts::ErrorCode::InvalidInput, "Desbordamiento numérico en consumo del combo '" + it.product_name + "'");
+                }
+                if (!add_recipe_consumption(part.product_id, multiplier, err_code, err_msg)) { ok = false; break; }
+            }
+        } else {
+            ok = add_recipe_consumption(it.product_id, it.quantity, err_code, err_msg);
+        }
+        if (!ok) {
+            db_.execute("ROLLBACK;");
+            return contracts::Result<contracts::SaleConfirmationDto>::fail(err_code, err_msg);
         }
     }
 
@@ -558,8 +656,8 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     // 10.1 Inserción de venta
     {
         auto prep_sale = db_.prepare(
-            "INSERT INTO sales (id, folio, shift_id, user_id, total_cents, idempotency_key, created_at, cashier_name, created_at_utc) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);"
+            "INSERT INTO sales (id, folio, shift_id, user_id, total_cents, idempotency_key, created_at, cashier_name, created_at_utc, discount_cents) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
         );
         if (!prep_sale.is_success()) {
             db_.execute("ROLLBACK;");
@@ -579,6 +677,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_s.bind_text(7, now);
         stmt_s.bind_text(8, cashier_name);
         stmt_s.bind_text(9, ts.utc);
+        stmt_s.bind_int64(10, discount_total_cents);
 
         auto step = stmt_s.step();
         if (!step.is_success()) {
@@ -591,8 +690,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     for (const auto& it : items) {
         std::string item_id = generate_id("sitem");
         auto prep_item = db_.prepare(
-            "INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price_cents, subtotal_cents, notes) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?);"
+            "INSERT INTO sale_items (id, sale_id, product_id, product_name, quantity, unit_price_cents, subtotal_cents, notes, "
+            "discount_cents, promotion_id, promotion_name, promotion_kind, promotion_params) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
         );
         if (!prep_item.is_success()) {
             db_.execute("ROLLBACK;");
@@ -607,6 +707,11 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_it.bind_int64(6, it.unit_price_cents);
         stmt_it.bind_int64(7, it.subtotal_cents);
         stmt_it.bind_text(8, it.notes);
+        stmt_it.bind_int64(9, it.discount_cents);
+        if (it.promotion_id.empty()) stmt_it.bind_null(10); else stmt_it.bind_text(10, it.promotion_id);
+        stmt_it.bind_text(11, it.promotion_name);
+        stmt_it.bind_text(12, it.promotion_kind);
+        stmt_it.bind_text(13, it.promotion_params);
 
         auto step = stmt_it.step();
         if (!step.is_success()) {
@@ -726,6 +831,18 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     {
         std::string audit_id = generate_id("audit");
         std::string details = "Venta confirmada folio " + folio + " por " + total.to_string() + " [" + contracts::to_string(payment_method) + "]";
+        if (discount_total_cents > 0) {
+            // El descuento total y las promociones aplicadas, por nombre (sin repetir).
+            std::vector<std::string> promo_names;
+            for (const auto& it : items) {
+                if (it.discount_cents > 0 && std::find(promo_names.begin(), promo_names.end(), it.promotion_name) == promo_names.end()) {
+                    promo_names.push_back(it.promotion_name);
+                }
+            }
+            details += " con descuento de " + contracts::Money::from_cents(discount_total_cents).to_string() + " (";
+            for (std::size_t pi = 0; pi < promo_names.size(); ++pi) details += (pi ? ", " : "") + promo_names[pi];
+            details += ")";
+        }
         auto prep_aud = db_.prepare(
             "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
             "VALUES (?, 'SALE_CONFIRMED', ?, ?, ?, ?);"
@@ -857,7 +974,7 @@ contracts::Result<contracts::TicketDto> SqliteSaleService::get_ticket(const std:
         "    WHEN s.cashier_name IS NOT NULL AND LENGTH(s.cashier_name) > 0 THEN s.cashier_name "
         "    WHEN s.user_id IS NOT NULL AND LENGTH(s.user_id) > 0 THEN ('Nombre histórico no disponible (' || s.user_id || ')') "
         "    ELSE 'Nombre histórico no disponible' "
-        "END "
+        "END, s.discount_cents "
         "FROM sales s "
         "LEFT JOIN payment_records p ON s.id = p.sale_id "
         "WHERE s.folio = ? LIMIT 1;";
@@ -894,14 +1011,14 @@ contracts::Result<contracts::TicketDto> SqliteSaleService::get_ticket(const std:
     }
 
     ticket.total = contracts::Money(stmt_s.get_int64(2));
-    ticket.subtotal = ticket.total;
-    ticket.discount = contracts::Money::zero();
+    ticket.discount = contracts::Money(stmt_s.get_int64(8));
+    ticket.subtotal = ticket.total + ticket.discount;
     ticket.cash_received = stmt_s.is_null(5) ? ticket.total : contracts::Money(stmt_s.get_int64(5));
     ticket.change = stmt_s.is_null(6) ? contracts::Money::zero() : contracts::Money(stmt_s.get_int64(6));
 
     // Consultar líneas inmutables de la venta
     const char* sql_items =
-        "SELECT product_name, quantity, unit_price_cents, subtotal_cents, notes "
+        "SELECT product_name, quantity, unit_price_cents, subtotal_cents, notes, discount_cents, promotion_name "
         "FROM sale_items WHERE sale_id = ? ORDER BY rowid ASC;";
 
     auto prep_it = db_.prepare(sql_items);
@@ -924,6 +1041,8 @@ contracts::Result<contracts::TicketDto> SqliteSaleService::get_ticket(const std:
         it.unit_price = contracts::Money(stmt_it.get_int64(2));
         it.subtotal = contracts::Money(stmt_it.get_int64(3));
         it.notes = stmt_it.get_text(4);
+        it.discount = contracts::Money(stmt_it.get_int64(5));
+        it.promotion_name = stmt_it.get_text(6);
         ticket.items.push_back(std::move(it));
     }
 
