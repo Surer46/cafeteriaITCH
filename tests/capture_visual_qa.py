@@ -38,6 +38,8 @@ from gui_dpi import (
     min_px,
     to_px,
     select_list_row,
+    enum_children,
+    get_rect,
 )
 
 WNDENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -607,6 +609,80 @@ def main():
 
         # CAPTURA 13: Inventario > Ingredientes (Touch)
         capture_window(hwnd_main, os.path.join(out_dir, "13_inventory_ingredients_touch.png"))
+
+        # Cambiar temporalmente a Estándar para CAPTURA 27 (Reabastecimiento) y CAPTURA 28 (Barra)
+        btn_to_std = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Estándar" in t), None)
+        if btn_to_std:
+            _f7_click_btn(btn_to_std)
+            time.sleep(0.45)
+        btn_inv_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Inventario" in t), None)
+        if btn_inv_qa:
+            _f7_click_btn(btn_inv_qa)
+            time.sleep(0.35)
+        btn_ing_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Ingredientes"), None)
+        if btn_ing_qa:
+            _f7_click_btn(btn_ing_qa)
+            time.sleep(0.45)
+        btn_new_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Nuevo ingrediente"), None)
+        if btn_new_qa:
+            _f7_click_btn(btn_new_qa)
+            time.sleep(0.2)
+            ing_qa_panel = user32.GetParent(btn_new_qa)
+            ing_qa_edits = sorted(
+                [(h, get_rect(h)) for (h, c, _t) in enum_children(ing_qa_panel) if user32.IsWindowVisible(h) and c.lower() == "edit"],
+                key=lambda x: x[1][1],
+            )
+            if len(ing_qa_edits) >= 2:
+                set_text(ing_qa_edits[0][0], "Limón")
+                set_text(ing_qa_edits[1][0], "500")
+                btn_save_qa = next((h for (h, c, t) in enum_children(ing_qa_panel) if c.lower() == "button" and t == "Guardar"), None)
+                if btn_save_qa:
+                    _f7_click_btn(btn_save_qa)
+                    time.sleep(0.35)
+
+        btn_restock_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Reabastecimiento"), None)
+        assert btn_restock_qa is not None, "Subsección Reabastecimiento no encontrada para captura 27"
+        _f7_click_btn(btn_restock_qa)
+        time.sleep(0.45)
+        btn_reg_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Registrar compra"), None)
+        assert btn_reg_qa is not None, "Botón Registrar compra no encontrado para captura 27"
+        restock_panel_qa = user32.GetParent(btn_reg_qa)
+        restock_edits_qa = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(restock_panel_qa) if user32.IsWindowVisible(h) and c.lower() == "edit"],
+            key=lambda x: x[1][1],
+        )
+        if len(restock_edits_qa) >= 2:
+            set_text(restock_edits_qa[0][0], "1000")
+            set_text(restock_edits_qa[1][0], "50.00")
+            _f7_click_btn(btn_reg_qa)
+            time.sleep(0.4)
+        # CAPTURA 27: Inventario > Reabastecimiento con lista
+        capture_window(hwnd_main, os.path.join(out_dir, "27_inventory_restock.png"))
+
+        btn_bar_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Barra"), None)
+        assert btn_bar_qa is not None, "Subsección Barra no encontrada para captura 28"
+        _f7_click_btn(btn_bar_qa)
+        time.sleep(0.45)
+        btn_merma_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Registrar merma"), None)
+        assert btn_merma_qa is not None, "Botón Registrar merma no encontrado para captura 28"
+        bar_form_qa = user32.GetParent(btn_merma_qa)
+        bar_edits_qa = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(bar_form_qa) if user32.IsWindowVisible(h) and c.lower() == "edit"],
+            key=lambda x: x[1][1],
+        )
+        if len(bar_edits_qa) >= 2:
+            set_text(bar_edits_qa[0][0], "200")
+            set_text(bar_edits_qa[1][0], "Fruta machucada")
+            _f7_click_btn(btn_merma_qa)
+            time.sleep(0.4)
+        # CAPTURA 28: Inventario > Barra con formulario de merma y movimientos
+        capture_window(hwnd_main, os.path.join(out_dir, "28_inventory_bar.png"))
+
+        # Restaurar perfil Touch antes de BackOffice > Configuracion
+        btn_to_touch = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Touch" in t), None)
+        if btn_to_touch:
+            _f7_click_btn(btn_to_touch)
+            time.sleep(0.45)
 
         # Navegar a BackOffice > Configuracion (sigue en Touch)
         btn_bo2 = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "BackOffice" in t), None)

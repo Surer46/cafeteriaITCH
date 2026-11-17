@@ -250,6 +250,10 @@ if(wxWidgets_FOUND)
         src/frontend/audit_log_panel.hpp
         src/frontend/inventory_ingredients_panel.cpp
         src/frontend/inventory_ingredients_panel.hpp
+        src/frontend/inventory_restock_panel.cpp
+        src/frontend/inventory_restock_panel.hpp
+        src/frontend/inventory_bar_panel.cpp
+        src/frontend/inventory_bar_panel.hpp
         src/frontend/theme.cpp
         src/frontend/theme.hpp
         src/frontend/app.rc

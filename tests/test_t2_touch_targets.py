@@ -680,6 +680,76 @@ def run_suite(label, exe_path, write_audit=False):
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Ingredientes (nuevo, teclado)", scale)
         assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Ingredientes"
         record_audit("Ingredientes (nuevo, teclado)", items, overlaps, lrows)
+        btn_listo_i = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Listo"), None)
+        if btn_listo_i:
+            click_button(btn_listo_i)
+            time.sleep(0.2)
+
+        # Guardar un ingrediente para que Reabastecimiento y Barra tengan opciones y filas en listas
+        set_edit_text(ing_edits[0][0], "Azúcar T2")
+        set_edit_text(ing_edits[1][0], "500")
+        btn_save_ing = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Guardar"), None)
+        assert btn_save_ing is not None, "Boton Guardar en Ingredientes no encontrado"
+        click_button(btn_save_ing)
+        time.sleep(0.35)
+
+        # --- 7b. Reabastecimiento (con compra registrada + teclado) ---
+        click_subnav(hwnd_main, "Reabastecimiento")
+        time.sleep(0.4)
+        rs_edits = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda x: x[1][1],
+        )
+        assert len(rs_edits) >= 2, "Campos Cantidad/Costo en Reabastecimiento no encontrados"
+        set_edit_text(rs_edits[0][0], "2")
+        set_edit_text(rs_edits[1][0], "40.00")
+        btn_reg_pur = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Registrar compra"), None)
+        assert btn_reg_pur is not None, "Boton Registrar compra no encontrado"
+        click_button(btn_reg_pur)
+        time.sleep(0.35)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Reabastecimiento", scale)
+        record_audit("Reabastecimiento", items, overlaps, lrows)
+
+        click_control_at(rs_edits[0][0])
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Reabastecimiento (teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Reabastecimiento"
+        record_audit("Reabastecimiento (teclado)", items, overlaps, lrows)
+        btn_listo_r = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Listo"), None)
+        if btn_listo_r:
+            click_button(btn_listo_r)
+            time.sleep(0.2)
+
+        # --- 7c. Barra (merma con filas + modo ajuste + teclado) ---
+        click_subnav(hwnd_main, "Barra")
+        time.sleep(0.4)
+        bar_edits = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            key=lambda x: (x[1][0], x[1][1]),
+        )
+        assert len(bar_edits) >= 3, "Campos de Barra (buscador, cantidad, motivo) no encontrados"
+        set_edit_text(bar_edits[1][0], "100")
+        set_edit_text(bar_edits[2][0], "Merma auditoría táctil")
+        btn_reg_merma = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Registrar merma"), None)
+        assert btn_reg_merma is not None, "Boton Registrar merma no encontrado"
+        click_button(btn_reg_merma)
+        time.sleep(0.35)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Barra", scale)
+        record_audit("Barra", items, overlaps, lrows)
+
+        btn_adj_mode = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Ajuste"), None)
+        assert btn_adj_mode is not None, "Boton Ajuste no encontrado en Barra"
+        click_button(btn_adj_mode)
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Barra (ajuste)", scale)
+        assert any(it["label"] == "Sumar" for it in items) and any(it["label"] == "Restar" for it in items), "Botones Sumar/Restar no visibles en modo Ajuste"
+        record_audit("Barra (ajuste)", items, overlaps, lrows)
+
+        click_control_at(bar_edits[1][0])
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Barra (teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Barra"
+        record_audit("Barra (teclado)", items, overlaps, lrows)
 
         # --- 8. Dialogos de Venta: Cobro, Ticket e Historial de tickets ---
         click_sidebar_section(hwnd_main, "Punto de Venta")

@@ -396,6 +396,145 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Ingredientes (nuevo, teclado) | button | Guardar | 120.0x48.0 | OK
   Ingredientes (nuevo, teclado) | list_row | SysListView32#0 (1 filas) | 601.6x43.2 | OK
 
+=== Reabastecimiento (total=17, marcados=0) ===
+  Reabastecimiento | button | Estándar | 137.6x48.0 | OK
+  Reabastecimiento | button | Punto de Venta | 220.0x56.0 | OK
+  Reabastecimiento | button | Inventario | 220.0x56.0 | OK
+  Reabastecimiento | button | Caja y Reportes | 220.0x56.0 | OK
+  Reabastecimiento | button | BackOffice | 220.0x56.0 | OK
+  Reabastecimiento | button | Existencias | 95.2x48.0 | OK
+  Reabastecimiento | button | Reabastecimiento | 144.0x48.0 | OK
+  Reabastecimiento | button | Productos y recetas | 156.8x48.0 | OK
+  Reabastecimiento | button | Ingredientes | 104.0x48.0 | OK
+  Reabastecimiento | button | Promociones y combos | 180.0x48.0 | OK
+  Reabastecimiento | button | Barra | 64.0x48.0 | OK
+  Reabastecimiento | switch/combo | comboBox | 264.0x48.0 | OK
+  Reabastecimiento | edit | <edit> | 149.6x48.0 | OK
+  Reabastecimiento | switch/combo | comboBox | 108.0x48.0 | OK
+  Reabastecimiento | edit | <edit> | 264.0x48.0 | OK
+  Reabastecimiento | button | Registrar compra | 180.0x48.0 | OK
+  Reabastecimiento | button | Actualizar | 115.2x48.0 | OK
+  Reabastecimiento | list_row | SysListView32#0 (1 filas) | 617.6x43.2 | OK
+
+=== Reabastecimiento (teclado) (total=30, marcados=0) ===
+  Reabastecimiento (teclado) | button | Estándar | 137.6x48.0 | OK
+  Reabastecimiento (teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Reabastecimiento (teclado) | button | Inventario | 220.0x56.0 | OK
+  Reabastecimiento (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Reabastecimiento (teclado) | button | BackOffice | 220.0x56.0 | OK
+  Reabastecimiento (teclado) | button | Existencias | 95.2x48.0 | OK
+  Reabastecimiento (teclado) | button | Reabastecimiento | 144.0x48.0 | OK
+  Reabastecimiento (teclado) | button | Productos y recetas | 156.8x48.0 | OK
+  Reabastecimiento (teclado) | button | Ingredientes | 104.0x48.0 | OK
+  Reabastecimiento (teclado) | button | Promociones y combos | 180.0x48.0 | OK
+  Reabastecimiento (teclado) | button | Barra | 64.0x48.0 | OK
+  Reabastecimiento (teclado) | button | 0 | 208.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 1 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 2 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 3 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 4 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 5 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 6 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 7 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 8 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | 9 | 64.0x64.0 | OK
+  Reabastecimiento (teclado) | button | Borrar | 88.0x64.0 | OK
+  Reabastecimiento (teclado) | button | Limpiar | 88.0x64.0 | OK
+  Reabastecimiento (teclado) | button | Listo | 88.0x136.0 | OK
+  Reabastecimiento (teclado) | switch/combo | comboBox | 264.0x48.0 | OK
+  Reabastecimiento (teclado) | edit | <edit> | 149.6x48.0 | OK
+  Reabastecimiento (teclado) | switch/combo | comboBox | 108.0x48.0 | OK
+  Reabastecimiento (teclado) | edit | <edit> | 264.0x48.0 | OK
+  Reabastecimiento (teclado) | button | Registrar compra | 180.0x48.0 | OK
+  Reabastecimiento (teclado) | button | Actualizar | 115.2x48.0 | OK
+  Reabastecimiento (teclado) | list_row | SysListView32#0 (1 filas) | 617.6x43.2 | OK
+
+=== Barra (total=20, marcados=0) ===
+  Barra | button | Estándar | 137.6x48.0 | OK
+  Barra | button | Punto de Venta | 220.0x56.0 | OK
+  Barra | button | Inventario | 220.0x56.0 | OK
+  Barra | button | Caja y Reportes | 220.0x56.0 | OK
+  Barra | button | BackOffice | 220.0x56.0 | OK
+  Barra | button | Existencias | 95.2x48.0 | OK
+  Barra | button | Reabastecimiento | 144.0x48.0 | OK
+  Barra | button | Productos y recetas | 156.8x48.0 | OK
+  Barra | button | Ingredientes | 104.0x48.0 | OK
+  Barra | button | Promociones y combos | 180.0x48.0 | OK
+  Barra | button | Barra | 64.0x48.0 | OK
+  Barra | edit | <edit> | 403.2x48.0 | OK
+  Barra | button | Actualizar | 110.4x48.0 | OK
+  Barra | button | Merma | 128.0x48.0 | OK
+  Barra | button | Ajuste | 134.4x48.0 | OK
+  Barra | switch/combo | comboBox | 268.8x48.0 | OK
+  Barra | edit | <edit> | 154.4x48.0 | OK
+  Barra | switch/combo | comboBox | 108.0x48.0 | OK
+  Barra | edit | <edit> | 268.8x48.0 | OK
+  Barra | button | Registrar merma | 268.8x48.0 | OK
+  Barra | list_row | SysListView32#0 (2 filas) | 620.8x43.2 | OK
+
+=== Barra (ajuste) (total=22, marcados=0) ===
+  Barra (ajuste) | button | Estándar | 137.6x48.0 | OK
+  Barra (ajuste) | button | Punto de Venta | 220.0x56.0 | OK
+  Barra (ajuste) | button | Inventario | 220.0x56.0 | OK
+  Barra (ajuste) | button | Caja y Reportes | 220.0x56.0 | OK
+  Barra (ajuste) | button | BackOffice | 220.0x56.0 | OK
+  Barra (ajuste) | button | Existencias | 95.2x48.0 | OK
+  Barra (ajuste) | button | Reabastecimiento | 144.0x48.0 | OK
+  Barra (ajuste) | button | Productos y recetas | 156.8x48.0 | OK
+  Barra (ajuste) | button | Ingredientes | 104.0x48.0 | OK
+  Barra (ajuste) | button | Promociones y combos | 180.0x48.0 | OK
+  Barra (ajuste) | button | Barra | 64.0x48.0 | OK
+  Barra (ajuste) | edit | <edit> | 403.2x48.0 | OK
+  Barra (ajuste) | button | Actualizar | 110.4x48.0 | OK
+  Barra (ajuste) | button | Merma | 128.0x48.0 | OK
+  Barra (ajuste) | button | Ajuste | 134.4x48.0 | OK
+  Barra (ajuste) | button | Sumar | 128.0x48.0 | OK
+  Barra (ajuste) | button | Restar | 134.4x48.0 | OK
+  Barra (ajuste) | switch/combo | comboBox | 268.8x48.0 | OK
+  Barra (ajuste) | edit | <edit> | 154.4x48.0 | OK
+  Barra (ajuste) | switch/combo | comboBox | 108.0x48.0 | OK
+  Barra (ajuste) | edit | <edit> | 268.8x48.0 | OK
+  Barra (ajuste) | button | Registrar ajuste | 268.8x48.0 | OK
+  Barra (ajuste) | list_row | SysListView32#0 (2 filas) | 620.8x43.2 | OK
+
+=== Barra (teclado) (total=35, marcados=0) ===
+  Barra (teclado) | button | Estándar | 137.6x48.0 | OK
+  Barra (teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Barra (teclado) | button | Inventario | 220.0x56.0 | OK
+  Barra (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Barra (teclado) | button | BackOffice | 220.0x56.0 | OK
+  Barra (teclado) | button | Existencias | 95.2x48.0 | OK
+  Barra (teclado) | button | Reabastecimiento | 144.0x48.0 | OK
+  Barra (teclado) | button | Productos y recetas | 156.8x48.0 | OK
+  Barra (teclado) | button | Ingredientes | 104.0x48.0 | OK
+  Barra (teclado) | button | Promociones y combos | 180.0x48.0 | OK
+  Barra (teclado) | button | Barra | 64.0x48.0 | OK
+  Barra (teclado) | button | 0 | 208.0x64.0 | OK
+  Barra (teclado) | button | 1 | 64.0x64.0 | OK
+  Barra (teclado) | button | 2 | 64.0x64.0 | OK
+  Barra (teclado) | button | 3 | 64.0x64.0 | OK
+  Barra (teclado) | button | 4 | 64.0x64.0 | OK
+  Barra (teclado) | button | 5 | 64.0x64.0 | OK
+  Barra (teclado) | button | 6 | 64.0x64.0 | OK
+  Barra (teclado) | button | 7 | 64.0x64.0 | OK
+  Barra (teclado) | button | 8 | 64.0x64.0 | OK
+  Barra (teclado) | button | 9 | 64.0x64.0 | OK
+  Barra (teclado) | button | Borrar | 88.0x64.0 | OK
+  Barra (teclado) | button | Limpiar | 88.0x64.0 | OK
+  Barra (teclado) | button | Listo | 88.0x136.0 | OK
+  Barra (teclado) | edit | <edit> | 403.2x48.0 | OK
+  Barra (teclado) | button | Actualizar | 110.4x48.0 | OK
+  Barra (teclado) | button | Merma | 128.0x48.0 | OK
+  Barra (teclado) | button | Ajuste | 134.4x48.0 | OK
+  Barra (teclado) | button | Sumar | 128.0x48.0 | OK
+  Barra (teclado) | button | Restar | 134.4x48.0 | OK
+  Barra (teclado) | switch/combo | comboBox | 268.8x48.0 | OK
+  Barra (teclado) | edit | <edit> | 154.4x48.0 | OK
+  Barra (teclado) | switch/combo | comboBox | 108.0x48.0 | OK
+  Barra (teclado) | edit | <edit> | 268.8x48.0 | OK
+  Barra (teclado) | button | Registrar ajuste | 268.8x48.0 | OK
+  Barra (teclado) | list_row | SysListView32#0 (2 filas) | 620.8x43.2 | OK
+
 === Dialogo Cobro (total=18, marcados=0) ===
   Dialogo Cobro | switch/combo | comboBox | 380.0x48.0 | OK
   Dialogo Cobro | edit | <edit> | 383.2x48.0 | OK

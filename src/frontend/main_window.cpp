@@ -10,6 +10,8 @@
 #include "src/frontend/cash_shift_panel.hpp"
 #include "src/frontend/audit_log_panel.hpp"
 #include "src/frontend/inventory_ingredients_panel.hpp"
+#include "src/frontend/inventory_restock_panel.hpp"
+#include "src/frontend/inventory_bar_panel.hpp"
 #include "src/frontend/theme.hpp"
 #include <wx/statline.h>
 
@@ -248,6 +250,14 @@ void MainWindow::sync_fullscreen_ui() {
 }
 
 void MainWindow::apply_profile_refresh() {
+    if (destroying_) {
+        return;
+    }
+    bool did_freeze = false;
+    if (IsShown()) {
+        Freeze();
+        did_freeze = true;
+    }
     if (header_panel_) {
         header_panel_->sync_profile_button();
     }
@@ -257,11 +267,19 @@ void MainWindow::apply_profile_refresh() {
     if (notes_dialog_) {
         notes_dialog_->refresh_profile();
     }
+    // Reconstruir subnavegación y vista de contenido antes de redimensionar los botones
+    // de la barra lateral, evitando una ventana intermedia sin controles de contenido.
+    on_section_changed(current_section_);
+    Layout();
     if (sidebar_panel_) {
         sidebar_panel_->refresh_profile();
     }
-    on_section_changed(current_section_);
     Layout();
+    if (did_freeze) {
+        Thaw();
+    }
+    Refresh();
+    Update();
 }
 
 void MainWindow::schedule_profile_refresh() {
@@ -308,6 +326,12 @@ void MainWindow::update_content_view() {
         current_view_ = new PosPanel(content_container_, services_);
     } else if (current_section_ == SectionId::Inventory && current_subsection_ == "Ingredientes") {
         current_view_ = new InventoryIngredientsPanel(
+            content_container_, services_.inventory_service, services_.account_service);
+    } else if (current_section_ == SectionId::Inventory && current_subsection_ == "Reabastecimiento") {
+        current_view_ = new InventoryRestockPanel(
+            content_container_, services_.inventory_service, services_.account_service);
+    } else if (current_section_ == SectionId::Inventory && current_subsection_ == "Barra") {
+        current_view_ = new InventoryBarPanel(
             content_container_, services_.inventory_service, services_.account_service);
     } else if (current_section_ == SectionId::CashAndReports && current_subsection_ == "Caja y turnos") {
         current_view_ = new CashShiftPanel(content_container_, services_, [this]() {
