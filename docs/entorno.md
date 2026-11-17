@@ -83,6 +83,8 @@ cmake --build build_hooks_release --parallel 2
 
 Variables que solo existen en esa compilación: `CAFETERIA_UPDATE_TEST_SOURCE=<carpeta>` (lee `manifiesto.json`, `manifiesto.json.sig` y el instalador de esa carpeta en vez de internet; carpeta vacía o inexistente = sin red; además activa la clave pública de prueba), `CAFETERIA_UPDATE_TEST_DELAY_MS` (retraso por bloque de descarga) y `CAFETERIA_UPDATE_TEST_LAUNCH=<archivo>` (escribe lo que habría lanzado en vez de ejecutar el instalador) y `CAFETERIA_UPDATE_TEST_LAUNCH_RESULT=UAC_CANCELLED|FAILED` (junto con la anterior, simula que Windows no dio permiso o que no se pudo lanzar). La carpeta fuente se prepara firmando con la clave de prueba: `tools\publicar_version.ps1 ... -Clave tests\update_test_key.priv -Salida <carpeta>`. `PackageTest` solo corresponde a las compilaciones normales: comprueba que el ejecutable del paquete no contiene estas cadenas ni la clave de prueba. `CAFETERIA_UPDATE_CHECK=0` (en cualquier compilación) apaga la búsqueda automática y la descarga.
 
+Si `UpdateTest` falla con «llegó incompleta o dañada», revisar `Get-MpThreatDetection` (Windows Defender puede haber bloqueado un archivo de prueba; los instaladores de prueba son texto de baja entropía justamente para evitarlo). Nunca añadir exclusiones del antivirus como solución.
+
 ## Escalado de pantalla
 
 El programa y las pruebas GUI se verifican con Windows al **100 %** (96 DPI) y al **125 %** (120 DPI). Con otro escalado las pruebas se detienen con un mensaje. Cambiar el escalado lo hace la persona (Configuración > Pantalla > Escala); los programas que se abren después ya lo usan, sin cerrar sesión. Para verificar un bloque de interfaz, correr la batería GUI en los dos escalados.
