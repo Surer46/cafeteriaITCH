@@ -48,6 +48,8 @@ public:
     contracts::OperationResult use_update_from_files(const std::string& installer_path,
                                                      const std::string& manifest_path,
                                                      const std::string& signature_path) override;
+    contracts::Result<contracts::UpdateFromFilesResultDto> apply_update_from_files(
+        const std::string& installer_path, const std::string& data_path, const std::string& verification_path) override;
     contracts::OperationResult postpone_install_this_session() override;
     contracts::Result<contracts::UpdateInstallResultDto> get_last_install_result() override;
     contracts::OperationResult acknowledge_install_result() override;
@@ -77,6 +79,10 @@ public:
     // Lanza el instalador con elevación (ShellExecuteEx "runas"). Con CAFETERIA_TEST_HOOKS y la variable
     // CAFETERIA_UPDATE_TEST_LAUNCH escribe en ese archivo lo que habría lanzado y no ejecuta nada.
     LaunchOutcome launch_install(const InstallLaunchPlan& plan, std::string* error = nullptr) const;
+
+    // Hubo plan válido pero no se pudo intentar el lanzamiento (la base no cerró limpia): el próximo arranque lo muestra
+    // como LAUNCH_FAILED. Sin plan válido (sin sesión, pospuesto, portable...) no escribe nada.
+    void note_launch_not_attempted(const InstallLaunchPlan& plan) const;
 
     // La base cerró limpia: no quedan archivos -wal ni -shm con contenido junto a ella.
     static bool database_closed_cleanly(const std::filesystem::path& db_file);

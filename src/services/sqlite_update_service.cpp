@@ -53,6 +53,13 @@ struct ErrorInfo {
     std::string message;
 };
 
+// Motivo de una descarga fallida (download_error_kind): INVALID si la descarga no es válida; el resto, fallo de conexión.
+std::string download_kind_of(const std::string& check_kind) {
+    if (check_kind == "NO_NETWORK" || check_kind == "TIMEOUT" || check_kind == "SERVER" || check_kind == "TLS_UNAVAILABLE" ||
+        check_kind == "TLS_FAILURE" || check_kind == "INVALID") return check_kind;
+    return "SERVER";
+}
+
 ErrorInfo describe_http_error(HttpError e, int status) {
     switch (e) {
         case HttpError::NoNetwork: return {"NO_NETWORK", kMsgNoNetwork};
@@ -109,6 +116,8 @@ struct Row {
     std::string download_state{"NONE"};
     std::string downloaded_path;
     std::string download_error;
+    std::string download_error_kind;
+    std::string last_install_reason;
     bool accepted{false};
     std::string install_target_version;
     std::string last_install_result{"NONE"};
@@ -122,7 +131,7 @@ bool load_row(storage::SqliteDatabase& db, Row& r) {
         "SELECT last_check_ms, last_manual_check_ms, last_check_at, last_check_result, last_check_manual, last_error, "
         "available_version, notes, installer_name, installer_size, installer_sha256, manifest_bytes, manifest_sig, "
         "download_state, downloaded_path, download_error, accepted, install_target_version, last_install_result, "
-        "last_install_message, last_install_version, last_install_shown FROM update_state WHERE id = 1;");
+        "last_install_message, last_install_version, last_install_shown, download_error_kind, last_install_reason FROM update_state WHERE id = 1;");
     if (!prep.is_success()) return false;
     auto stmt = std::move(prep.value());
     auto step = stmt.step();
@@ -149,6 +158,8 @@ bool load_row(storage::SqliteDatabase& db, Row& r) {
     r.last_install_message = stmt.get_text(19);
     r.last_install_version = stmt.get_text(20);
     r.last_install_shown = stmt.get_int64(21) != 0;
+    r.download_error_kind = stmt.get_text(22);
+    r.last_install_reason = stmt.get_text(23);
     return true;
 }
 
@@ -279,9 +290,78 @@ void cleanup_updates_dir(const fs::path& updates_dir, const std::string& keep_ve
 
 // Verifica el instalador por su tamaño y SHA-256 (por bloques).
 bool installer_matches(const fs::path& file, std::uint64_t size, const std::string& sha256) {
+    // Un antivirus puede tener el archivo recién escrito abierto unos instantes: se reintenta antes de rechazar.
     FileFingerprint fp;
-    if (!fingerprint_file(file, fp)) return false;
+    bool read_ok = false;
+    for (int attempt = 0; attempt < 20 && !read_ok; ++attempt) {
+        read_ok = fingerprint_file(file, fp);
+        if (!read_ok) std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    }
+    if (!read_ok) return false;
     return static_cast<std::uint64_t>(fp.size) == size && fp.sha256 == sha256;
+}
+
+// Archivo de resultado del lanzamiento: <datos>\updates\ultimo-lanzamiento.txt. Se escribe al cerrar, cuando la base
+// ya está cerrada, y el siguiente arranque lo lee y lo borra. Solo puede AFINAR el motivo de una instalación que no
+// se completó; "instalada" nunca depende de él (eso lo decide la versión en ejecución).
+fs::path launch_result_path(const fs::path& updates_dir) { return updates_dir / "ultimo-lanzamiento.txt"; }
+
+std::string launch_result_body(const std::string& target, const std::string& from, const std::string& outcome) {
+    return "CAFEUPD1\n" + target + "\n" + from + "\n" + outcome + "\n";
+}
+
+std::string sha_text(const std::string& text) {
+    crypto::Sha256 h;
+    h.update(reinterpret_cast<const std::uint8_t*>(text.data()), text.size());
+    return to_hex(h.finalize());
+}
+
+// Escribe con temporal y renombrado; si falla no pasa nada (el arranque siguiente cae en NOT_COMPLETED).
+void write_launch_result(const fs::path& updates_dir, const std::string& target, const std::string& from, const std::string& outcome) {
+    try {
+        std::error_code ec;
+        fs::create_directories(updates_dir, ec);
+        const fs::path final_file = launch_result_path(updates_dir);
+        const fs::path tmp = fs::path(final_file.u8string() + ".tmp");
+        const std::string body = launch_result_body(target, from, outcome);
+        {
+            std::ofstream out(tmp, std::ios::binary | std::ios::trunc);
+            out << body << sha_text(body) << "\n";
+            out.flush();
+            if (!out) { out.close(); fs::remove(tmp, ec); return; }
+        }
+        fs::remove(final_file, ec);
+        fs::rename(tmp, final_file, ec);
+        if (ec) fs::remove(tmp, ec);
+    } catch (...) {
+    }
+}
+
+// Lee y BORRA siempre el archivo. Devuelve el resultado (UAC_CANCELLED, FAILED o LAUNCHED) solo si el archivo está
+// íntegro y es de esta misma instalación (misma versión objetivo y misma versión de origen); si no, vacío.
+std::string take_launch_result(const fs::path& updates_dir, const std::string& target, const std::string& from) {
+    std::string outcome;
+    try {
+        std::error_code ec;
+        const fs::path file = launch_result_path(updates_dir);
+        std::vector<std::uint8_t> raw;
+        if (read_small_file(file, 1024, raw)) {
+            const std::string text(raw.begin(), raw.end());
+            std::vector<std::string> lines;
+            std::string cur;
+            for (char c : text) { if (c == '\n') { lines.push_back(cur); cur.clear(); } else cur += c; }
+            if (!cur.empty()) lines.push_back(cur);
+            if (lines.size() == 5 && lines[0] == "CAFEUPD1" && !target.empty() && lines[1] == target && lines[2] == from &&
+                (lines[3] == "UAC_CANCELLED" || lines[3] == "FAILED" || lines[3] == "LAUNCHED") &&
+                lines[4] == sha_text(launch_result_body(lines[1], lines[2], lines[3]))) {
+                outcome = lines[3];
+            }
+        }
+        fs::remove(file, ec);
+        fs::remove(fs::path(file.u8string() + ".tmp"), ec);
+    } catch (...) {
+    }
+    return outcome;
 }
 
 std::string installer_url(const UpdateServiceOptions& opt, const UpdateManifest& m) {
@@ -343,10 +423,10 @@ bool SqliteUpdateService::has_permission() const {
 
 OperationResult SqliteUpdateService::require_permission() const {
     if (!account_service_ || !account_service_->is_authenticated()) {
-        return OperationResult::fail(ErrorCode::Forbidden, "Se requiere inicio de sesión");
+        return OperationResult::fail(ErrorCode::Forbidden, "Inicie sesión para continuar.");
     }
     if (!account_service_->has_permission("updates.manage")) {
-        return OperationResult::fail(ErrorCode::Forbidden, "Operación denegada: falta de permisos (updates.manage)");
+        return OperationResult::fail(ErrorCode::Forbidden, "No tiene permiso para actualizar el programa.");
     }
     return OperationResult::ok();
 }
@@ -358,12 +438,13 @@ void SqliteUpdateService::reconcile_install_state() {
     UpdateVersion installed;
     if (!parse_update_version(ctx_->opt.installed_version, installed)) return;
 
+    const std::string launch_outcome = take_launch_result(ctx_->updates_dir, row.install_target_version, ctx_->opt.installed_version);
     if (!row.install_target_version.empty()) {
         UpdateVersion target;
         const bool target_ok = parse_update_version(row.install_target_version, target);
         if (target_ok && compare_update_versions(installed, target) >= 0) {
-            set_cols(db_, {{"last_install_result", std::string("SUCCESS")},
-                           {"last_install_message", "El programa se actualizó a la versión " + row.install_target_version + "."},
+            set_cols(db_, {{"last_install_result", std::string("SUCCESS")}, {"last_install_reason", std::string("INSTALLED")},
+                           {"last_install_message", "Se actualizó a la versión " + row.install_target_version + "."},
                            {"last_install_version", row.install_target_version},
                            {"last_install_shown", std::int64_t(0)},
                            {"install_target_version", std::string()},
@@ -374,16 +455,36 @@ void SqliteUpdateService::reconcile_install_state() {
                            {"accepted", std::int64_t(0)}});
             write_audit_direct(db_, "", "UPDATE_INSTALL_OK", "Actualización instalada: versión " + row.install_target_version);
         } else {
-            set_cols(db_, {{"last_install_result", std::string("NOT_COMPLETED")},
-                           {"last_install_message",
-                            "La actualización a la versión " + row.install_target_version +
-                                " no se completó (puede que se haya cancelado la autorización de Windows). El programa sigue en la versión " +
-                                ctx_->opt.installed_version + " y funciona con normalidad. Se volverá a ofrecer."},
-                           {"last_install_version", row.install_target_version},
-                           {"last_install_shown", std::int64_t(0)},
-                           {"install_target_version", std::string()},
-                           {"accepted", std::int64_t(0)}});
-            write_audit_direct(db_, "", "UPDATE_INSTALL_NOT_COMPLETED", "La instalación de la versión " + row.install_target_version + " no se completó");
+            std::string reason = "NOT_COMPLETED";
+            std::string message = "La actualización no se completó; sigues con la versión " + ctx_->opt.installed_version + ". Se volverá a ofrecer.";
+            if (launch_outcome == "UAC_CANCELLED") {
+                reason = "PERMISSION_DENIED";
+                message = "No se instaló porque no se dio permiso en Windows. Se volverá a ofrecer.";
+            } else if (launch_outcome == "FAILED") {
+                reason = "LAUNCH_FAILED";
+                message = "No se pudo iniciar la instalación. El programa sigue en la versión " + ctx_->opt.installed_version + " y se volverá a ofrecer.";
+            }
+            // "Se volverá a ofrecer" es verdad: la versión sigue disponible, sin aceptar. La descarga se conserva solo si
+            // el archivo sigue en su sitio con su tamaño (el hash se vuelve a comprobar antes de instalar).
+            std::vector<Col> cols = {{"last_install_result", std::string("NOT_COMPLETED")}, {"last_install_reason", reason}, {"last_install_message", message},
+                                     {"last_install_version", row.install_target_version}, {"last_install_shown", std::int64_t(0)},
+                                     {"install_target_version", std::string()}, {"accepted", std::int64_t(0)}};
+            std::error_code ec;
+            const fs::path kept = fs::u8path(row.downloaded_path);
+            // El tamaño esperado sale del manifiesto firmado vuelto a verificar, no de las columnas de apoyo.
+            std::vector<std::uint8_t> kept_sig;
+            bool file_ok = false;
+            if (!row.downloaded_path.empty() && decode_hex(row.manifest_sig, kept_sig)) {
+                auto kept_manifest = verify_and_parse_manifest(row.manifest_bytes, kept_sig, ctx_->opt.keys, "0.0.0");
+                file_ok = kept_manifest.error == ManifestError::None && fs::is_regular_file(kept, ec) &&
+                          fs::file_size(kept, ec) == kept_manifest.manifest.installer_size;
+            }
+            if (row.download_state == "DONE" && !file_ok) {
+                cols.push_back({"download_state", std::string("NONE")});
+                cols.push_back({"downloaded_path", std::string()});
+            }
+            set_cols(db_, cols);
+            write_audit_direct(db_, "", "UPDATE_INSTALL_NOT_COMPLETED", "La instalación de la versión " + row.install_target_version + " no se completó (" + reason + ")");
         }
         load_row(db_, row);
     }
@@ -458,6 +559,7 @@ contracts::Result<contracts::UpdateStatusDto> SqliteUpdateService::get_update_st
         if (!row.download_error.empty()) {
             dto.error_kind = "DOWNLOAD";
             dto.error_message = row.download_error;
+            dto.download_error_kind = row.download_error_kind;  // vacío = motivo desconocido (filas anteriores a la migración 018)
         }
     } else if (row.last_check_result != "NONE" && row.last_check_result != "OK") {
         dto.state = "ERROR";
@@ -559,6 +661,7 @@ void SqliteUpdateService::start_check_thread(bool manual) {
                 cols.push_back({"download_state", std::string("NONE")});
                 cols.push_back({"downloaded_path", std::string()});
                 cols.push_back({"download_error", std::string()});
+                cols.push_back({"download_error_kind", std::string()});
             }
             set_cols(db, cols);
             finish_with("OK", "");
@@ -595,17 +698,18 @@ void SqliteUpdateService::start_download_thread() {
             Row row;
             if (!load_row(db, row) || row.available_version.empty()) return;
 
-            auto fail_download = [&](const std::string& message) {
-                set_cols(db, {{"download_state", std::string("NONE")}, {"accepted", std::int64_t(0)}, {"download_error", message}});
+            auto fail_download = [&](const std::string& kind, const std::string& message) {
+                set_cols(db, {{"download_state", std::string("NONE")}, {"accepted", std::int64_t(0)}, {"download_error", message},
+                              {"download_error_kind", kind}});
                 write_audit_direct(db, "", "UPDATE_DOWNLOAD_FAILED", "No se pudo descargar la versión " + row.available_version);
             };
 
             // La descarga se decide con el manifiesto guardado, VUELTO A VERIFICAR (la base puede ser editada por otros).
             std::vector<std::uint8_t> sig;
-            if (!decode_hex(row.manifest_sig, sig)) { fail_download(kMsgInvalid); return; }
+            if (!decode_hex(row.manifest_sig, sig)) { fail_download("INVALID", kMsgInvalid); return; }
             auto verified = verify_and_parse_manifest(row.manifest_bytes, sig, opt.keys, opt.installed_version);
             if (verified.error != ManifestError::None) {
-                fail_download(kMsgInvalid);
+                fail_download("INVALID", kMsgInvalid);
                 write_audit_direct(db, "", "UPDATE_REJECTED", "El manifiesto guardado ya no pasa la verificación");
                 return;
             }
@@ -629,26 +733,27 @@ void SqliteUpdateService::start_download_thread() {
                     10 * 60 * 1000);
                 if (res.error == HttpError::Cancelled) {
                     if (!worker->shutting_down.load()) {
-                        set_cols(db, {{"download_state", std::string("NONE")}, {"accepted", std::int64_t(0)}, {"download_error", std::string()}});
+                        set_cols(db, {{"download_state", std::string("NONE")}, {"accepted", std::int64_t(0)}, {"download_error", std::string()}, {"download_error_kind", std::string()}});
                         write_audit_direct(db, "", "UPDATE_DOWNLOAD_CANCELLED", "Descarga cancelada: versión " + m.version);
                     }
                     return;
                 }
                 if (res.error != HttpError::None) {
-                    fail_download(describe_http_error(res.error, res.status).message);
+                    const auto info = describe_http_error(res.error, res.status);
+                    fail_download(download_kind_of(info.kind), info.message);
                     return;
                 }
                 if (!installer_matches(part_file, m.installer_size, m.installer_sha256)) {
                     fs::remove(part_file, ec);
-                    fail_download(kMsgDownloadCorrupt);
+                    fail_download("INVALID", kMsgDownloadCorrupt);
                     write_audit_direct(db, "", "UPDATE_REJECTED", "La descarga no coincide con el manifiesto firmado");
                     return;
                 }
                 fs::rename(part_file, final_file, ec);
-                if (ec) { fail_download("No se pudo guardar la descarga en el disco."); return; }
+                if (ec) { fail_download("STORAGE", "No se pudo guardar la descarga en el disco."); return; }
             }
             worker->downloaded.store(m.installer_size);
-            set_cols(db, {{"download_state", std::string("DONE")}, {"downloaded_path", final_file.u8string()}, {"download_error", std::string()}});
+            set_cols(db, {{"download_state", std::string("DONE")}, {"downloaded_path", final_file.u8string()}, {"download_error", std::string()}, {"download_error_kind", std::string()}});
             write_audit_direct(db, "", "UPDATE_DOWNLOADED", "Versión " + m.version + " descargada y verificada");
         } catch (...) {
         }
@@ -695,7 +800,7 @@ OperationResult SqliteUpdateService::accept_update() {
         return OperationResult::fail(ErrorCode::InvalidState, "No hay ninguna actualización disponible para aceptar.");
     }
     const bool downloaded = row.download_state == "DONE";
-    set_cols(db_, {{"accepted", std::int64_t(1)}, {"accepted_at", local_text(ctx_->now())}, {"download_error", std::string()},
+    set_cols(db_, {{"accepted", std::int64_t(1)}, {"accepted_at", local_text(ctx_->now())}, {"download_error", std::string()}, {"download_error_kind", std::string()},
                    {"download_state", std::string(downloaded ? "DONE" : "DOWNLOADING")}});
     account_service_->record_audit_event("UPDATE_ACCEPTED", "Actualización aceptada: versión " + row.available_version);
     if (!downloaded) start_download_thread();
@@ -726,34 +831,44 @@ OperationResult SqliteUpdateService::cancel_download() {
     return OperationResult::ok();
 }
 
-OperationResult SqliteUpdateService::use_update_from_files(const std::string& installer_path, const std::string& manifest_path,
-                                                           const std::string& signature_path) {
+contracts::Result<contracts::UpdateFromFilesResultDto> SqliteUpdateService::apply_update_from_files(
+    const std::string& installer_path, const std::string& data_path, const std::string& verification_path) {
+    using R = contracts::Result<contracts::UpdateFromFilesResultDto>;
     auto perm = require_permission();
-    if (!perm.is_success()) return perm;
-    if (ctx_->opt.is_portable) return OperationResult::fail(ErrorCode::InvalidState, kMsgPortable);
-    if (ctx_->opt.keys.empty()) return OperationResult::fail(ErrorCode::InvalidState, kMsgNotConfigured);
+    if (!perm.is_success()) return R::fail(perm.error_code(), perm.error_message());
+    auto done = [](bool accepted, const char* reason, const std::string& message) {
+        contracts::UpdateFromFilesResultDto dto;
+        dto.accepted = accepted;
+        dto.reason = reason;
+        dto.message = message;
+        return R::ok(std::move(dto));
+    };
+    if (ctx_->opt.is_portable) return done(false, "PORTABLE", kMsgPortable);
+    if (ctx_->opt.keys.empty()) return done(false, "NOT_CONFIGURED", kMsgNotConfigured);
+    const std::string unreadable =
+        "No se pudieron leer los archivos. Elija el instalador, el archivo de datos y el archivo de verificación.";
     const fs::path installer = fs::u8path(installer_path);
     std::vector<std::uint8_t> manifest, sig_file;
-    if (!read_small_file(fs::u8path(manifest_path), kMaxManifestBytes, manifest) ||
-        !read_small_file(fs::u8path(signature_path), kMaxSignatureFileBytes, sig_file)) {
-        return OperationResult::fail(ErrorCode::InvalidInput, "No se pudieron leer los archivos de la actualización. Elija el instalador, su manifiesto y su firma.");
+    std::error_code ec;
+    if (!fs::is_regular_file(installer, ec) || !read_small_file(fs::u8path(data_path), kMaxManifestBytes, manifest) ||
+        !read_small_file(fs::u8path(verification_path), kMaxSignatureFileBytes, sig_file)) {
+        return done(false, "UNREADABLE", unreadable);
     }
     auto verified = verify_and_parse_manifest(manifest, sig_file, ctx_->opt.keys, ctx_->opt.installed_version);
     if (verified.error == ManifestError::NotNewer) {
-        return OperationResult::fail(ErrorCode::InvalidState, "Esa actualización no es más nueva que la versión instalada.");
+        return done(false, "NOT_NEWER", "Esa actualización no es más nueva que la versión instalada.");
     }
     if (verified.error != ManifestError::None) {
         write_audit_direct(db_, "", "UPDATE_REJECTED", "Una actualización desde archivos no pasó la verificación");
-        return OperationResult::fail(ErrorCode::InvalidInput, "Esa actualización no es auténtica o está dañada. No se instaló nada.");
+        return done(false, "INVALID", "Esa actualización no es auténtica o está dañada. No se instaló nada.");
     }
     const auto& m = verified.manifest;
     if (!installer_matches(installer, m.installer_size, m.installer_sha256)) {
-        write_audit_direct(db_, "", "UPDATE_REJECTED", "El instalador elegido no coincide con el manifiesto firmado");
-        return OperationResult::fail(ErrorCode::InvalidInput, "El instalador elegido no corresponde a esa actualización o está dañado. No se instaló nada.");
+        write_audit_direct(db_, "", "UPDATE_REJECTED", "El instalador elegido no coincide con la información firmada");
+        return done(false, "INVALID", "El instalador elegido no corresponde a esa actualización o está dañado. No se instaló nada.");
     }
     // Se copia a la carpeta propia (con archivo temporal) y se vuelve a verificar la copia.
     const fs::path dir = ctx_->updates_dir / m.version;
-    std::error_code ec;
     fs::create_directories(dir, ec);
     const fs::path final_file = dir / m.installer_name;
     const fs::path tmp_file = dir / (m.installer_name + ".part");
@@ -761,11 +876,11 @@ OperationResult SqliteUpdateService::use_update_from_files(const std::string& in
     fs::copy_file(installer, tmp_file, fs::copy_options::overwrite_existing, ec);
     if (ec || !installer_matches(tmp_file, m.installer_size, m.installer_sha256)) {
         fs::remove(tmp_file, ec);
-        return OperationResult::fail(ErrorCode::StorageFailure, "No se pudo copiar la actualización al disco del equipo.");
+        return done(false, "STORAGE", "No se pudo copiar la actualización al disco del equipo.");
     }
     fs::remove(final_file, ec);
     fs::rename(tmp_file, final_file, ec);
-    if (ec) return OperationResult::fail(ErrorCode::StorageFailure, "No se pudo guardar la actualización en el disco del equipo.");
+    if (ec) return done(false, "STORAGE", "No se pudo guardar la actualización en el disco del equipo.");
 
     Row row;
     load_row(db_, row);
@@ -777,11 +892,23 @@ OperationResult SqliteUpdateService::use_update_from_files(const std::string& in
     set_cols(db_, {{"available_version", m.version}, {"notes", notes}, {"installer_name", m.installer_name},
                    {"installer_size", std::int64_t(m.installer_size)}, {"installer_sha256", m.installer_sha256},
                    {"manifest_bytes", manifest}, {"manifest_sig", to_hex(sig_decoded)}, {"download_state", std::string("DONE")},
-                   {"downloaded_path", final_file.u8string()}, {"download_error", std::string()},
+                   {"downloaded_path", final_file.u8string()}, {"download_error", std::string()}, {"download_error_kind", std::string()},
                    {"accepted", std::int64_t(1)}, {"accepted_at", local_text(ctx_->now())}});
     cleanup_updates_dir(ctx_->updates_dir, m.version);
     account_service_->record_audit_event("UPDATE_FROM_FILES", "Actualización desde archivos aceptada: versión " + m.version);
-    return OperationResult::ok();
+    return done(true, "OK", "La actualización quedó lista para instalarse al cerrar el programa.");
+}
+
+OperationResult SqliteUpdateService::use_update_from_files(const std::string& installer_path, const std::string& manifest_path,
+                                                           const std::string& signature_path) {
+    auto r = apply_update_from_files(installer_path, manifest_path, signature_path);
+    if (!r.is_success()) return OperationResult::fail(r.error_code(), r.error_message());
+    const auto& v = r.value();
+    if (v.accepted) return OperationResult::ok();
+    ErrorCode code = ErrorCode::InvalidState;
+    if (v.reason == "INVALID" || v.reason == "UNREADABLE") code = ErrorCode::InvalidInput;
+    else if (v.reason == "STORAGE") code = ErrorCode::StorageFailure;
+    return OperationResult::fail(code, v.message);
 }
 
 OperationResult SqliteUpdateService::postpone_install_this_session() {
@@ -802,6 +929,9 @@ contracts::Result<contracts::UpdateInstallResultDto> SqliteUpdateService::get_la
     if (row.last_install_result != "NONE" && !row.last_install_shown) {
         dto.has_result = true;
         dto.success = row.last_install_result == "SUCCESS";
+        dto.reason = dto.success ? "INSTALLED"
+                     : (row.last_install_reason == "PERMISSION_DENIED" || row.last_install_reason == "LAUNCH_FAILED") ? row.last_install_reason
+                                                                                                                       : "NOT_COMPLETED";
         dto.version = row.last_install_version;
         dto.message = row.last_install_message;
     }
@@ -920,13 +1050,24 @@ SqliteUpdateService::LaunchOutcome SqliteUpdateService::launch_install(const Ins
         if (error) *error = plan.reason;
         return LaunchOutcome::Failed;
     }
+    // El resultado se guarda DESPUÉS de que el lanzamiento vuelva (el aviso de Windows bloquea hasta que la persona
+    // decide). La base ya está cerrada: se usa un archivo pequeño que el siguiente arranque lee y borra.
+    auto record = [&](LaunchOutcome outcome) {
+        const char* text = outcome == LaunchOutcome::Launched ? "LAUNCHED" : outcome == LaunchOutcome::UacCancelled ? "UAC_CANCELLED" : "FAILED";
+        write_launch_result(ctx_->updates_dir, plan.version, ctx_->opt.installed_version, text);
+        return outcome;
+    };
 #ifdef CAFETERIA_TEST_HOOKS
     {
         const char* target = std::getenv("CAFETERIA_UPDATE_TEST_LAUNCH");
         if (target && *target) {
+            const char* forced = std::getenv("CAFETERIA_UPDATE_TEST_LAUNCH_RESULT");
+            const std::string want = forced ? forced : "";
+            if (want == "UAC_CANCELLED") { if (error) *error = "simulado: autorización cancelada"; return record(LaunchOutcome::UacCancelled); }
+            if (want == "FAILED") { if (error) *error = "simulado: no se pudo lanzar"; return record(LaunchOutcome::Failed); }
             std::ofstream out(fs::u8path(target), std::ios::binary | std::ios::trunc);
             out << plan.installer.u8string() << "\n" << plan.version << "\n" << plan.arguments << "\n";
-            return out ? LaunchOutcome::Launched : LaunchOutcome::Failed;
+            return record(out ? LaunchOutcome::Launched : LaunchOutcome::Failed);
         }
     }
 #endif
@@ -943,14 +1084,21 @@ SqliteUpdateService::LaunchOutcome SqliteUpdateService::launch_install(const Ins
     if (!ShellExecuteExW(&sei)) {
         const DWORD e = GetLastError();
         if (error) *error = "ShellExecuteEx falló (" + std::to_string(e) + ")";
-        return e == ERROR_CANCELLED ? LaunchOutcome::UacCancelled : LaunchOutcome::Failed;
+        return record(e == ERROR_CANCELLED ? LaunchOutcome::UacCancelled : LaunchOutcome::Failed);
     }
     if (sei.hProcess) CloseHandle(sei.hProcess);
-    return LaunchOutcome::Launched;
+    return record(LaunchOutcome::Launched);
 #else
     if (error) *error = "solo Windows";
-    return LaunchOutcome::Failed;
+    return record(LaunchOutcome::Failed);
 #endif
+}
+
+// Hubo plan pero no se pudo intentar el lanzamiento (la base no cerró limpia): se anota como fallo de inicio. Solo
+// escribe si el plan es válido; sin plan (sin sesión, pospuesto, portable...) no escribe nada.
+void SqliteUpdateService::note_launch_not_attempted(const InstallLaunchPlan& plan) const {
+    if (!plan.ok) return;
+    write_launch_result(ctx_->updates_dir, plan.version, ctx_->opt.installed_version, "FAILED");
 }
 
 } // namespace app::services

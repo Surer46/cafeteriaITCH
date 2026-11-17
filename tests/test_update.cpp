@@ -29,6 +29,8 @@
 #include "app/services/update_manifest.hpp"
 #include "app/services/update_public_keys.hpp"
 #include "app/services/update_signature.hpp"
+#include "app/storage/migration_runner.hpp"
+#include <functional>
 #include "app/storage/sqlite_database.hpp"
 
 namespace fs = std::filesystem;
@@ -224,7 +226,7 @@ Published make_release(const TestKey& key, const std::string& version, std::size
                        const std::vector<std::string>& notes = {"Ahora el ticket muestra la hora.", "Se corrigió un error al cobrar."}) {
     Published p;
     p.version = version;
-    p.installer = pseudo_bytes(installer_size, 1234u + static_cast<std::uint32_t>(version.size()) + static_cast<std::uint32_t>(version.back()));
+    p.installer = pseudo_bytes(installer_size, 98765u + static_cast<std::uint32_t>(version.size()) + static_cast<std::uint32_t>(version.back()));
     p.manifest = bytes_of(manifest_json(version, notes, p.installer));
     p.signature = key.sign(p.manifest);
     return p;
@@ -816,7 +818,7 @@ static void test_state_persists_and_install_reconciliation() {
     env.make_service(kInstalled, false);
     auto result = env.svc->get_last_install_result().value();
     TEST_CHECK(result.has_result && !result.success && result.version == "0.2.0" && !has_jargon(result.message) &&
-                   result.message.find("sigue en la versión 0.1.0") != std::string::npos, "No completada: " + result.message);
+                   result.message.find("sigues con la versión 0.1.0") != std::string::npos && result.reason == "NOT_COMPLETED", "No completada: " + result.message);
     st = env.status();
     TEST_CHECK(st.state == "AVAILABLE" && !st.accepted && st.download_verified, "Se vuelve a ofrecer (descarga conservada, sin aceptar)");
     TEST_CHECK(env.svc->acknowledge_install_result().is_success() && !env.svc->get_last_install_result().value().has_result, "El resultado se muestra una vez");
@@ -829,7 +831,7 @@ static void test_state_persists_and_install_reconciliation() {
     plan = SqliteUpdateService::InstallLaunchPlan();
     env.make_service("0.2.0", false);
     result = env.svc->get_last_install_result().value();
-    TEST_CHECK(result.has_result && result.success && result.message == "El programa se actualizó a la versión 0.2.0.", "Completada: " + result.message);
+    TEST_CHECK(result.has_result && result.success && result.message == "Se actualizó a la versión 0.2.0." && result.reason == "INSTALLED", "Completada: " + result.message);
     st = env.status();
     TEST_CHECK(st.state == "UP_TO_DATE" && st.available_version.empty() && !st.accepted, "Sin novedad tras actualizar");
     TEST_CHECK(!fs::exists(env.dir / "updates" / "0.2.0"), "Se limpia la descarga de la versión ya instalada");
@@ -1237,6 +1239,28 @@ static void test_hooks_or_their_absence() {
                    launched.find("/VERYSILENT") != std::string::npos, "Escribe lo que habría lanzado");
     _putenv_s("CAFETERIA_UPDATE_TEST_LAUNCH", "");
 
+    // UAC cancelado y fallo de lanzamiento simulados: el resultado llega al reabrir con su motivo
+    plan = SqliteUpdateService::InstallLaunchPlan();
+    for (const char* sim : {"UAC_CANCELLED", "FAILED"}) {
+        env.make_service(kInstalled, false);
+        env.svc->acknowledge_install_result();
+        TEST_CHECK(env.svc->accept_update().is_success() && env.status().state == "READY", std::string(sim) + ": lista");
+        auto p2 = env.svc->prepare_install_on_close();
+        TEST_CHECK(p2.ok, std::string(sim) + ": plan");
+        _putenv_s("CAFETERIA_UPDATE_TEST_LAUNCH", launch_file.u8string().c_str());
+        _putenv_s("CAFETERIA_UPDATE_TEST_LAUNCH_RESULT", sim);
+        std::string err;
+        const auto outcome = env.svc->launch_install(p2, &err);
+        _putenv_s("CAFETERIA_UPDATE_TEST_LAUNCH_RESULT", "");
+        _putenv_s("CAFETERIA_UPDATE_TEST_LAUNCH", "");
+        TEST_CHECK(outcome == (std::string(sim) == "FAILED" ? SqliteUpdateService::LaunchOutcome::Failed : SqliteUpdateService::LaunchOutcome::UacCancelled),
+                   std::string(sim) + ": resultado del lanzamiento");
+        p2 = SqliteUpdateService::InstallLaunchPlan();
+        env.make_service(kInstalled, false);
+        const auto r = env.svc->get_last_install_result().value();
+        TEST_CHECK(r.has_result && r.reason == (std::string(sim) == "FAILED" ? "LAUNCH_FAILED" : "PERMISSION_DENIED"), std::string(sim) + ": motivo al reabrir: " + r.reason);
+    }
+
     // Fuente vacía o inexistente = sin red
     _putenv_s("CAFETERIA_UPDATE_TEST_SOURCE", (work / "vacia").u8string().c_str());
     UEnv env2("ganchos sin red", configured_update_keys());
@@ -1266,6 +1290,391 @@ static void test_hooks_or_their_absence() {
 #endif
 }
 
+
+// ===============================================================================================
+// B13: motivos explícitos
+// ===============================================================================================
+static std::vector<std::string> g_messages;  // todo texto que el servicio devolvió para mostrar (revisión de lenguaje llano)
+static void seen(const std::string& m) { if (!m.empty()) g_messages.push_back(m); }
+
+static std::string sha_of_text(const std::string& t) {
+    app::crypto::Sha256 h;
+    h.update(reinterpret_cast<const std::uint8_t*>(t.data()), t.size());
+    return hex_of(h.finalize());
+}
+
+// Archivo de resultado del lanzamiento, con el mismo formato que escribe el servicio. modo: 0 válido, 1 contenido
+// cambiado (no coincide con su comprobación), 2 cortado, 3 basura.
+static void put_launch_file(const fs::path& dir, const std::string& target, const std::string& from, const std::string& outcome, int mode = 0) {
+    fs::create_directories(dir / "updates");
+    const std::string body = "CAFEUPD1\n" + target + "\n" + from + "\n" + outcome + "\n";
+    std::string text = body + sha_of_text(body) + "\n";
+    if (mode == 1) text = "CAFEUPD1\n" + target + "\n" + from + "\n" + (outcome == "FAILED" ? "UAC_CANCELLED" : "FAILED") + "\n" + sha_of_text(body) + "\n";
+    if (mode == 2) text = text.substr(0, text.size() / 2);
+    if (mode == 3) text = "basura";
+    std::ofstream out(dir / "updates" / "ultimo-lanzamiento.txt", std::ios::binary | std::ios::trunc);
+    out << text;
+}
+
+static bool contains_word_ci(const std::string& text, const std::string& word) {
+    auto lower = [](std::string v) { for (auto& c : v) if (c >= 'A' && c <= 'Z') c = static_cast<char>(c - 'A' + 'a'); return v; };
+    const std::string t = lower(text), w = lower(word);
+    auto letter = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (static_cast<unsigned char>(c) >= 0x80); };
+    for (std::size_t pos = t.find(w); pos != std::string::npos; pos = t.find(w, pos + 1)) {
+        const bool left = pos == 0 || !letter(t[pos - 1]);
+        const bool right = pos + w.size() >= t.size() || !letter(t[pos + w.size()]);
+        if (left && right) return true;
+    }
+    return false;
+}
+
+static void test_install_result_reasons() {
+    std::cout << "[TEST] B13: motivo del resultado de la instalación (INSTALLED, PERMISSION_DENIED, LAUNCH_FAILED, NOT_COMPLETED)..." << std::endl;
+    TestKey key;
+    UEnv env("motivos instalacion", {key.pub});
+    env.login_owner();
+    serve(*env.http, make_release(key, "0.2.0"));
+    TEST_CHECK(env.check_and_wait().state == "AVAILABLE", "Disponible");
+    const fs::path launch_file = env.dir / "updates" / "ultimo-lanzamiento.txt";
+    const std::string msg_pd = "No se instaló porque no se dio permiso en Windows. Se volverá a ofrecer.";
+    const std::string msg_lf = "No se pudo iniciar la instalación. El programa sigue en la versión 0.1.0 y se volverá a ofrecer.";
+    const std::string msg_nc = "La actualización no se completó; sigues con la versión 0.1.0. Se volverá a ofrecer.";
+
+    auto scenario = [&](const std::string& name, const std::function<void()>& writer, const std::string& reason, const std::string& message) {
+        TEST_CHECK(env.svc->accept_update().is_success(), name + ": aceptar");
+        env.wait_state("READY");
+        {
+            auto plan = env.svc->prepare_install_on_close();
+            TEST_CHECK(plan.ok, name + ": plan: " + plan.reason);
+        }
+        writer();
+        env.make_service(kInstalled, false);  // "el siguiente arranque"
+        const auto r = env.svc->get_last_install_result().value();
+        TEST_CHECK(r.has_result && !r.success && r.reason == reason && r.version == "0.2.0" && r.message == message,
+                   name + ": motivo " + r.reason + " / " + r.message);
+        seen(r.message);
+        TEST_CHECK(!fs::exists(launch_file), name + ": el archivo de resultado se borra siempre");
+        const auto st = env.status();
+        TEST_CHECK(st.state == "AVAILABLE" && !st.accepted && st.download_verified && st.available_version == "0.2.0" && !st.will_install_on_close,
+                   name + ": se vuelve a ofrecer (AVAILABLE, sin aceptar, descarga conservada): " + st.state);
+        TEST_CHECK(env.svc->acknowledge_install_result().is_success() && !env.svc->get_last_install_result().value().has_result, name + ": se muestra una sola vez");
+        env.make_service(kInstalled, false);
+        TEST_CHECK(!env.svc->get_last_install_result().value().has_result, name + ": no reaparece al reabrir otra vez");
+    };
+    scenario("sin archivo", [] {}, "NOT_COMPLETED", msg_nc);
+    scenario("autorización cancelada", [&] { put_launch_file(env.dir, "0.2.0", kInstalled, "UAC_CANCELLED"); }, "PERMISSION_DENIED", msg_pd);
+    scenario("no se pudo lanzar", [&] { put_launch_file(env.dir, "0.2.0", kInstalled, "FAILED"); }, "LAUNCH_FAILED", msg_lf);
+    scenario("se abrió y no terminó", [&] { put_launch_file(env.dir, "0.2.0", kInstalled, "LAUNCHED"); }, "NOT_COMPLETED", msg_nc);
+    scenario("archivo alterado", [&] { put_launch_file(env.dir, "0.2.0", kInstalled, "UAC_CANCELLED", 1); }, "NOT_COMPLETED", msg_nc);
+    scenario("archivo cortado", [&] { put_launch_file(env.dir, "0.2.0", kInstalled, "FAILED", 2); }, "NOT_COMPLETED", msg_nc);
+    scenario("archivo con basura", [&] { put_launch_file(env.dir, "0.2.0", kInstalled, "FAILED", 3); }, "NOT_COMPLETED", msg_nc);
+    scenario("archivo de otra versión", [&] { put_launch_file(env.dir, "0.9.9", kInstalled, "UAC_CANCELLED"); }, "NOT_COMPLETED", msg_nc);
+    scenario("archivo de otro origen", [&] { put_launch_file(env.dir, "0.2.0", "0.0.5", "UAC_CANCELLED"); }, "NOT_COMPLETED", msg_nc);
+
+    // Sobra de otro intento (sin instalación pendiente): se borra y no aparece ningún resultado
+    put_launch_file(env.dir, "0.2.0", kInstalled, "UAC_CANCELLED");
+    env.make_service(kInstalled, false);
+    TEST_CHECK(!fs::exists(launch_file) && !env.svc->get_last_install_result().value().has_result, "Archivo sobrante: se borra y no hay resultado");
+
+    // INSTALLED nunca sale del archivo: depende de la versión en ejecución
+    TEST_CHECK(env.svc->accept_update().is_success(), "Aceptar");
+    { auto plan = env.svc->prepare_install_on_close(); TEST_CHECK(plan.ok, "Plan"); }
+    put_launch_file(env.dir, "0.2.0", kInstalled, "UAC_CANCELLED");
+    env.make_service("0.2.0", false);
+    const auto done = env.svc->get_last_install_result().value();
+    TEST_CHECK(done.has_result && done.success && done.reason == "INSTALLED" && done.message == "Se actualizó a la versión 0.2.0." && !fs::exists(launch_file),
+               "Con la versión nueva en ejecución es INSTALLED aunque el archivo diga otra cosa");
+    seen(done.message);
+    // Una versión nueva sin archivo tampoco cae en nada distinto
+    TEST_CHECK(env.svc->acknowledge_install_result().is_success() && !env.svc->get_last_install_result().value().has_result, "Una sola vez");
+
+    // Lanzamiento no intentado (la base no cerró limpia): LAUNCH_FAILED, solo si hubo plan válido
+    UEnv env2("no intentado", {key.pub});
+    env2.login_owner();
+    serve(*env2.http, make_release(key, "0.2.0"));
+    env2.check_and_wait();
+    TEST_CHECK(env2.svc->accept_update().is_success(), "Aceptar");
+    env2.wait_state("READY");
+    {
+        SqliteUpdateService::InstallLaunchPlan none;
+        env2.svc->note_launch_not_attempted(none);
+        TEST_CHECK(!fs::exists(env2.dir / "updates" / "ultimo-lanzamiento.txt"), "Sin plan válido no se escribe nada");
+        auto plan = env2.svc->prepare_install_on_close();
+        TEST_CHECK(plan.ok, "Plan");
+        env2.svc->note_launch_not_attempted(plan);
+        TEST_CHECK(fs::exists(env2.dir / "updates" / "ultimo-lanzamiento.txt"), "Con plan válido se anota");
+    }
+    env2.make_service(kInstalled, false);
+    const auto nf = env2.svc->get_last_install_result().value();
+    TEST_CHECK(nf.has_result && nf.reason == "LAUNCH_FAILED" && nf.message == msg_lf, "No intentado: LAUNCH_FAILED: " + nf.message);
+    // Casos sin lanzamiento: ningún resultado al reabrir
+    auto no_launch = [&](const std::string& name, const std::function<void(UEnv&)>& prepare) {
+        UEnv e("sin lanzamiento " + name, {key.pub});
+        e.login_owner();
+        serve(*e.http, make_release(key, "0.2.0"));
+        e.check_and_wait();
+        TEST_CHECK(e.svc->accept_update().is_success(), name + ": aceptar");
+        e.wait_state("READY");
+        prepare(e);
+        auto plan = e.svc->prepare_install_on_close();
+        TEST_CHECK(!plan.ok, name + ": no hay plan");
+        e.svc->note_launch_not_attempted(plan);
+        TEST_CHECK(!fs::exists(e.dir / "updates" / "ultimo-lanzamiento.txt"), name + ": no se escribe nada");
+        e.account->login("dueno_b11", kOwnerPwd);
+        e.make_service(kInstalled, false);
+        TEST_CHECK(!e.svc->get_last_install_result().value().has_result, name + ": no aparece ningún resultado al reabrir");
+    };
+    no_launch("pospuesto", [](UEnv& e) { e.svc->postpone_install_this_session(); });
+    no_launch("sin sesion", [](UEnv& e) { e.account->logout(); });
+    no_launch("portable", [](UEnv& e) { e.make_service(kInstalled, true); });
+}
+
+static void test_download_error_reasons() {
+    std::cout << "[TEST] B13: motivo de la descarga fallida (download_error_kind) y migración 018..." << std::endl;
+    TestKey key;
+    UEnv env("motivos descarga", {key.pub});
+    env.login_owner();
+    const auto rel = make_release(key, "0.2.0");
+    serve(*env.http, rel);
+    TEST_CHECK(env.check_and_wait().state == "AVAILABLE", "Disponible");
+    auto failed_with = [&](const std::string& name, const std::string& kind) {
+        TEST_CHECK(env.svc->accept_update().is_success(), name + ": aceptar");
+        TEST_CHECK(env.svc->wait_idle(20000), name + ": termina");
+        const auto st = env.status();
+        TEST_CHECK(st.state == "AVAILABLE" && !st.accepted && st.error_kind == "DOWNLOAD" && st.download_error_kind == kind && !st.error_message.empty(),
+                   name + ": " + st.state + " / " + st.error_kind + " / " + st.download_error_kind);
+        seen(st.error_message);
+    };
+    struct C { const char* name; HttpError e; int status; const char* kind; };
+    for (const C& c : std::vector<C>{{"sin red", HttpError::NoNetwork, 0, "NO_NETWORK"}, {"lenta", HttpError::Timeout, 0, "TIMEOUT"},
+                                     {"servidor", HttpError::BadStatus, 503, "SERVER"}, {"TLS no disponible", HttpError::TlsUnavailable, 0, "TLS_UNAVAILABLE"},
+                                     {"certificado", HttpError::TlsFailure, 0, "TLS_FAILURE"}}) {
+        env.http->route_error(installer_url("0.2.0"), c.e, c.status);
+        failed_with(c.name, c.kind);
+    }
+    auto evil = rel.installer;
+    evil[evil.size() / 2] ^= 1;
+    env.http->route(installer_url("0.2.0"), evil);
+    failed_with("dañada", "INVALID");
+    auto shorter = rel.installer;
+    shorter.resize(shorter.size() - 1000);
+    env.http->route(installer_url("0.2.0"), shorter);
+    failed_with("incompleta", "INVALID");
+    // No se pudo guardar: el destino final está ocupado por una carpeta
+    env.http->route(installer_url("0.2.0"), rel.installer);
+    const fs::path block = env.installer_path("0.2.0");
+    fs::create_directories(block);
+    { std::ofstream(block / "ocupado.txt") << "x"; }
+    failed_with("disco", "STORAGE");
+    std::error_code ec;
+    fs::remove_all(block, ec);
+    // Éxito: el motivo se limpia
+    TEST_CHECK(env.svc->accept_update().is_success(), "Aceptar");
+    const auto ok = env.wait_state("READY");
+    TEST_CHECK(ok.error_kind.empty() && ok.download_error_kind.empty() && ok.error_message.empty(), "Con éxito no queda motivo");
+    // Fila anterior a la migración 018: motivo desconocido (vacío) con mensaje
+    TEST_CHECK(env.db.execute("UPDATE update_state SET download_error = 'La conexión está muy lenta.', download_error_kind = '', accepted = 0, download_state = 'NONE';").is_success(), "Fila antigua");
+    const auto old = env.status();
+    TEST_CHECK(old.state == "AVAILABLE" && old.error_kind == "DOWNLOAD" && old.download_error_kind.empty() && old.error_message == "La conexión está muy lenta.",
+               "Motivo vacío = desconocido, con el mensaje del servicio");
+
+    // Migración 018: la columna existe y el runner no la duplica al correr de nuevo
+    auto scalar = [&](const std::string& sql) {
+        auto prep = env.db.prepare(sql);
+        TEST_CHECK(prep.is_success(), "consulta: " + sql);
+        auto stmt = std::move(prep.value());
+        TEST_CHECK(stmt.step().is_success(), "consulta");
+        return stmt.get_text(0);
+    };
+    TEST_CHECK(scalar("SELECT COUNT(*) FROM pragma_table_info('update_state') WHERE name = 'download_error_kind';") == "1", "Columna download_error_kind");
+    const std::string before = scalar("SELECT COUNT(*) FROM schema_migrations;");
+    MigrationRunner runner(env.db);
+    TEST_CHECK(runner.run_pending_migrations_from_dir(fs::u8path(SOURCE_MIGRATIONS_DIR)).is_success(), "El runner corre de nuevo sin error");
+    TEST_CHECK(scalar("SELECT COUNT(*) FROM schema_migrations;") == before &&
+                   scalar("SELECT COUNT(*) FROM pragma_table_info('update_state') WHERE name = 'download_error_kind';") == "1",
+               "Sin duplicar versiones ni columna");
+    TEST_CHECK(scalar("SELECT COUNT(*) FROM schema_migrations WHERE version = 18;") == "1", "Migración 018 aplicada");
+}
+
+static void test_apply_update_from_files_reasons() {
+    std::cout << "[TEST] B13: motivo al elegir archivos del USB (apply_update_from_files)..." << std::endl;
+    TestKey key, other;
+    UEnv env("motivos usb", {key.pub});
+    const fs::path usb = g_root / "usb b13";
+    fs::create_directories(usb);
+    auto write = [&](const std::string& name, const std::vector<std::uint8_t>& b) {
+        const fs::path f = usb / fs::u8path(name);
+        std::ofstream out(f, std::ios::binary | std::ios::trunc);
+        out.write(reinterpret_cast<const char*>(b.data()), static_cast<std::streamsize>(b.size()));
+        return f.u8string();
+    };
+    const auto rel = make_release(key, "0.2.0");
+    const auto installer = write(installer_name("0.2.0"), rel.installer);
+    const auto data = write("datos.json", rel.manifest);
+    const auto verif = write("verificacion.sig", bytes_of(hex_of(rel.signature)));
+
+    // Sin sesión y sin permiso
+    env.account->logout();
+    TEST_CHECK(env.svc->apply_update_from_files(installer, data, verif).error_code() == ErrorCode::Forbidden, "Sin sesión: Forbidden");
+    seen(env.svc->apply_update_from_files(installer, data, verif).error_message());
+    env.login_cashier();
+    TEST_CHECK(env.svc->apply_update_from_files(installer, data, verif).error_code() == ErrorCode::Forbidden, "Cajero: Forbidden");
+    seen(env.svc->apply_update_from_files(installer, data, verif).error_message());
+    env.login_owner();
+
+    auto expect = [&](const std::string& name, const std::string& i, const std::string& d, const std::string& v, const std::string& reason) {
+        auto r = env.svc->apply_update_from_files(i, d, v);
+        TEST_CHECK(r.is_success(), name + ": el Result no falla");
+        TEST_CHECK(r.value().reason == reason && r.value().accepted == (reason == "OK") && !r.value().message.empty(),
+                   name + ": motivo " + r.value().reason + " / " + r.value().message);
+        seen(r.value().message);
+        return r.value();
+    };
+    expect("instalador inexistente", (usb / "no-existe.exe").u8string(), data, verif, "UNREADABLE");
+    expect("datos inexistentes", installer, (usb / "no-existe.json").u8string(), verif, "UNREADABLE");
+    expect("verificación inexistente", installer, data, (usb / "no-existe.sig").u8string(), "UNREADABLE");
+    expect("instalador es una carpeta", usb.u8string(), data, verif, "UNREADABLE");
+    const auto unreadable = expect("ilegible", installer, data, (usb / "no-existe.sig").u8string(), "UNREADABLE");
+    TEST_CHECK(unreadable.message == "No se pudieron leer los archivos. Elija el instalador, el archivo de datos y el archivo de verificación.", "Texto de archivos ilegibles");
+    const auto foreign = make_release(other, "0.2.0");
+    expect("verificación de otra clave", installer, data, write("ajena.sig", bytes_of(hex_of(foreign.signature))), "INVALID");
+    auto altered_data = rel.manifest;
+    altered_data[30] ^= 1;
+    expect("datos alterados", installer, write("alterado.json", altered_data), verif, "INVALID");
+    auto altered_inst = rel.installer;
+    altered_inst[100] ^= 1;
+    expect("instalador alterado", write("malo.exe", altered_inst), data, verif, "INVALID");
+    auto short_inst = rel.installer;
+    short_inst.resize(short_inst.size() - 5);
+    expect("instalador incompleto", write("corto.exe", short_inst), data, verif, "INVALID");
+    const auto same = make_release(key, "0.1.0");
+    expect("misma versión", write(installer_name("0.1.0"), same.installer), write("igual.json", same.manifest), write("igual.sig", bytes_of(hex_of(same.signature))), "NOT_NEWER");
+    const auto older = make_release(key, "0.0.9");
+    expect("versión anterior", write(installer_name("0.0.9"), older.installer), write("vieja.json", older.manifest), write("vieja.sig", bytes_of(hex_of(older.signature))), "NOT_NEWER");
+    TEST_CHECK(env.status().state == "UP_TO_DATE" && env.status().available_version.empty(), "Ningún rechazo cambió el estado");
+
+    // No se pudo copiar al disco: el destino está ocupado por una carpeta
+    const fs::path block = env.installer_path("0.2.0");
+    fs::create_directories(block);
+    { std::ofstream(block / "ocupado.txt") << "x"; }
+    expect("disco", installer, data, verif, "STORAGE");
+    TEST_CHECK(env.svc->use_update_from_files(installer, data, verif).error_code() == ErrorCode::StorageFailure, "El método anterior: STORAGE = StorageFailure");
+    std::error_code ec;
+    fs::remove_all(block, ec);
+    TEST_CHECK(env.svc->use_update_from_files(installer, data, (usb / "no-existe.sig").u8string()).error_code() == ErrorCode::InvalidInput, "El método anterior: UNREADABLE = InvalidInput");
+    TEST_CHECK(env.svc->use_update_from_files(write("a.exe", same.installer), write("a.json", same.manifest), write("a.sig", bytes_of(hex_of(same.signature)))).error_code() == ErrorCode::InvalidState,
+               "El método anterior: NOT_NEWER = InvalidState");
+
+    // Aceptada
+    const auto ok = expect("aceptada", installer, data, verif, "OK");
+    TEST_CHECK(ok.message == "La actualización quedó lista para instalarse al cerrar el programa.", "Texto de aceptada");
+    TEST_CHECK(env.status().state == "READY" && env.status().will_install_on_close, "Queda lista");
+
+    // Portable y sin configurar
+    env.make_service(kInstalled, true);
+    expect("portable", installer, data, verif, "PORTABLE");
+    UEnv nokeys("motivos usb sin claves", {});
+    nokeys.login_owner();
+    auto r = nokeys.svc->apply_update_from_files(installer, data, verif);
+    TEST_CHECK(r.is_success() && r.value().reason == "NOT_CONFIGURED" && !r.value().accepted, "Sin claves: NOT_CONFIGURED");
+    seen(r.value().message);
+    TEST_CHECK(nokeys.svc->use_update_from_files(installer, data, verif).error_code() == ErrorCode::InvalidState, "El método anterior: NOT_CONFIGURED = InvalidState");
+}
+
+static void test_plain_language_everywhere() {
+    std::cout << "[TEST] B13: lenguaje llano en todo lo que el servicio devuelve para mostrar..." << std::endl;
+    TestKey key;
+    // Negativas de permisos y mensajes de error de cada tipo
+    UEnv env("lenguaje llano", {key.pub});
+    env.account->logout();
+    auto deny = [&] {
+        seen(env.svc->get_update_status().error_message());
+        seen(env.svc->check_for_updates().error_message());
+        seen(env.svc->accept_update().error_message());
+        seen(env.svc->decline_update().error_message());
+        seen(env.svc->cancel_download().error_message());
+        seen(env.svc->use_update_from_files("a", "b", "c").error_message());
+        seen(env.svc->apply_update_from_files("a", "b", "c").error_message());
+        seen(env.svc->postpone_install_this_session().error_message());
+        seen(env.svc->get_last_install_result().error_message());
+        seen(env.svc->acknowledge_install_result().error_message());
+    };
+    deny();
+    env.login_cashier();
+    deny();
+    TEST_CHECK(g_messages.size() >= 20, "Se recogieron los mensajes de permisos");
+    {
+        const auto m = env.svc->accept_update().error_message();
+        TEST_CHECK(m == "No tiene permiso para actualizar el programa.", "Texto de permiso: " + m);
+        TEST_CHECK(env.svc->get_update_status().error_message() == "No tiene permiso para actualizar el programa.", "Permiso en el estado");
+    }
+    env.account->logout();
+    TEST_CHECK(env.svc->get_update_status().error_message() == "Inicie sesión para continuar.", "Texto de sesión");
+    env.login_owner();
+    // Búsquedas fallidas de cada tipo
+    for (const HttpError e : {HttpError::NoNetwork, HttpError::Timeout, HttpError::TlsUnavailable, HttpError::TlsFailure, HttpError::BadStatus,
+                              HttpError::TooLarge, HttpError::NotHttps, HttpError::Other}) {
+        env.http->routes.clear();
+        env.http->route_error(kManifestUrl, e, e == HttpError::BadStatus ? 429 : 0);
+        env.now_ms += 11LL * 60 * 1000;
+        const auto st = env.check_and_wait();
+        TEST_CHECK(st.state == "ERROR", "Estado de error");
+        seen(st.error_message);
+        seen(st.info_message);
+    }
+    {   // firmada por otra clave
+        TestKey other;
+        const auto bad = make_release(other, "0.2.0");
+        env.http->routes.clear();
+        serve(*env.http, bad);
+        env.now_ms += 11LL * 60 * 1000;
+        seen(env.check_and_wait().error_message);
+    }
+    // Sin claves, portable, buscar demasiado pronto, sin nada que aceptar
+    {
+        UEnv nk("lenguaje sin claves", {});
+        nk.login_owner();
+        const auto st = nk.status();
+        seen(st.info_message);
+        seen(nk.svc->accept_update().error_message());
+        nk.make_service(kInstalled, true);
+        seen(nk.status().info_message);
+        seen(nk.svc->accept_update().error_message());
+    }
+    env.http->routes.clear();
+    serve(*env.http, make_release(key, "0.2.0"));
+    env.now_ms += 11LL * 60 * 1000;
+    env.check_and_wait();
+    env.svc->check_for_updates();
+    env.svc->wait_idle(2000);
+    seen(env.status().info_message);  // "Ya se buscó hace poco..."
+    env.make_service(kInstalled, true);
+    seen(env.status().info_message);
+    env.make_service(kInstalled, false);
+    {
+        UEnv none("lenguaje sin version", {key.pub});
+        none.login_owner();
+        seen(none.svc->accept_update().error_message());
+    }
+
+    const std::vector<std::string> banned = {"manifiesto", "manifest", "firma", "SHA", "sha256", "hash", "JSON", "HTTP", "HTTPS", "TLS",
+                                             "updates.manage", "ShellExecute", "ShellExecuteEx", "CNG", "bcrypt", "UAC", "CAFEUPD1", "Forbidden",
+                                             "InvalidInput", "InvalidState"};
+    std::size_t distinct = 0;
+    std::vector<std::string> unique = g_messages;
+    std::sort(unique.begin(), unique.end());
+    unique.erase(std::unique(unique.begin(), unique.end()), unique.end());
+    for (const auto& m : unique) {
+        ++distinct;
+        for (const auto& w : banned) {
+            TEST_CHECK(!contains_word_ci(m, w), "El mensaje \"" + m + "\" contiene la palabra técnica \"" + w + "\"");
+        }
+        TEST_CHECK(m.find("0x") == std::string::npos && m.find("::") == std::string::npos && m.find('_') == std::string::npos,
+                   "El mensaje \"" + m + "\" no debe mostrar códigos internos");
+    }
+    TEST_CHECK(distinct >= 25, "Se revisaron al menos 25 mensajes distintos (fueron " + std::to_string(distinct) + ")");
+}
+
 int main() {
     std::error_code ec;
     g_root = fs::temp_directory_path(ec) / fs::u8path(u8"cafeteria b11 update " + std::to_string(Clock::now().time_since_epoch().count()));
@@ -1287,6 +1696,10 @@ int main() {
     test_cleanup_old_downloads();
     test_winhttp_client_without_network();
     test_publish_tool_interoperates();
+    test_install_result_reasons();
+    test_download_error_reasons();
+    test_apply_update_from_files_reasons();
+    test_plain_language_everywhere();
     test_hooks_or_their_absence();
 
     std::cout << "Pruebas de actualizaciones (B11) correctas. TEST_CHECK ejecutados: " << g_checks << std::endl;
