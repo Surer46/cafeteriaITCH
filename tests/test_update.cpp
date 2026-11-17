@@ -4,6 +4,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -114,10 +115,18 @@ std::string sha_hex(const std::vector<std::uint8_t>& data) {
     return hex_of(h.finalize());
 }
 
+// Contenido de prueba de baja entropía y claramente no ejecutable: texto ASCII repetido con un contador (nunca empieza
+// por "MZ"). Bytes pseudoaleatorios en un archivo .exe parecen un ejecutable empaquetado y Windows Defender los
+// detecta por aprendizaje automático. La semilla cambia el texto, así que cada versión tiene su propio contenido y hash.
 std::vector<std::uint8_t> pseudo_bytes(std::size_t n, std::uint32_t seed) {
-    std::vector<std::uint8_t> v(n);
-    std::uint32_t x = seed;
-    for (auto& b : v) { x = x * 1664525u + 1013904223u; b = static_cast<std::uint8_t>(x >> 24); }
+    std::vector<std::uint8_t> v;
+    v.reserve(n + 100);
+    for (unsigned line = 1; v.size() < n; ++line) {
+        char buf[100];
+        std::snprintf(buf, sizeof(buf), "CAFETERIA ITCH PRUEBA DE ACTUALIZACION serie %u linea %06u\r\n", seed, line);
+        for (const char* c = buf; *c; ++c) v.push_back(static_cast<std::uint8_t>(*c));
+    }
+    v.resize(n);
     return v;
 }
 
@@ -222,11 +231,17 @@ struct Published {
     std::vector<std::uint8_t> signature;
 };
 
+std::uint32_t version_seed(const std::string& version) {
+    std::uint32_t h = 98765u;
+    for (unsigned char c : version) h = h * 31u + c;  // distinto para cada versión: 0.2.0 y 0.3.0 no comparten contenido
+    return h;
+}
+
 Published make_release(const TestKey& key, const std::string& version, std::size_t installer_size = 300 * 1000,
                        const std::vector<std::string>& notes = {"Ahora el ticket muestra la hora.", "Se corrigió un error al cobrar."}) {
     Published p;
     p.version = version;
-    p.installer = pseudo_bytes(installer_size, 98765u + static_cast<std::uint32_t>(version.size()) + static_cast<std::uint32_t>(version.back()));
+    p.installer = pseudo_bytes(installer_size, version_seed(version));
     p.manifest = bytes_of(manifest_json(version, notes, p.installer));
     p.signature = key.sign(p.manifest);
     return p;
