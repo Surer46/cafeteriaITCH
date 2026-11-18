@@ -160,7 +160,15 @@ otas-pc.md`. `ctest` vuelve a estar disponible, pero **no correr `UpdateTest` ha
 
 ## Reanudar agentes
 
-- **Pausa del 2026-11-18 (retomar aquí):**
+- **Pausa del 2026-11-18, mediodía (retomar aquí):**
+  - **`main` en `35968e1`** (más este registro), con T13 aceptado: **I3 completo en software**.
+  - **T14 redactado y sin pegar** (sección 1 de `prompts-para-pegar.md`, `Prompts/prompts-2026-11-18-T14.md`): corte con arqueo, historial de cortes y Reportes con CSV. Con él se completa I4 en software.
+  - **B16 en curso, sin commit**, en el worktree del backend (rama `backend/b16`): Claude estaba corriendo CTest a las 10:53. Al volver: pedirle la entrega (o leerla en su terminal), auditar B16 (contrato `ProductDto::stock_status` y `last_movement_at`, sin N+1, `prepared_statement_count` nuevo en `SqliteDatabase`), integrarlo y correr la batería GUI. Mi batería de T13 pudo coincidir con su CTest; si reporta un fallo en `EndSessionTest`, repetirlo.
+  - **Después:** auditar T14; luego I7 (pantalla completa sin espacios vacíos, alto de la lista de permisos de I6, notas de espacio de T11).
+  - **Pendientes:** pasada al 100 % de T8 a T13; claves de firma y prueba manual con UAC (usuario).
+  - **Reanudar:** `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend). Orquestador: conversación `6fbbf53f-3bf2-4bac-8571-90797a3e1b3e`.
+  - **Copia de las conversaciones** en `C:\Cafeteria_ITCH\respaldo-conversaciones\2026-11-18-mediodia\`.
+- **Pausa del 2026-11-18, madrugada:**
   - **`main` en `1f4b07f`** (más este registro), con B14, B13c, T12 y B15 integrados y auditados. Sin subir a GitHub desde `27e890e`.
   - **T13 redactado y sin pegar** (sección 1 de `prompts-para-pegar.md`, `Prompts/prompts-2026-11-18-T13.md`): Promociones y combos, más la corrección de `test_f1_roles_panel.py` (21 → 22 permisos). Hasta entonces esa prueba falla en `main` por el permiso nuevo de B15.
   - **Al volver:** pegar T13 a Gemini y auditarlo; luego redactar T14 (interfaz de I4: corte con arqueo y movimientos de caja en Caja y turnos; Reportes con CSV) y después I7 (pantalla completa sin espacios vacíos).
