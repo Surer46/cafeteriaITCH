@@ -780,6 +780,16 @@ def run_suite(label, exe_path, write_audit=False):
         assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Productos y recetas"
         record_audit("Productos y recetas (teclado)", items, overlaps, lrows)
 
+        # --- 7e. Existencias ---
+        click_subnav(hwnd_main, "Existencias")
+        time.sleep(0.45)
+        ex_lists = [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)]
+        assert ex_lists and send_msg(ex_lists[0], LVM_GETITEMCOUNT, 0, 0) >= 1, "Lista de Existencias vacía en auditoría T2"
+        select_list_row(ex_lists[0], 0)
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Existencias", scale)
+        record_audit("Existencias", items, overlaps, lrows)
+
         # --- 8. Dialogos de Venta: Cobro, Ticket e Historial de tickets ---
         click_sidebar_section(hwnd_main, "Punto de Venta")
         time.sleep(0.45)

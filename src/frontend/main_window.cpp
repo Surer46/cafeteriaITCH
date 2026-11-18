@@ -13,6 +13,7 @@
 #include "src/frontend/inventory_restock_panel.hpp"
 #include "src/frontend/inventory_bar_panel.hpp"
 #include "src/frontend/inventory_products_panel.hpp"
+#include "src/frontend/inventory_stock_panel.hpp"
 #include "src/frontend/theme.hpp"
 #include <wx/statline.h>
 
@@ -325,6 +326,9 @@ void MainWindow::update_content_view() {
 
     if (current_section_ == SectionId::PointOfSale && current_subsection_ == "Venta") {
         current_view_ = new PosPanel(content_container_, services_);
+    } else if (current_section_ == SectionId::Inventory && current_subsection_ == "Existencias") {
+        current_view_ = new InventoryStockPanel(
+            content_container_, services_.inventory_service, services_.catalog_service, services_.account_service);
     } else if (current_section_ == SectionId::Inventory && current_subsection_ == "Ingredientes") {
         current_view_ = new InventoryIngredientsPanel(
             content_container_, services_.inventory_service, services_.account_service);

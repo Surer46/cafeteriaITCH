@@ -8,17 +8,17 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta | button | BackOffice | 220.0x56.0 | OK
   Venta | button | Venta | 64.0x48.0 | OK
   Venta | button | Catálogo visual | 124.0x48.0 | OK
-  Venta | edit | <edit> | 220.0x48.0 | OK
+  Venta | edit | <edit> | 151.2x48.0 | OK
   Venta | edit | Edit:1 | 64.0x48.0 | OK
-  Venta | edit | <edit> | 585.6x48.0 | OK
+  Venta | edit | <edit> | 620.8x48.0 | OK
   Venta | button | − | 75.2x48.0 | OK
   Venta | button | + | 75.2x48.0 | OK
   Venta | button | Buscar | 125.6x48.0 | OK
-  Venta | switch/combo | comboBox | 219.2x48.0 | OK
+  Venta | switch/combo | comboBox | 323.2x48.0 | OK
   Venta | button | Agregar al Carrito | 210.4x56.0 | OK
   Venta | button | Más acciones ▾ | 185.6x48.0 | OK
-  Venta | button | Cobrar | 293.6x60.0 | OK
-  Venta | button | Cancelar pedido | 293.6x48.0 | OK
+  Venta | button | Cobrar | 258.4x60.0 | OK
+  Venta | button | Cancelar pedido | 258.4x48.0 | OK
 
 === Venta (con linea) (total=21, marcados=0) ===
   Venta (con linea) | button | Estándar | 137.6x48.0 | OK
@@ -28,21 +28,21 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta (con linea) | button | BackOffice | 220.0x56.0 | OK
   Venta (con linea) | button | Venta | 64.0x48.0 | OK
   Venta (con linea) | button | Catálogo visual | 124.0x48.0 | OK
-  Venta (con linea) | edit | <edit> | 220.0x48.0 | OK
+  Venta (con linea) | edit | <edit> | 151.2x48.0 | OK
   Venta (con linea) | edit | Edit:1 | 64.0x48.0 | OK
-  Venta (con linea) | edit | <edit> | 585.6x48.0 | OK
+  Venta (con linea) | edit | <edit> | 620.8x48.0 | OK
   Venta (con linea) | button | − | 75.2x48.0 | OK
   Venta (con linea) | button | + | 75.2x48.0 | OK
   Venta (con linea) | button | Buscar | 125.6x48.0 | OK
-  Venta (con linea) | switch/combo | comboBox | 219.2x48.0 | OK
+  Venta (con linea) | switch/combo | comboBox | 323.2x48.0 | OK
   Venta (con linea) | button | Agregar al Carrito | 210.4x56.0 | OK
   Venta (con linea) | button | Editar cantidad | 183.2x48.0 | OK
   Venta (con linea) | button | Editar nota | 153.6x48.0 | OK
   Venta (con linea) | button | Quitar línea | 160.8x48.0 | OK
   Venta (con linea) | button | Más acciones ▾ | 185.6x48.0 | OK
-  Venta (con linea) | button | Cobrar | 293.6x60.0 | OK
-  Venta (con linea) | button | Cancelar pedido | 293.6x48.0 | OK
-  Venta (con linea) | list_row | SysListView32#0 (1 filas) | 567.2x43.2 | OK
+  Venta (con linea) | button | Cobrar | 258.4x60.0 | OK
+  Venta (con linea) | button | Cancelar pedido | 258.4x48.0 | OK
+  Venta (con linea) | list_row | SysListView32#0 (1 filas) | 615.2x43.2 | OK
 
 === Venta (teclado) (total=34, marcados=0) ===
   Venta (teclado) | button | Estándar | 137.6x48.0 | OK
@@ -65,21 +65,21 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta (teclado) | button | Borrar | 88.0x64.0 | OK
   Venta (teclado) | button | Limpiar | 88.0x64.0 | OK
   Venta (teclado) | button | Listo | 88.0x136.0 | OK
-  Venta (teclado) | edit | <edit> | 220.0x48.0 | OK
+  Venta (teclado) | edit | <edit> | 151.2x48.0 | OK
   Venta (teclado) | edit | Edit:1 | 64.0x48.0 | OK
-  Venta (teclado) | edit | <edit> | 585.6x48.0 | OK
+  Venta (teclado) | edit | <edit> | 620.8x48.0 | OK
   Venta (teclado) | button | − | 75.2x48.0 | OK
   Venta (teclado) | button | + | 75.2x48.0 | OK
   Venta (teclado) | button | Buscar | 125.6x48.0 | OK
-  Venta (teclado) | switch/combo | comboBox | 219.2x48.0 | OK
+  Venta (teclado) | switch/combo | comboBox | 323.2x48.0 | OK
   Venta (teclado) | button | Agregar al Carrito | 210.4x56.0 | OK
   Venta (teclado) | button | Editar cantidad | 183.2x48.0 | OK
   Venta (teclado) | button | Editar nota | 153.6x48.0 | OK
   Venta (teclado) | button | Quitar línea | 160.8x48.0 | OK
   Venta (teclado) | button | Más acciones ▾ | 185.6x48.0 | OK
-  Venta (teclado) | button | Cobrar | 293.6x60.0 | OK
-  Venta (teclado) | button | Cancelar pedido | 293.6x48.0 | OK
-  Venta (teclado) | list_row | SysListView32#0 (1 filas) | 567.2x43.2 | OK
+  Venta (teclado) | button | Cobrar | 258.4x60.0 | OK
+  Venta (teclado) | button | Cancelar pedido | 258.4x48.0 | OK
+  Venta (teclado) | list_row | SysListView32#0 (1 filas) | 615.2x43.2 | OK
 
 === Caja y turnos (total=10, marcados=0) ===
   Caja y turnos | button | Estándar | 137.6x48.0 | OK
@@ -620,6 +620,24 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Productos y recetas (teclado) | button | Quitar | 76.0x48.0 | OK
   Productos y recetas (teclado) | button | Guardar receta | 187.2x48.0 | OK
   Productos y recetas (teclado) | list_row | SysListView32#0 (1 filas) | 417.6x43.2 | OK
+
+=== Existencias (total=15, marcados=0) ===
+  Existencias | button | Estándar | 137.6x48.0 | OK
+  Existencias | button | Punto de Venta | 220.0x56.0 | OK
+  Existencias | button | Inventario | 220.0x56.0 | OK
+  Existencias | button | Caja y Reportes | 220.0x56.0 | OK
+  Existencias | button | BackOffice | 220.0x56.0 | OK
+  Existencias | button | Existencias | 95.2x48.0 | OK
+  Existencias | button | Reabastecimiento | 144.0x48.0 | OK
+  Existencias | button | Productos y recetas | 156.8x48.0 | OK
+  Existencias | button | Ingredientes | 104.0x48.0 | OK
+  Existencias | button | Promociones y combos | 180.0x48.0 | OK
+  Existencias | button | Barra | 64.0x48.0 | OK
+  Existencias | button | Actualizar | 104.8x48.0 | OK
+  Existencias | edit | <edit> | 465.6x48.0 | OK
+  Existencias | switch/combo | comboBox | 228.8x48.0 | OK
+  Existencias | button | Solo con poco o agotado | 200.8x48.0 | OK
+  Existencias | list_row | SysListView32#0 (3 filas) | 905.6x43.2 | OK
 
 === Dialogo Cobro (total=18, marcados=0) ===
   Dialogo Cobro | switch/combo | comboBox | 380.0x48.0 | OK

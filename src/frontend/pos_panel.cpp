@@ -7,6 +7,7 @@
 #include <wx/statline.h>
 #include <wx/imaglist.h>
 #include <wx/dcclient.h>
+#include <wx/wrapsizer.h>
 #include <chrono>
 
 #ifdef _WIN32
@@ -14,6 +15,18 @@
 #endif
 
 namespace app::frontend {
+
+namespace {
+
+std::string format_line_discount_text(const contracts::CartItemDto& item) {
+    if (item.line_discount.cents() <= 0) {
+        return "";
+    }
+    const std::string promo = item.promotion_name.empty() ? std::string("Descuento") : item.promotion_name;
+    return promo + ": -" + item.line_discount.to_string();
+}
+
+} // namespace
 
 PosPanel::PosPanel(
     wxWindow* parent,
@@ -25,6 +38,18 @@ PosPanel::PosPanel(
     refresh_cart();
 }
 
+PosPanel::~PosPanel() {
+    destroying_ = true;
+    Unbind(wxEVT_SIZE, &PosPanel::on_size, this);
+    if (list_items_) {
+        list_items_->Unbind(wxEVT_LIST_ITEM_ACTIVATED, &PosPanel::on_item_activated, this);
+    }
+    if (keypad_) {
+        keypad_->hide_keypad(false);
+    }
+    DestroyChildren();
+}
+
 void PosPanel::setup_ui() {
     SetBackgroundColour(Theme::ColorBackground);
     bool touch = Theme::is_touch();
@@ -33,7 +58,8 @@ void PosPanel::setup_ui() {
     // =========================================================================
     // Columna Izquierda: Captura de Pedido, Búsqueda, Notas y Tabla de Artículos
     // =========================================================================
-    auto* left_box = new wxBoxSizer(wxVERTICAL);
+    left_box_ = new wxBoxSizer(wxVERTICAL);
+    auto* left_box = left_box_;
 
     // Tarjeta superior para búsqueda, selección y notas
     auto* search_card = new CardPanel(this);
@@ -41,7 +67,7 @@ void PosPanel::setup_ui() {
 
     // ORDEN ESTRICTO DE CREACIÓN DE TEXTCTRL PARA TEST AUTOMATIZADO (edits[0], edits[1], edits[2]):
     // 1. txt_search_ en contenedor centrado verticalmente
-    auto* search_box = new wxPanel(search_card, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(touch ? 220 : 180, touch ? 48 : 32)), wxBORDER_SIMPLE);
+    auto* search_box = new wxPanel(search_card, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(touch ? 120 : 120, touch ? 48 : 32)), wxBORDER_SIMPLE);
     search_box->SetBackgroundColour(Theme::ColorSurface);
     txt_search_ = new wxTextCtrl(search_box, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxBORDER_NONE | wxTE_PROCESS_ENTER);
     txt_search_->SetHint(wxT("Buscar código o nombre..."));
@@ -132,7 +158,7 @@ void PosPanel::setup_ui() {
         wxCB_READONLY
     );
     choice_products_->SetFont(Theme::get_font_body());
-    choice_products_->SetMinSize(FromDIP(wxSize(-1, qty_btn_sz)));
+    choice_products_->SetMinSize(FromDIP(wxSize(120, qty_btn_sz)));
 
     auto* lbl_qty = new wxStaticText(search_card, wxID_ANY, wxT("Cant:"));
     lbl_qty->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
@@ -145,48 +171,30 @@ void PosPanel::setup_ui() {
     Theme::setup_button_icon(btn_add_, "add", wxSize(touch ? 22 : 18, touch ? 22 : 18), Theme::ColorSurface);
     Theme::ensure_button_min_size(btn_add_, touch ? 210 : 180, add_btn_h);
 
-    if (touch) {
-        // Distribución Touch reorganizada (3 filas limpias, espacios generosos y ergonómicos):
-        // Fila 1: Búsqueda y Selección en catálogo
-        auto* search_row = new wxBoxSizer(wxHORIZONTAL);
-        search_row->Add(search_box, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
-        search_row->Add(btn_search_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
-        search_row->Add(choice_products_, 2, wxALIGN_CENTER_VERTICAL);
-        card_inner_sizer->Add(search_row, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
+    // Distribución en 3 filas (Estándar y Táctil) para evitar recortes en 960x600:
+    // Fila 1: Búsqueda y Selección en catálogo
+    const int row_gap = FromDIP(touch ? 10 : 6);
+    auto* search_row = new wxBoxSizer(wxHORIZONTAL);
+    search_row->Add(search_box, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, row_gap);
+    search_row->Add(btn_search_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, row_gap);
+    search_row->Add(choice_products_, 2, wxALIGN_CENTER_VERTICAL);
+    card_inner_sizer->Add(search_row, 0, wxEXPAND | wxBOTTOM, row_gap);
 
-        // Fila 2: Notas específicas de preparación (ancho completo >500px, 48px alto)
-        auto* notes_row = new wxBoxSizer(wxHORIZONTAL);
-        notes_row->Add(notes_box, 1, wxALIGN_CENTER_VERTICAL);
-        card_inner_sizer->Add(notes_row, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
+    // Fila 2: Notas específicas de preparación
+    auto* notes_row = new wxBoxSizer(wxHORIZONTAL);
+    notes_row->Add(notes_box, 1, wxALIGN_CENTER_VERTICAL);
+    card_inner_sizer->Add(notes_row, 0, wxEXPAND | wxBOTTOM, row_gap);
 
-        // Fila 3: Steppers táctiles de cantidad [−] [ 1 ] [+] y Botón Hero Agregar
-        auto* qty_add_row = new wxBoxSizer(wxHORIZONTAL);
-        qty_add_row->Add(lbl_qty, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
-        qty_add_row->Add(btn_qty_minus_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
-        qty_add_row->Add(qty_box, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
-        qty_add_row->Add(btn_qty_plus_, 0, wxALIGN_CENTER_VERTICAL);
-        qty_add_row->AddStretchSpacer(1);
-        qty_add_row->Add(btn_add_, 0, wxALIGN_CENTER_VERTICAL);
-        card_inner_sizer->Add(qty_add_row, 0, wxEXPAND);
-    } else {
-        // Distribución Estándar compacta:
-        // Fila 1: Búsqueda, Selección y Cantidad con Stepper
-        auto* search_row = new wxBoxSizer(wxHORIZONTAL);
-        search_row->Add(search_box, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
-        search_row->Add(btn_search_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
-        search_row->Add(choice_products_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
-        search_row->Add(lbl_qty, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(4));
-        search_row->Add(btn_qty_minus_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(2));
-        search_row->Add(qty_box, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(2));
-        search_row->Add(btn_qty_plus_, 0, wxALIGN_CENTER_VERTICAL);
-        card_inner_sizer->Add(search_row, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
-
-        // Fila 2: Notas específicas de preparación y Botón Agregar
-        auto* notes_row = new wxBoxSizer(wxHORIZONTAL);
-        notes_row->Add(notes_box, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
-        notes_row->Add(btn_add_, 0, wxALIGN_CENTER_VERTICAL);
-        card_inner_sizer->Add(notes_row, 0, wxEXPAND);
-    }
+    // Fila 3: Steppers de cantidad [−] [ 1 ] [+] y Botón Agregar (con wrap en 960x600)
+    auto* qty_add_row = new wxWrapSizer(wxHORIZONTAL, wxREMOVE_LEADING_SPACES);
+    auto* qty_group = new wxBoxSizer(wxHORIZONTAL);
+    qty_group->Add(lbl_qty, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(touch ? 8 : 4));
+    qty_group->Add(btn_qty_minus_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(touch ? 6 : 3));
+    qty_group->Add(qty_box, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(touch ? 6 : 3));
+    qty_group->Add(btn_qty_plus_, 0, wxALIGN_CENTER_VERTICAL);
+    qty_add_row->Add(qty_group, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxBOTTOM, FromDIP(touch ? 8 : 4));
+    qty_add_row->Add(btn_add_, 0, wxALIGN_CENTER_VERTICAL | wxBOTTOM, FromDIP(touch ? 4 : 2));
+    card_inner_sizer->Add(qty_add_row, 0, wxEXPAND);
 
     search_card->SetSizer(card_inner_sizer);
     left_box->Add(search_card, 0, wxEXPAND | wxBOTTOM, FromDIP(touch ? 12 : 10));
@@ -215,21 +223,29 @@ void PosPanel::setup_ui() {
     int img_and_native_pad = list_items_->FromDIP(touch ? 30 : 26);
     int col_sku = std::max(calc_col_width(wxT("SKU"), header_pad_logical, touch ? 55 : 50), sku_sample_w + 1 + img_and_native_pad);
 
-    int col_cant = calc_col_width(wxT("Cant."), header_pad_logical + 4, touch ? 58 : 54);
-    int col_precio = calc_col_width(wxT("Precio"), header_pad_logical + 4, touch ? 66 : 62);
-    int col_subtotal = calc_col_width(wxT("Subtotal"), header_pad_logical + 6, touch ? 82 : 76);
-    int col_prod = list_items_->FromDIP(touch ? 135 : 130);
-    int col_notas = list_items_->FromDIP(touch ? 135 : 125);
+    int col_cant = calc_col_width(wxT("Cant."), header_pad_logical + 2, touch ? 52 : 48);
+    int col_subtotal = calc_col_width(wxT("Subtotal"), header_pad_logical + 4, touch ? 74 : 70);
+    int col_descuento = calc_col_width(wxT("Descuento"), header_pad_logical + 4, touch ? 110 : 100);
+    int col_total = calc_col_width(wxT("Total"), header_pad_logical + 4, touch ? 68 : 64);
+    int col_prod = list_items_->FromDIP(touch ? 120 : 115);
+    int col_notas = list_items_->FromDIP(touch ? 85 : 80);
 
     list_items_->InsertColumn(0, wxT("SKU"), wxLIST_FORMAT_LEFT, col_sku);
     list_items_->InsertColumn(1, wxT("Producto"), wxLIST_FORMAT_LEFT, col_prod);
-    list_items_->InsertColumn(2, wxT("Notas de Preparación"), wxLIST_FORMAT_LEFT, col_notas);
+    list_items_->InsertColumn(2, wxT("Notas"), wxLIST_FORMAT_LEFT, col_notas);
     list_items_->InsertColumn(3, wxT("Cant."), wxLIST_FORMAT_RIGHT, col_cant);
-    list_items_->InsertColumn(4, wxT("Precio"), wxLIST_FORMAT_RIGHT, col_precio);
-    list_items_->InsertColumn(5, wxT("Subtotal"), wxLIST_FORMAT_RIGHT, col_subtotal);
-    list_items_->SetMinSize(list_items_->FromDIP(wxSize(250, 150)));
+    list_items_->InsertColumn(4, wxT("Subtotal"), wxLIST_FORMAT_RIGHT, col_subtotal);
+    list_items_->InsertColumn(5, wxT("Descuento"), wxLIST_FORMAT_LEFT, col_descuento);
+    list_items_->InsertColumn(6, wxT("Total"), wxLIST_FORMAT_RIGHT, col_total);
+    list_items_->SetMinSize(list_items_->FromDIP(wxSize(250, touch ? 80 : 100)));
 
-    left_box->Add(list_items_, 1, wxEXPAND | wxBOTTOM, FromDIP(touch ? 10 : 8));
+    left_box->Add(list_items_, 1, wxEXPAND | wxBOTTOM, FromDIP(touch ? 6 : 6));
+
+    lbl_cart_line_detail_ = new wxStaticText(this, wxID_ANY, wxEmptyString);
+    lbl_cart_line_detail_->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
+    lbl_cart_line_detail_->SetForegroundColour(Theme::ColorTextSecondary);
+    lbl_cart_line_detail_->Hide();
+    left_box->Add(lbl_cart_line_detail_, 0, wxEXPAND | wxBOTTOM, FromDIP(touch ? 8 : 6));
 
     // Fila inferior de tabla: Acciones contextuales (Editar cantidad, nota, quitar línea) y secundarios en Más acciones
     const int action_btn_h = touch ? 48 : 34;
@@ -265,32 +281,13 @@ void PosPanel::setup_ui() {
     btn_more_actions_->SetMinSize(wxSize(final_more_w, final_more_h));
     btn_more_actions_->SetSize(wxSize(final_more_w, final_more_h));
 
-    if (touch) {
-        // En Touch: organizar en dos filas para asegurar que Más acciones nunca se corte
-        auto* table_actions_box = new wxBoxSizer(wxVERTICAL);
-
-        auto* line_actions = new wxBoxSizer(wxHORIZONTAL);
-        line_actions->Add(btn_edit_qty_, 0, wxRIGHT, FromDIP(10));
-        line_actions->Add(btn_edit_notes_, 0, wxRIGHT, FromDIP(10));
-        line_actions->Add(btn_remove_item_, 0);
-        line_actions->AddStretchSpacer(1);
-        table_actions_box->Add(line_actions, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
-
-        auto* extra_actions = new wxBoxSizer(wxHORIZONTAL);
-        extra_actions->AddStretchSpacer(1);
-        extra_actions->Add(btn_more_actions_, 0);
-        table_actions_box->Add(extra_actions, 0, wxEXPAND);
-
-        left_box->Add(table_actions_box, 0, wxEXPAND);
-    } else {
-        auto* table_actions_row = new wxBoxSizer(wxHORIZONTAL);
-        table_actions_row->Add(btn_edit_qty_, 0, wxRIGHT, FromDIP(6));
-        table_actions_row->Add(btn_edit_notes_, 0, wxRIGHT, FromDIP(6));
-        table_actions_row->Add(btn_remove_item_, 0, wxRIGHT, FromDIP(6));
-        table_actions_row->AddStretchSpacer(1);
-        table_actions_row->Add(btn_more_actions_, 0);
-        left_box->Add(table_actions_row, 0, wxEXPAND);
-    }
+    auto* table_actions_wrap = new wxWrapSizer(wxHORIZONTAL, wxREMOVE_LEADING_SPACES);
+    const int act_gap = FromDIP(touch ? 8 : 6);
+    table_actions_wrap->Add(btn_edit_qty_, 0, wxRIGHT | wxBOTTOM, act_gap);
+    table_actions_wrap->Add(btn_edit_notes_, 0, wxRIGHT | wxBOTTOM, act_gap);
+    table_actions_wrap->Add(btn_remove_item_, 0, wxRIGHT | wxBOTTOM, act_gap);
+    table_actions_wrap->Add(btn_more_actions_, 0, wxBOTTOM, act_gap);
+    left_box->Add(table_actions_wrap, 0, wxEXPAND);
 
     left_box->SetMinSize(FromDIP(wxSize(350, -1)));
     main_sizer->Add(left_box, 1, wxEXPAND | wxRIGHT, FromDIP(touch ? 16 : 14));
@@ -299,7 +296,7 @@ void PosPanel::setup_ui() {
     // Columna Derecha: CUENTA ACTUAL (Tarjeta blanca Cupertino)
     // =========================================================================
     auto* account_card = new CardPanel(this);
-    const int card_w = FromDIP(touch ? 330 : 310);
+    const int card_w = FromDIP(touch ? 295 : 285);
     account_card->SetMinSize(wxSize(card_w, -1));
     account_card->SetMaxSize(wxSize(card_w, -1));
 
@@ -324,11 +321,14 @@ void PosPanel::setup_ui() {
     acc_sizer->Add(new wxStaticLine(account_card, wxID_ANY), 0, wxEXPAND | wxLEFT | wxRIGHT, pad_lr);
     acc_sizer->AddSpacer(FromDIP(touch ? 16 : 12));
 
-    auto make_summary_row = [&](const wxString& label, wxStaticText** out_val, bool is_total = false) {
+    auto make_summary_row = [&](const wxString& label, wxStaticText** out_val, bool is_total = false, wxStaticText** out_cap = nullptr) {
         auto* row = new wxBoxSizer(wxHORIZONTAL);
         auto* l = new wxStaticText(account_card, wxID_ANY, label);
         auto* v = new wxStaticText(account_card, wxID_ANY, wxT("$0.00"), wxDefaultPosition, wxDefaultSize, wxALIGN_RIGHT);
         *out_val = v;
+        if (out_cap) {
+            *out_cap = l;
+        }
 
         if (is_total) {
             l->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
@@ -348,7 +348,9 @@ void PosPanel::setup_ui() {
     };
 
     acc_sizer->Add(make_summary_row(wxT("Subtotal:"), &lbl_subtotal_val_), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, pad_lr);
-    acc_sizer->Add(make_summary_row(wxT("Descuento:"), &lbl_discount_val_), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, pad_lr);
+    acc_sizer->Add(make_summary_row(wxT("Descuento:"), &lbl_discount_val_, false, &lbl_discount_caption_), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, pad_lr);
+    lbl_discount_caption_->Hide();
+    lbl_discount_val_->Hide();
     acc_sizer->Add(make_summary_row(wxT("TOTAL:"), &lbl_total_val_, true), 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, pad_lr);
 
     // Botón Cobrar (verde éxito Cupertino #166534 con receipt_long)
@@ -392,6 +394,8 @@ void PosPanel::setup_ui() {
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { wxCommandEvent d; on_open_ticket_history(d); }, 1001);
     Bind(wxEVT_MENU, [this](wxCommandEvent&) { wxCommandEvent d; on_cancel_order(d); }, 1002);
 
+    Bind(wxEVT_SIZE, &PosPanel::on_size, this);
+
     update_contextual_actions();
 
     if (touch) {
@@ -422,6 +426,7 @@ void PosPanel::setup_ui() {
 }
 
 void PosPanel::update_contextual_actions() {
+    if (destroying_) return;
     long sel = list_items_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
     bool has_sel = (sel >= 0 && sel < static_cast<long>(current_cart_items_.size()));
 
@@ -434,11 +439,101 @@ void PosPanel::update_contextual_actions() {
         if (btn_edit_qty_) btn_edit_qty_->SetToolTip(wxString::Format(wxT("Cambiar cantidad de '%s'"), wxString::FromUTF8(item.name.c_str())));
         if (btn_edit_notes_) btn_edit_notes_->SetToolTip(wxString::Format(wxT("Editar nota de '%s'"), wxString::FromUTF8(item.name.c_str())));
         if (btn_remove_item_) btn_remove_item_->SetToolTip(wxString::Format(wxT("Quitar '%s' del carrito"), wxString::FromUTF8(item.name.c_str())));
+
+        if (lbl_cart_line_detail_) {
+            std::string detail = item.name + " (" + std::to_string(item.quantity) + " x " +
+                                 item.unit_price.to_string() + ") — Original: " + item.subtotal.to_string();
+            const std::string disc = format_line_discount_text(item);
+            if (!disc.empty()) {
+                detail += " | " + disc;
+                lbl_cart_line_detail_->SetForegroundColour(Theme::ColorSuccess);
+            } else {
+                lbl_cart_line_detail_->SetForegroundColour(Theme::ColorTextSecondary);
+            }
+            detail += " | Total: " + item.line_total.to_string();
+            if (!item.notes.empty()) {
+                detail += " · Nota: " + item.notes;
+            }
+            last_line_detail_ = std::move(detail);
+            lbl_cart_line_detail_->Show();
+            update_line_detail_wrap();
+        }
     } else {
         if (btn_edit_qty_) btn_edit_qty_->SetToolTip(wxT("Seleccione una línea de la tabla para editar su cantidad"));
         if (btn_edit_notes_) btn_edit_notes_->SetToolTip(wxT("Seleccione una línea de la tabla para editar su nota"));
         if (btn_remove_item_) btn_remove_item_->SetToolTip(wxT("Seleccione una línea de la tabla para quitarla"));
+        last_line_detail_.clear();
+        if (lbl_cart_line_detail_) {
+            lbl_cart_line_detail_->Hide();
+        }
     }
+    if (left_box_) {
+        Layout();
+    }
+}
+
+void PosPanel::update_line_detail_wrap() {
+    if (!lbl_cart_line_detail_ || !lbl_cart_line_detail_->IsShown()) return;
+    int avail_w = list_items_ ? list_items_->GetSize().GetWidth() : GetClientSize().GetWidth();
+    if (avail_w <= 40) avail_w = FromDIP(340);
+    lbl_cart_line_detail_->SetLabel(wxString::FromUTF8(last_line_detail_));
+    lbl_cart_line_detail_->Wrap(std::max(FromDIP(160), avail_w - FromDIP(8)));
+}
+
+void PosPanel::update_list_column_widths() {
+    if (destroying_ || sizing_columns_ || !list_items_ || !list_items_->IsShown() ||
+        list_items_->GetClientSize().GetWidth() <= 0) {
+        return;
+    }
+    sizing_columns_ = true;
+    wxClientDC dc(list_items_);
+    dc.SetFont(list_items_->GetFont());
+
+    int max_sku = dc.GetTextExtent(wxT("BAG-01")).GetWidth();
+    int max_prod = dc.GetTextExtent(wxT("Producto")).GetWidth();
+    int max_notas = dc.GetTextExtent(wxT("Notas")).GetWidth();
+    int max_cant = dc.GetTextExtent(wxT("Cant.")).GetWidth();
+    int max_sub = dc.GetTextExtent(wxT("Subtotal")).GetWidth();
+    int max_desc = dc.GetTextExtent(wxT("Descuento")).GetWidth();
+    int max_tot = dc.GetTextExtent(wxT("Total")).GetWidth();
+
+    for (const auto& item : current_cart_items_) {
+        max_sku = std::max(max_sku, dc.GetTextExtent(wxString::FromUTF8(item.sku)).GetWidth());
+        max_prod = std::max(max_prod, dc.GetTextExtent(wxString::FromUTF8(item.name)).GetWidth());
+        if (!item.notes.empty()) {
+            max_notas = std::max(max_notas, dc.GetTextExtent(wxString::FromUTF8(item.notes)).GetWidth());
+        }
+        max_cant = std::max(max_cant, dc.GetTextExtent(wxString::Format(wxT("%lld"), item.quantity)).GetWidth());
+        max_sub = std::max(max_sub, dc.GetTextExtent(wxString::FromUTF8(item.subtotal.to_string())).GetWidth());
+        const std::string disc = format_line_discount_text(item);
+        if (!disc.empty()) {
+            max_desc = std::max(max_desc, dc.GetTextExtent(wxString::FromUTF8(disc)).GetWidth());
+        }
+        max_tot = std::max(max_tot, dc.GetTextExtent(wxString::FromUTF8(item.line_total.to_string())).GetWidth());
+    }
+
+    const int pad = 18;
+    const int sku_extra = Theme::is_touch() ? 30 : 26;
+    std::vector<ui::ColumnSpec> specs;
+    specs.push_back({wxT("SKU"), max_sku, max_sku, 0, sku_extra});
+    specs.push_back({wxT("Producto"), std::min(max_prod, FromDIP(140)), dc.GetTextExtent(wxT("Producto")).GetWidth(), pad, 0});
+    specs.push_back({wxT("Notas"), max_notas, 0, pad, 0});
+    specs.push_back({wxT("Cant."), max_cant, max_cant, pad, 0});
+    specs.push_back({wxT("Subtotal"), max_sub, max_sub, pad, 0});
+    specs.push_back({wxT("Descuento"), max_desc, max_desc, pad, 0});
+    specs.push_back({wxT("Total"), max_tot, max_tot, pad, 0});
+    ui::distribute_list_columns(list_items_, specs, 2);
+    sizing_columns_ = false;
+}
+
+void PosPanel::on_size(wxSizeEvent& evt) {
+    evt.Skip();
+    CallAfter([this]() {
+        if (destroying_ || IsBeingDeleted()) return;
+        update_list_column_widths();
+        update_line_detail_wrap();
+        Layout();
+    });
 }
 
 void PosPanel::on_more_actions(wxCommandEvent&) {
@@ -500,7 +595,7 @@ void PosPanel::load_catalog_products(const std::string& query) {
 }
 
 void PosPanel::on_search(wxCommandEvent&) {
-    std::string query = txt_search_->GetValue().ToStdString();
+    std::string query = std::string(txt_search_->GetValue().ToUTF8().data());
     load_catalog_products(query);
 }
 
@@ -521,7 +616,7 @@ void PosPanel::on_add_item(wxCommandEvent&) {
         return;
     }
 
-    std::string notes = txt_notes_->GetValue().ToStdString();
+    std::string notes = std::string(txt_notes_->GetValue().ToUTF8().data());
     if (notes.length() > 250) {
         wxMessageBox(wxT("La nota de preparación no puede exceder 250 caracteres."), wxT("Nota demasiado larga"), wxOK | wxICON_WARNING, this);
         txt_notes_->SetFocus();
@@ -561,34 +656,29 @@ void PosPanel::refresh_cart() {
         list_items_->SetItem(row, 1, wxString::FromUTF8(item.name.c_str()));
         list_items_->SetItem(row, 2, wxString::FromUTF8(item.notes.c_str()));
         list_items_->SetItem(row, 3, wxString::Format(wxT("%lld"), item.quantity));
-        list_items_->SetItem(row, 4, wxString::FromUTF8(item.unit_price.to_string().c_str()));
-        list_items_->SetItem(row, 5, wxString::FromUTF8(item.subtotal.to_string().c_str()));
+        list_items_->SetItem(row, 4, wxString::FromUTF8(item.subtotal.to_string().c_str()));
+        list_items_->SetItem(row, 5, wxString::FromUTF8(format_line_discount_text(item)));
+        list_items_->SetItem(row, 6, wxString::FromUTF8(item.line_total.to_string().c_str()));
+        if (item.line_discount.cents() > 0) {
+            list_items_->SetItemTextColour(row, Theme::ColorBrandDeep);
+        }
         idx++;
     }
 
     if (!current_cart_items_.empty()) {
         list_items_->SetItemState(0, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED, wxLIST_STATE_SELECTED | wxLIST_STATE_FOCUSED);
-
-        wxClientDC r_dc(list_items_);
-        r_dc.SetFont(list_items_->GetFont());
-        int max_cart_sku_w = 0;
-        for (const auto& item : current_cart_items_) {
-            int tw = 0, th = 0;
-            r_dc.GetTextExtent(wxString::FromUTF8(item.sku.c_str()), &tw, &th);
-            if (tw > max_cart_sku_w) max_cart_sku_w = tw;
-        }
-        if (max_cart_sku_w > 0) {
-            int img_and_native_pad = list_items_->FromDIP(Theme::is_touch() ? 30 : 26);
-            int needed_col0 = max_cart_sku_w + 1 + img_and_native_pad;
-            if (list_items_->GetColumnWidth(0) < needed_col0) {
-                list_items_->SetColumnWidth(0, needed_col0);
-            }
-        }
     }
+    update_list_column_widths();
 
+    const bool has_discount = cart.discount.cents() > 0;
     lbl_items_count_->SetLabel(wxString::Format(wxT("%lld artículos en carrito"), cart.total_items));
     lbl_subtotal_val_->SetLabel(wxString::FromUTF8(cart.subtotal.to_string().c_str()));
-    lbl_discount_val_->SetLabel(wxString::FromUTF8(cart.discount.to_string().c_str()));
+    if (has_discount) {
+        lbl_discount_val_->SetLabel(wxString::Format(wxT("-%s"), wxString::FromUTF8(cart.discount.to_string().c_str())));
+        lbl_discount_val_->SetForegroundColour(Theme::ColorSuccess);
+    }
+    if (lbl_discount_caption_) lbl_discount_caption_->Show(has_discount);
+    lbl_discount_val_->Show(has_discount);
     lbl_total_val_->SetLabel(wxString::FromUTF8(cart.total.to_string().c_str()));
 
     lbl_subtotal_val_->InvalidateBestSize();
@@ -806,8 +896,9 @@ void PosPanel::on_checkout(wxCommandEvent&) {
     if (!cart_res.is_success()) return;
 
     contracts::Money total = cart_res.value().total;
+    contracts::Money discount = cart_res.value().discount;
 
-    CheckoutDialog dlg(this, total);
+    CheckoutDialog dlg(this, total, discount);
     if (dlg.ShowModal() != wxID_OK) {
         return;
     }
@@ -831,6 +922,17 @@ void PosPanel::on_checkout(wxCommandEvent&) {
     btn_checkout_->Enable(true);
 
     if (!sale_res.is_success()) {
+        if (sale_res.error_code() == contracts::ErrorCode::Conflict) {
+            active_idempotency_key_.clear();
+            refresh_cart();
+            wxMessageBox(
+                wxString::FromUTF8(sale_res.error_message().c_str()),
+                wxT("Promociones Actualizadas"),
+                wxOK | wxICON_WARNING,
+                this
+            );
+            return;
+        }
         wxMessageBox(
             wxString::Format(wxT("Error al confirmar venta: %s"), wxString::FromUTF8(sale_res.error_message().c_str())),
             wxT("Fallo al Cobrar"),

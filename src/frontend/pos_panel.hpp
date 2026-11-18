@@ -17,6 +17,7 @@ public:
         wxWindow* parent,
         services::ServiceRegistry services
     );
+    ~PosPanel() override;
 
     void refresh_cart();
     void update_shift_display();
@@ -31,6 +32,9 @@ private:
     void on_edit_notes(wxCommandEvent& evt);
     void on_open_ticket_history(wxCommandEvent& evt);
     void update_contextual_actions();
+    void update_list_column_widths();
+    void update_line_detail_wrap();
+    void on_size(wxSizeEvent& evt);
     void on_more_actions(wxCommandEvent& evt);
     void on_item_activated(wxListEvent& evt);
     void on_cancel_order(wxCommandEvent& evt);
@@ -40,6 +44,9 @@ private:
     std::vector<contracts::ProductDto> loaded_products_;
     std::vector<contracts::CartItemDto> current_cart_items_;
     std::string active_idempotency_key_;
+    bool destroying_{false};
+    bool sizing_columns_{false};
+    std::string last_line_detail_;
 
     wxTextCtrl* txt_search_{nullptr};
     wxButton* btn_search_{nullptr};
@@ -51,6 +58,8 @@ private:
     wxButton* btn_add_{nullptr};
 
     wxListCtrl* list_items_{nullptr};
+    wxStaticText* lbl_cart_line_detail_{nullptr};
+    wxBoxSizer* left_box_{nullptr};
     wxButton* btn_remove_item_{nullptr};
     wxButton* btn_edit_qty_{nullptr};
     wxButton* btn_edit_notes_{nullptr};
@@ -58,6 +67,7 @@ private:
 
     wxStaticText* lbl_items_count_{nullptr};
     wxStaticText* lbl_subtotal_val_{nullptr};
+    wxStaticText* lbl_discount_caption_{nullptr};
     wxStaticText* lbl_discount_val_{nullptr};
     wxStaticText* lbl_total_val_{nullptr};
     wxButton* btn_checkout_{nullptr};

@@ -8,9 +8,11 @@ namespace app::frontend {
 
 CheckoutDialog::CheckoutDialog(
     wxWindow* parent,
-    contracts::Money total
+    contracts::Money total,
+    contracts::Money discount
 ) : wxDialog(parent, wxID_ANY, wxT("Cobro de Venta — Cafetería ITCH II"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE),
     total_(total),
+    discount_(discount),
     cash_received_(total) {
     SetBackgroundColour(Theme::ColorBackground);
     const bool touch = Theme::is_touch();
@@ -37,7 +39,19 @@ CheckoutDialog::CheckoutDialog(
     lbl_total_val_ = new wxStaticText(total_card, wxID_ANY, wxString::FromUTF8(total_.to_string().c_str()));
     lbl_total_val_->SetFont(Theme::get_font_hero(wxFONTWEIGHT_BOLD));
     lbl_total_val_->SetForegroundColour(Theme::ColorSuccess);
-    card_sizer->Add(lbl_total_val_, 0, wxALL, FromDIP(14));
+    if (discount_.cents() > 0) {
+        card_sizer->Add(lbl_total_val_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+        auto* lbl_discount = new wxStaticText(
+            total_card,
+            wxID_ANY,
+            wxString::Format(wxT("Descuento aplicado: -%s"), wxString::FromUTF8(discount_.to_string().c_str()))
+        );
+        lbl_discount->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+        lbl_discount->SetForegroundColour(Theme::ColorSuccess);
+        card_sizer->Add(lbl_discount, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(10));
+    } else {
+        card_sizer->Add(lbl_total_val_, 0, wxALL, FromDIP(14));
+    }
 
     total_card->SetSizer(card_sizer);
     main_sizer->Add(total_card, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));

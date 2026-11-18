@@ -71,6 +71,7 @@ private:
     void on_category_combo_changed(wxCommandEvent& event);
     void on_type_prepared(wxCommandEvent& event);
     void on_type_direct(wxCommandEvent& event);
+    void on_enable_direct_stock(wxCommandEvent& event);
     void on_pick_image(wxCommandEvent& event);
     void on_remove_image(wxCommandEvent& event);
     void on_save_product(wxCommandEvent& event);
@@ -107,6 +108,8 @@ private:
     bool is_prepared_selected_{false};
     bool editing_is_active_{true};
     bool editing_has_image_{false};
+    bool editing_stock_tracked_{false};
+    std::int64_t editing_stock_units_{0};
     std::string editing_product_id_;
     std::string last_list_error_;
     std::string last_feedback_;
@@ -142,6 +145,12 @@ private:
     wxTextCtrl* txt_category_{nullptr};
     wxButton* btn_type_prepared_{nullptr};
     wxButton* btn_type_direct_{nullptr};
+
+    wxPanel* pnl_direct_stock_{nullptr};
+    wxCheckBox* chk_track_stock_{nullptr};
+    wxStaticText* lbl_direct_stock_status_{nullptr};
+    wxStaticText* lbl_direct_stock_hint_{nullptr};
+    wxButton* btn_enable_stock_{nullptr};
 
     wxStaticBitmap* bmp_thumb_{nullptr};
     wxStaticText* lbl_image_status_{nullptr};

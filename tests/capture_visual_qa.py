@@ -692,6 +692,64 @@ def main():
         time.sleep(0.4)
         capture_window(hwnd_main, os.path.join(out_dir, "29_inventory_products_recipes.png"))
 
+        # CAPTURA 31: Inventario > Existencias (ingredientes, directo, preparado)
+        btn_ex_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Existencias"), None)
+        assert btn_ex_qa is not None, "Subsección Existencias no encontrada para captura 31"
+        _f7_click_btn(btn_ex_qa)
+        time.sleep(0.45)
+        ex_lists_qa = [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)]
+        if ex_lists_qa:
+            select_list_row(ex_lists_qa[0], 0)
+            time.sleep(0.25)
+        capture_window(hwnd_main, os.path.join(out_dir, "31_inventory_stock.png"))
+
+        # CAPTURA 30: Punto de Venta con promoción aplicada (2x1 Capuchino + descuento en carrito)
+        con_p = sqlite3.connect(db_path)
+        try:
+            cap_row = con_p.execute("SELECT id FROM products WHERE name LIKE '%Capuchino%' LIMIT 1").fetchone()
+            if cap_row:
+                now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+                con_p.execute(
+                    """
+                    INSERT OR REPLACE INTO promotions
+                    (id, name, kind, percent_bp, fixed_off_cents, buy_qty, pay_qty, scope_kind, priority, is_active, weekdays_mask, created_at, updated_at)
+                    VALUES ('promo-qa-2x1', '2x1 Capuchino', 'NXM', 0, 0, 2, 1, 'PRODUCT', 10, 1, 0, ?, ?)
+                    """,
+                    (now_str, now_str),
+                )
+                con_p.execute("DELETE FROM promotion_targets WHERE promotion_id = 'promo-qa-2x1'")
+                con_p.execute(
+                    "INSERT INTO promotion_targets (promotion_id, product_id, category) VALUES ('promo-qa-2x1', ?, NULL)",
+                    (cap_row[0],),
+                )
+                con_p.commit()
+        finally:
+            con_p.close()
+
+        btn_pos_30 = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Punto de Venta" in t), None)
+        assert btn_pos_30 is not None, "Botón Punto de Venta no encontrado para captura 30"
+        _f7_click_btn(btn_pos_30)
+        time.sleep(0.45)
+        pos_c30 = get_child_controls(hwnd_main)
+        edits_30 = [h for (h, cls, _t) in pos_c30 if cls.lower() == "edit" and user32.IsWindowVisible(h)]
+        btns_30 = [(h, t) for (h, cls, t) in pos_c30 if cls.lower() == "button" and user32.IsWindowVisible(h)]
+        btn_find_30 = next((h for (h, t) in btns_30 if "Buscar" in t), None)
+        btn_add_30 = next((h for (h, t) in btns_30 if "Agregar al Carrito" in t), None)
+        if len(edits_30) >= 2 and btn_find_30 and btn_add_30:
+            set_text(edits_30[0], "Capuchino")
+            _f7_click_btn(btn_find_30)
+            time.sleep(0.25)
+            set_text(edits_30[1], "3")
+            _f7_click_btn(btn_add_30)
+            time.sleep(0.35)
+        capture_window(hwnd_main, os.path.join(out_dir, "30_pos_discount.png"))
+
+        # Volver a Inventario > Productos y recetas antes de restaurar Touch para no alterar pasos 15+
+        btn_inv_back = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Inventario" in t), None)
+        if btn_inv_back:
+            _f7_click_btn(btn_inv_back)
+            time.sleep(0.35)
+
         # Restaurar perfil Touch antes de BackOffice > Configuracion
         btn_to_touch = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Touch" in t), None)
         if btn_to_touch:

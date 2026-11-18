@@ -14,7 +14,8 @@ class CheckoutDialog : public wxDialog {
 public:
     CheckoutDialog(
         wxWindow* parent,
-        contracts::Money total
+        contracts::Money total,
+        contracts::Money discount = contracts::Money::zero()
     );
 
     contracts::PaymentMethod get_payment_method() const { return selected_method_; }
@@ -29,6 +30,7 @@ private:
     void update_cash_calculations();
 
     contracts::Money total_;
+    contracts::Money discount_{contracts::Money::zero()};
     contracts::PaymentMethod selected_method_{contracts::PaymentMethod::Efectivo};
     contracts::Money cash_received_{contracts::Money::zero()};
     contracts::Money change_{contracts::Money::zero()};

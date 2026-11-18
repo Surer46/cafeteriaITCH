@@ -481,6 +481,46 @@ void InventoryProductsPanel::build_ui() {
     img_row->Add(img_btns_col, 1, wxALIGN_CENTER_VERTICAL);
     detail_sizer_->Add(img_row, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
 
+    // Existencia de productos directos
+    pnl_direct_stock_ = new wxPanel(detail_scroll_, wxID_ANY);
+    pnl_direct_stock_->SetBackgroundColour(Theme::ColorSurfaceSubtle);
+    auto* direct_stock_sizer = new wxBoxSizer(wxVERTICAL);
+
+    chk_track_stock_ = new wxCheckBox(pnl_direct_stock_, wxID_ANY, wxT("Controlar existencia"));
+    chk_track_stock_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    chk_track_stock_->SetValue(true);
+    {
+        int chk_tw = 0, chk_th = 0;
+        chk_track_stock_->GetTextExtent(wxT("Controlar existencia"), &chk_tw, &chk_th);
+        chk_track_stock_->SetMinSize(wxSize(chk_tw + FromDIP(44), FromDIP(btn_h_logical)));
+    }
+    direct_stock_sizer->Add(chk_track_stock_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
+
+    lbl_direct_stock_status_ = new wxStaticText(pnl_direct_stock_, wxID_ANY, wxEmptyString);
+    lbl_direct_stock_status_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_direct_stock_status_->SetForegroundColour(Theme::ColorText);
+    direct_stock_sizer->Add(lbl_direct_stock_status_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
+
+    lbl_direct_stock_hint_ = new wxStaticText(
+        pnl_direct_stock_,
+        wxID_ANY,
+        wxT("Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.")
+    );
+    lbl_direct_stock_hint_->SetFont(Theme::get_font_small());
+    lbl_direct_stock_hint_->SetForegroundColour(Theme::ColorTextSecondary);
+    direct_stock_sizer->Add(lbl_direct_stock_hint_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(4));
+
+    btn_enable_stock_ = new wxButton(pnl_direct_stock_, wxID_ANY, wxT("Controlar existencia"));
+    btn_enable_stock_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
+    Theme::style_button_secondary(btn_enable_stock_, btn_h_logical);
+    ensure_btn_width_fits(btn_enable_stock_, 170, btn_h_logical);
+    btn_enable_stock_->Bind(wxEVT_BUTTON, &InventoryProductsPanel::on_enable_direct_stock, this);
+    direct_stock_sizer->Add(btn_enable_stock_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
+    direct_stock_sizer->AddSpacer(FromDIP(8));
+
+    pnl_direct_stock_->SetSizer(direct_stock_sizer);
+    detail_sizer_->Add(pnl_direct_stock_, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
+
     // Botones principales de producto
     auto* action_row = new wxBoxSizer(wxHORIZONTAL);
     btn_save_ = new wxButton(detail_scroll_, wxID_ANY, wxT("Guardar"));
@@ -915,6 +955,43 @@ void InventoryProductsPanel::update_type_buttons_ui() {
     ensure_btn_width_fits(btn_type_prepared_, 100, btn_h_logical);
 
     const bool show_recipe = is_prepared_selected_;
+    if (pnl_direct_stock_) {
+        const bool show_direct = !is_prepared_selected_;
+        pnl_direct_stock_->Show(show_direct);
+        if (show_direct) {
+            const bool is_new = editing_product_id_.empty();
+            chk_track_stock_->Show(is_new);
+            lbl_direct_stock_status_->Show(!is_new);
+            if (is_new) {
+                lbl_direct_stock_hint_->SetLabel(
+                    wxT("Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.")
+                );
+                lbl_direct_stock_hint_->Show(true);
+                btn_enable_stock_->Show(false);
+            } else if (editing_stock_tracked_) {
+                lbl_direct_stock_status_->SetLabel(wxString::Format(
+                    wxT("Existencia controlada (%lld %s)"),
+                    editing_stock_units_,
+                    editing_stock_units_ == 1 ? wxT("pieza") : wxT("piezas")
+                ));
+                lbl_direct_stock_status_->SetForegroundColour(Theme::ColorSuccess);
+                lbl_direct_stock_hint_->SetLabel(
+                    wxT("Puedes registrar compras y mermas desde Reabastecimiento y Barra.")
+                );
+                lbl_direct_stock_hint_->Show(true);
+                btn_enable_stock_->Show(false);
+            } else {
+                lbl_direct_stock_status_->SetLabel(wxT("Sin control de existencia"));
+                lbl_direct_stock_status_->SetForegroundColour(Theme::ColorTextSecondary);
+                lbl_direct_stock_hint_->SetLabel(
+                    wxT("Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.")
+                );
+                lbl_direct_stock_hint_->Show(true);
+                btn_enable_stock_->Show(true);
+            }
+            pnl_direct_stock_->Layout();
+        }
+    }
     pnl_recipe_->Show(show_recipe);
     if (show_recipe) {
         const bool has_saved = !editing_product_id_.empty();
@@ -951,6 +1028,16 @@ void InventoryProductsPanel::update_detail_scroll_layout() {
         lbl_cost_->Wrap(wrap_w);
         lbl_margin_->Wrap(wrap_w);
     }
+    if (pnl_direct_stock_ && pnl_direct_stock_->IsShown()) {
+        const int wrap_w = std::max(FromDIP(160), detail_scroll_->GetClientSize().GetWidth() - FromDIP(32));
+        if (lbl_direct_stock_status_ && lbl_direct_stock_status_->IsShown()) {
+            lbl_direct_stock_status_->Wrap(wrap_w);
+        }
+        if (lbl_direct_stock_hint_ && lbl_direct_stock_hint_->IsShown()) {
+            lbl_direct_stock_hint_->Wrap(wrap_w);
+        }
+        pnl_direct_stock_->Layout();
+    }
     detail_sizer_->Layout();
     detail_scroll_->FitInside();
     detail_scroll_->Layout();
@@ -962,8 +1049,14 @@ void InventoryProductsPanel::start_new_product() {
     editing_product_id_.clear();
     editing_is_active_ = true;
     editing_has_image_ = false;
+    editing_stock_tracked_ = false;
+    editing_stock_units_ = 0;
     pending_image_bytes_.clear();
     pending_image_mime_.clear();
+
+    if (chk_track_stock_) {
+        chk_track_stock_->SetValue(true);
+    }
 
     if (list_) {
         sync_selection_guard_ = true;
@@ -1002,6 +1095,8 @@ void InventoryProductsPanel::load_product_into_form(const std::string& product_i
     editing_product_id_ = p.id;
     editing_is_active_ = p.is_active;
     editing_has_image_ = p.has_image;
+    editing_stock_tracked_ = p.stock_tracked;
+    editing_stock_units_ = p.stock_units;
     pending_image_bytes_.clear();
     pending_image_mime_.clear();
 
@@ -1268,6 +1363,19 @@ void InventoryProductsPanel::on_type_direct(wxCommandEvent&) {
     update_type_buttons_ui();
 }
 
+void InventoryProductsPanel::on_enable_direct_stock(wxCommandEvent&) {
+    if (destroying_ || !catalog_service_ || editing_product_id_.empty()) return;
+    auto res = catalog_service_->enable_stock_for_direct_product(editing_product_id_);
+    if (!res.is_success()) {
+        set_feedback(res.error_message(), true);
+        return;
+    }
+    const std::string target_id = editing_product_id_;
+    refresh_all(target_id);
+    load_product_into_form(target_id);
+    set_feedback("Control de existencia activado.", false);
+}
+
 void InventoryProductsPanel::on_pick_image(wxCommandEvent&) {
     if (destroying_ || !catalog_service_) return;
     wxFileDialog dlg(
@@ -1364,6 +1472,7 @@ void InventoryProductsPanel::on_save_product(wxCommandEvent&) {
         dto.category = category;
         dto.price = price_res.value();
         dto.is_prepared = is_prepared_selected_;
+        dto.track_stock = is_prepared_selected_ ? false : (chk_track_stock_ ? chk_track_stock_->GetValue() : true);
         auto res = catalog_service_->create_product(dto);
         if (!res.is_success()) {
             set_feedback(res.error_message(), true);

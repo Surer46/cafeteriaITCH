@@ -698,9 +698,18 @@ def run_suite(label, exe_path):
             pc = locate_products_controls(hwnd_main2)
             post_click_button(pc["btns"]["Elegir imagen"])
             accept_file_dialog(p2.pid, png_path)
-            con = sqlite3.connect(db_path)
-            assert con.execute("SELECT COUNT(*) FROM product_images").fetchone()[0] == 1, "Imagen PNG no persistió en SQLite"
-            con.close()
+            img_deadline = time.time() + 5.0
+            img_count = 0
+            while time.time() < img_deadline:
+                con = sqlite3.connect(db_path)
+                try:
+                    img_count = con.execute("SELECT COUNT(*) FROM product_images").fetchone()[0]
+                finally:
+                    con.close()
+                if img_count == 1:
+                    break
+                time.sleep(0.15)
+            assert img_count == 1, "Imagen PNG no persistió en SQLite"
             pc = locate_products_controls(hwnd_main2)
             assert any("Imagen asignada" in s for s in pc["statics"]), pc["statics"]
             click_button(pc["btns"]["Quitar imagen"])
