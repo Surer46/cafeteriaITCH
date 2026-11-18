@@ -157,7 +157,14 @@ otas-pc.md`. `ctest` vuelve a estar disponible, pero **no correr `UpdateTest` ha
 
 ## Reanudar agentes
 
-- **Pausa del 2026-11-17 (retomar aquí):**
+- **Pausa del 2026-11-18 (retomar aquí):**
+  - **`main` en `1f4b07f`** (más este registro), con B14, B13c, T12 y B15 integrados y auditados. Sin subir a GitHub desde `27e890e`.
+  - **T13 redactado y sin pegar** (sección 1 de `prompts-para-pegar.md`, `Prompts/prompts-2026-11-18-T13.md`): Promociones y combos, más la corrección de `test_f1_roles_panel.py` (21 → 22 permisos). Hasta entonces esa prueba falla en `main` por el permiso nuevo de B15.
+  - **Al volver:** pegar T13 a Gemini y auditarlo; luego redactar T14 (interfaz de I4: corte con arqueo y movimientos de caja en Caja y turnos; Reportes con CSV) y después I7 (pantalla completa sin espacios vacíos).
+  - **Claude Code Terminal libre.** Bloque corto posible, sin redactar: estado «Poco» y último movimiento de productos en `ProductDto` para Existencias.
+  - **Pendientes:** pasada al 100 % de T8 a T13; claves de firma y prueba manual con UAC (usuario); T6 tuvo un fallo intermitente el 2026-11-17.
+  - **Reanudar:** `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend).
+- **Pausa del 2026-11-17:**
   - **`main` en `5731ec1`** (más este registro), con T8 a T11, B13 y B13b integrados. Sin subir a GitHub desde `27e890e`.
   - **Sin integrar ni auditar, en el worktree del backend:**
     - B14 (`2204496`, rama `backend/b14`).
