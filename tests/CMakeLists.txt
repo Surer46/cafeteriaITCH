@@ -80,6 +80,25 @@ target_compile_definitions(test_reports PRIVATE
 )
 add_test(NAME ReportsTest COMMAND test_reports)
 
+# Test B15: corte de turno, cerrar el turno de otro, movimientos de caja, reportes por rango y CSV
+add_executable(test_b15
+    test_b15.cpp
+)
+target_link_libraries(test_b15 PRIVATE
+    app_storage
+    app_services
+    app_contracts
+    app_crypto
+    sqlite3
+)
+add_dependencies(test_b15 copy_migrations)
+target_compile_definitions(test_b15 PRIVATE
+    MIGRATIONS_DIR_PATH="${CMAKE_CURRENT_BINARY_DIR}/migrations"
+    SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations"
+)
+add_test(NAME ShiftCloseoutTest COMMAND test_b15 shift)
+add_test(NAME ReportsRangeTest COMMAND test_b15 reports)
+
 # Ejecutable aislado de integración para reintento real de idempotencia a nivel de servicio
 add_executable(test_idempotency_runner
     test_idempotency_runner.cpp
@@ -123,7 +142,7 @@ if(WIN32)
             file(COPY ${WX_TEST_DLLS} DESTINATION "${CMAKE_CURRENT_BINARY_DIR}")
         endif()
     endif()
-    set_tests_properties(ContractsTest StorageTest BackupTest ReportsTest PROPERTIES
+    set_tests_properties(ContractsTest StorageTest BackupTest ReportsTest ShiftCloseoutTest ReportsRangeTest PROPERTIES
         ENVIRONMENT "PATH=${CMAKE_CURRENT_BINARY_DIR};${CMAKE_BINARY_DIR};${wxWidgets_LIB_DIR};${COMPILER_BIN_DIR};$ENV{PATH}"
     )
     if(wxWidgets_FOUND)

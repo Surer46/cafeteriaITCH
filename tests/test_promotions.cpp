@@ -250,7 +250,7 @@ static void test_permissions() {
     env.owner();
     TEST_CHECK(env.promo->get_combo_costing(cc.value().product_id).is_success(), "El Dueño sí ve costos");
     // Permisos de sistema: no se crearon permisos ni roles nuevos
-    TEST_CHECK(env.scalar("SELECT COUNT(*) FROM permissions;") == "22", "Siguen 22 permisos (sin permisos nuevos)");
+    TEST_CHECK(env.scalar("SELECT COUNT(*) FROM permissions;") == "23", "23 permisos (B15 añadió shift.close_others; B14 no añadió ninguno)");
     TEST_CHECK(env.scalar("SELECT COUNT(*) FROM roles;") == "4", "Roles: Dueño, Cajero, Desarrollador y el creado por el Dueño");
 }
 

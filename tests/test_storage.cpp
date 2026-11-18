@@ -3196,7 +3196,7 @@ void test_b4a_permission_titles_migration() {
         MigrationRunner runner_rest(db);
         TEST_CHECK(runner_rest.run_pending_migrations_from_dir(mig_dir).is_success(), "Aplicar migraciones posteriores a 009");
         TEST_CHECK(query_text("SELECT MAX(version) FROM schema_migrations;") == latest_migration_version(), "Última versión del esquema es la de la carpeta de migraciones");
-        TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "22", "22 permisos con updates.manage");
+        TEST_CHECK(query_text("SELECT COUNT(*) FROM permissions;") == "23", "23 permisos con updates.manage y shift.close_others");
         TEST_CHECK(query_text("SELECT group_concat(role_id, ',') FROM role_permissions WHERE permission_id = 'updates.manage';") == "role-owner",
                    "updates.manage solo para role-owner");
         const std::string rp_latest = query_text(rp_sql);
@@ -3214,7 +3214,7 @@ void test_b4a_permission_titles_migration() {
 
         auto list = account_svc->list_permissions();
         TEST_CHECK(list.is_success(), "list_permissions B4a");
-        TEST_CHECK(list.value().size() == 22, "list_permissions devuelve las 22 filas");
+        TEST_CHECK(list.value().size() == 23, "list_permissions devuelve las 23 filas");
         bool ordered = true;
         bool filled = true;
         for (std::size_t i = 0; i < list.value().size(); ++i) {

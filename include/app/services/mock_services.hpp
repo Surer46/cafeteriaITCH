@@ -140,9 +140,20 @@ public:
         contracts::Money initial_cash
     ) override;
     contracts::OperationResult close_shift(contracts::Money final_cash) override;
+    contracts::Result<contracts::ShiftCloseoutDto> preview_closeout(const std::string& shift_id = "") override;
+    contracts::Result<contracts::ShiftCloseoutDto> close_shift_with_count(
+        const std::string& shift_id, contracts::Money counted_cash, const std::string& difference_reason) override;
+    contracts::Result<contracts::ShiftCloseoutDto> get_closeout(const std::string& shift_id) override;
+    contracts::Result<contracts::ClosedShiftListDto> list_closed_shifts(
+        const std::string& from_date, const std::string& to_date, int limit = 100) override;
+    contracts::Result<contracts::CashMovementDto> record_cash_movement(
+        contracts::CashMovementKind kind, contracts::Money amount, const std::string& description) override;
 
 private:
+    contracts::ShiftCloseoutDto build_closeout() const;
     contracts::ShiftDto current_shift_;
+    std::vector<contracts::CashMovementDto> movements_;
+    std::vector<contracts::ShiftCloseoutDto> closed_;
 };
 
 class MockInventoryService : public contracts::IInventoryService {
@@ -215,6 +226,15 @@ class MockReportService : public contracts::IReportService {
 public:
     MockReportService();
     contracts::Result<contracts::DailySalesReportDto> get_daily_sales_summary(const std::string& date_iso) override;
+    contracts::Result<contracts::SalesByDayReportDto> sales_by_day(const std::string& from_date, const std::string& to_date) override;
+    contracts::Result<contracts::SalesByProductReportDto> sales_by_product(const std::string& from_date, const std::string& to_date) override;
+    contracts::Result<contracts::SalesByPaymentReportDto> sales_by_payment_method(const std::string& from_date, const std::string& to_date) override;
+    contracts::Result<contracts::SalesByCashierReportDto> sales_by_cashier(const std::string& from_date, const std::string& to_date) override;
+    contracts::Result<contracts::InventoryLossReportDto> inventory_losses(const std::string& from_date, const std::string& to_date) override;
+    contracts::Result<contracts::InventoryMovementsReportDto> inventory_movements(const std::string& from_date, const std::string& to_date, int limit = 1000) override;
+    contracts::Result<contracts::PurchasesSummaryReportDto> purchases_summary(const std::string& from_date, const std::string& to_date) override;
+    contracts::Result<contracts::ReportExportResultDto> export_report_csv(contracts::ReportKind kind, const std::string& from_date,
+        const std::string& to_date, const std::string& file_path, bool overwrite = false) override;
 };
 
 class MockBackupService : public contracts::IBackupService {
