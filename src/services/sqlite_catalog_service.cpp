@@ -1,3 +1,6 @@
+#include <map>
+#include <set>
+#include <algorithm>
 #include "app/services/sqlite_catalog_service.hpp"
 #include "app/services/identifiers.hpp"
 #include "app/domain/clock.hpp"
@@ -43,68 +46,159 @@ bool validate_image_header(const std::vector<std::uint8_t>& bytes, std::string& 
     return false;
 }
 
-// Porciones que alcanzan con las existencias para un producto con receta vigente; -1 si no tiene receta.
-std::int64_t recipe_portions(storage::SqliteDatabase& db, const std::string& product_id) {
-    auto prep_rec = db.prepare(
-        "SELECT ri.quantity_base_units, i.current_stock "
-        "FROM recipes r "
-        "JOIN recipe_items ri ON r.id = ri.recipe_id "
-        "JOIN ingredients i ON ri.ingredient_id = i.id "
-        "WHERE r.id = ("
-        "    SELECT id FROM recipes WHERE product_id = ? ORDER BY version DESC LIMIT 1"
-        ");"
-    );
-    if (!prep_rec.is_success()) return -1;
-    auto stmt_rec = std::move(prep_rec.value());
-    stmt_rec.bind_text(1, product_id);
+// Existencias de un grupo de productos (B14 y B16) con un número FIJO de consultas, sin importar cuántos productos
+// sean (nada de una consulta por producto):
+//   1. las partes de los combos del grupo (`combo_items`);
+//   2. las líneas de la receta vigente de los productos del grupo y de las partes de sus combos, junto con la
+//      existencia, el umbral y el último movimiento de cada ingrediente.
+// Con listas largas se parte en tandas de 400 identificadores (límite de variables de SQLite).
+// Llena stock_tracked, stock_units, stock_status y last_movement_at. Reglas:
+//   - Preparado o directo enlazado (tiene receta): controlado. stock_units = porciones que alcanzan (mínimo entre
+//     sus ingredientes). stock_status: OUT si stock_units es 0; LOW si alguno de sus ingredientes está en LOW
+//     (existencia > 0, umbral > 0 y existencia <= umbral); si no, OK. last_movement_at: el movimiento más reciente
+//     entre sus ingredientes. Un directo con receta de 1 pieza queda igual que su ingrediente.
+//   - Combo: controlado solo si TODAS sus partes lo están (como ya era). stock_units = mínimo entre las partes
+//     controladas (cada una dividida entre su cantidad); las partes sin control no entran en esa cuenta. Estado y
+//     último movimiento se calculan con las partes controladas, igual que las reglas del preparado.
+//   - No controlado: stock_units 0, stock_status y last_movement_at vacíos.
+struct RecipeLine {
+    std::int64_t qty{0};
+    std::int64_t stock{0};
+    std::int64_t threshold{0};
+    std::string last_movement;
+};
+
+struct StockEval {
+    bool tracked{false};
+    std::int64_t units{0};
+    bool low{false};
+    std::string last_movement;
+};
+
+StockEval eval_lines(const std::vector<RecipeLine>& lines) {
+    StockEval ev;
     std::int64_t min_portions = -1;
-    while (true) {
-        auto s = stmt_rec.step();
-        if (!s.is_success() || !s.value()) break;
-        const std::int64_t qty_req = stmt_rec.get_int64(0);
-        const std::int64_t stock_avail = stmt_rec.get_int64(1);
-        if (qty_req > 0) {
-            std::int64_t portions = stock_avail / qty_req;
-            if (portions < 0) portions = 0;
-            if (min_portions < 0 || portions < min_portions) min_portions = portions;
-        }
+    for (const auto& l : lines) {
+        if (l.qty <= 0) continue;
+        std::int64_t portions = l.stock / l.qty;
+        if (portions < 0) portions = 0;
+        if (min_portions < 0 || portions < min_portions) min_portions = portions;
+        if (l.stock > 0 && l.threshold > 0 && l.stock <= l.threshold) ev.low = true;
+        if (l.last_movement > ev.last_movement) ev.last_movement = l.last_movement;
     }
-    return min_portions;
+    if (min_portions >= 0) {
+        ev.tracked = true;
+        ev.units = min_portions;
+    }
+    return ev;
 }
 
-// stock_units y stock_tracked de un producto (B14): receta (preparado o directo enlazado) o partes de un combo.
-void fill_stock_info(storage::SqliteDatabase& db, contracts::ProductDto& dto) {
-    dto.stock_units = 0;
-    dto.stock_tracked = false;
-    if (dto.is_combo) {
-        struct Part { std::string id; std::int64_t qty; };
-        std::vector<Part> parts;
-        auto prep = db.prepare("SELECT component_product_id, quantity FROM combo_items WHERE combo_product_id = ? ORDER BY rowid;");
+const char* status_of(std::int64_t units, bool low) { return units <= 0 ? "OUT" : (low ? "LOW" : "OK"); }
+
+std::string placeholders(std::size_t n) {
+    std::string s;
+    for (std::size_t i = 0; i < n; ++i) s += (i ? ",?" : "?");
+    return s;
+}
+
+void fill_stock_bulk(storage::SqliteDatabase& db, std::vector<contracts::ProductDto>& products) {
+    constexpr std::size_t kChunk = 400;
+    for (auto& p : products) {
+        p.stock_units = 0;
+        p.stock_tracked = false;
+        p.stock_status.clear();
+        p.last_movement_at.clear();
+    }
+    if (products.empty()) return;
+
+    // 1. Partes de los combos del grupo
+    struct Part { std::string id; std::int64_t qty; };
+    std::map<std::string, std::vector<Part>> combo_parts;
+    std::set<std::string> need_recipes;
+    std::vector<std::string> combo_ids;
+    for (const auto& p : products) {
+        if (p.is_combo) combo_ids.push_back(p.id);
+        else need_recipes.insert(p.id);
+    }
+    for (std::size_t i = 0; i < combo_ids.size(); i += kChunk) {
+        const std::size_t n = std::min(kChunk, combo_ids.size() - i);
+        auto prep = db.prepare("SELECT combo_product_id, component_product_id, quantity FROM combo_items WHERE combo_product_id IN (" +
+                               placeholders(n) + ") ORDER BY rowid;");
         if (!prep.is_success()) return;
         auto stmt = std::move(prep.value());
-        stmt.bind_text(1, dto.id);
+        for (std::size_t k = 0; k < n; ++k) stmt.bind_text(static_cast<int>(k) + 1, combo_ids[i + k]);
         while (true) {
             auto st = stmt.step();
             if (!st.is_success() || !st.value()) break;
-            parts.push_back(Part{stmt.get_text(0), stmt.get_int64(1)});
+            combo_parts[stmt.get_text(0)].push_back(Part{stmt.get_text(1), stmt.get_int64(2)});
+            need_recipes.insert(stmt.get_text(1));
         }
-        bool all_tracked = !parts.empty();
+    }
+
+    // 2. Líneas de receta vigente con la existencia y el último movimiento de cada ingrediente
+    std::map<std::string, std::vector<RecipeLine>> lines;
+    const std::vector<std::string> ids(need_recipes.begin(), need_recipes.end());
+    for (std::size_t i = 0; i < ids.size(); i += kChunk) {
+        const std::size_t n = std::min(kChunk, ids.size() - i);
+        auto prep = db.prepare(
+            "SELECT r.product_id, ri.quantity_base_units, ing.current_stock, ing.low_stock_threshold, "
+            "COALESCE((SELECT MAX(m.created_at) FROM stock_movements m WHERE m.ingredient_id = ing.id), '') "
+            "FROM recipes r JOIN recipe_items ri ON ri.recipe_id = r.id JOIN ingredients ing ON ing.id = ri.ingredient_id "
+            "WHERE r.product_id IN (" + placeholders(n) + ") "
+            "AND r.id = (SELECT id FROM recipes WHERE product_id = r.product_id ORDER BY version DESC LIMIT 1);");
+        if (!prep.is_success()) return;
+        auto stmt = std::move(prep.value());
+        for (std::size_t k = 0; k < n; ++k) stmt.bind_text(static_cast<int>(k) + 1, ids[i + k]);
+        while (true) {
+            auto st = stmt.step();
+            if (!st.is_success() || !st.value()) break;
+            lines[stmt.get_text(0)].push_back(RecipeLine{stmt.get_int64(1), stmt.get_int64(2), stmt.get_int64(3), stmt.get_text(4)});
+        }
+    }
+    auto eval_of = [&](const std::string& product_id) {
+        auto it = lines.find(product_id);
+        return it == lines.end() ? StockEval{} : eval_lines(it->second);
+    };
+
+    for (auto& p : products) {
+        if (!p.is_combo) {
+            const StockEval ev = eval_of(p.id);
+            if (!ev.tracked) continue;
+            p.stock_tracked = true;
+            p.stock_units = ev.units;
+            p.stock_status = status_of(ev.units, ev.low);
+            p.last_movement_at = ev.last_movement;
+            continue;
+        }
+        const auto it = combo_parts.find(p.id);
+        const bool has_parts = it != combo_parts.end() && !it->second.empty();
+        bool all_tracked = has_parts;
+        bool low = false;
         std::int64_t min_units = -1;
-        for (const auto& part : parts) {
-            const std::int64_t p = recipe_portions(db, part.id);
-            if (p < 0) { all_tracked = false; continue; }
-            const std::int64_t units = part.qty > 0 ? p / part.qty : 0;
-            if (min_units < 0 || units < min_units) min_units = units;
+        std::string last;
+        if (has_parts) {
+            for (const auto& part : it->second) {
+                const StockEval ev = eval_of(part.id);
+                if (!ev.tracked) { all_tracked = false; continue; }
+                const std::int64_t units = part.qty > 0 ? ev.units / part.qty : 0;
+                if (min_units < 0 || units < min_units) min_units = units;
+                if (ev.low) low = true;
+                if (ev.last_movement > last) last = ev.last_movement;
+            }
         }
-        dto.stock_tracked = all_tracked;
-        dto.stock_units = min_units > 0 ? min_units : 0;
-        return;
+        p.stock_tracked = all_tracked;
+        p.stock_units = min_units > 0 ? min_units : 0;
+        if (all_tracked) {
+            p.stock_status = status_of(p.stock_units, low);
+            p.last_movement_at = last;
+        }
     }
-    const std::int64_t p = recipe_portions(db, dto.id);
-    if (p >= 0) {
-        dto.stock_tracked = true;
-        dto.stock_units = p;
-    }
+}
+
+void fill_stock_info(storage::SqliteDatabase& db, contracts::ProductDto& dto) {
+    std::vector<contracts::ProductDto> one{dto};
+    fill_stock_bulk(db, one);
+    dto = one.front();
 }
 
 } // namespace
@@ -215,10 +309,10 @@ contracts::Result<std::vector<contracts::ProductDto>> SqliteCatalogService::sear
         dto.stock_units = 0;
 
         dto.is_combo = stmt.get_int64(9) != 0;
-        fill_stock_info(db_, dto);
-
         products.push_back(dto);
     }
+    // Existencias de toda la página con un número fijo de consultas (sin una consulta por producto).
+    fill_stock_bulk(db_, products);
 
     return contracts::Result<std::vector<contracts::ProductDto>>::ok(products);
 }

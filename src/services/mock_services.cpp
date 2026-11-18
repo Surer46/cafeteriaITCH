@@ -391,6 +391,12 @@ MockCatalogService::MockCatalogService() {
         {"prod-4", "SKU-004", "7501004", "Café Americano", "Bebidas", contracts::Money::from_major_minor(25, 0), 100, false, true, false},
         {"prod-5", "SKU-005", "7501005", "Molletes con Queso", "Platillos", contracts::Money::from_major_minor(40, 0), 18, true, true, false}
     };
+    // B16: estado y último movimiento de existencias (simulados, con las mismas palabras que el servicio real).
+    for (auto& p : products_) {
+        p.stock_tracked = true;
+        p.stock_status = p.stock_units <= 0 ? "OUT" : (p.stock_units <= 10 ? "LOW" : "OK");
+        p.last_movement_at = "2026-09-24 10:00:00";
+    }
 }
 
 contracts::Result<std::vector<contracts::ProductDto>> MockCatalogService::search_products(
