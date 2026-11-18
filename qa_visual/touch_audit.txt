@@ -201,7 +201,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Dialogo Nuevo Usuario | button | Cancelar | 110.4x48.0 | OK
   Dialogo Nuevo Usuario | button | Guardar Usuario | 160.0x48.0 | OK
 
-=== Roles y permisos (total=34, marcados=0) ===
+=== Roles y permisos (total=35, marcados=0) ===
   Roles y permisos | button | Estándar | 137.6x48.0 | OK
   Roles y permisos | button | Punto de Venta | 220.0x56.0 | OK
   Roles y permisos | button | Inventario | 220.0x56.0 | OK
@@ -227,6 +227,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Roles y permisos | switch/combo | Definir avisos de poco inventario | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Administrar promociones y combos | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Abrir y cerrar caja | 60.0x48.0 | OK
+  Roles y permisos | switch/combo | Cerrar turno de otro usuario | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Ver reportes | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Ver la bitácora | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Administrar cuentas | 60.0x48.0 | OK
