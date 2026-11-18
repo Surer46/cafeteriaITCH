@@ -220,7 +220,8 @@ contracts::Result<std::vector<contracts::IngredientDto>> SqliteInventoryService:
     }
 
     auto prep = db_.prepare(
-        "SELECT id, name, unit_dimension, base_unit, current_stock, low_stock_threshold "
+        "SELECT id, name, unit_dimension, base_unit, current_stock, low_stock_threshold, "
+        "(SELECT MAX(created_at) FROM stock_movements WHERE ingredient_id = ingredients.id) "
         "FROM ingredients ORDER BY name ASC;"
     );
     if (!prep.is_success()) {
@@ -243,6 +244,9 @@ contracts::Result<std::vector<contracts::IngredientDto>> SqliteInventoryService:
         dto.base_unit = stmt.get_text(3);
         dto.current_stock_base = stmt.get_int64(4);
         dto.low_stock_threshold_base = stmt.get_int64(5);
+        dto.last_movement_at = stmt.is_null(6) ? "" : stmt.get_text(6);
+        dto.stock_status = dto.current_stock_base <= 0 ? "OUT"
+                           : (dto.low_stock_threshold_base > 0 && dto.current_stock_base <= dto.low_stock_threshold_base) ? "LOW" : "OK";
         list.push_back(dto);
     }
 
@@ -264,7 +268,8 @@ contracts::Result<contracts::IngredientDto> SqliteInventoryService::get_ingredie
     }
 
     auto prep = db_.prepare(
-        "SELECT id, name, unit_dimension, base_unit, current_stock, low_stock_threshold "
+        "SELECT id, name, unit_dimension, base_unit, current_stock, low_stock_threshold, "
+        "(SELECT MAX(created_at) FROM stock_movements WHERE ingredient_id = ingredients.id) "
         "FROM ingredients WHERE id = ?;"
     );
     if (!prep.is_success()) {
@@ -288,6 +293,9 @@ contracts::Result<contracts::IngredientDto> SqliteInventoryService::get_ingredie
     dto.base_unit = stmt.get_text(3);
     dto.current_stock_base = stmt.get_int64(4);
     dto.low_stock_threshold_base = stmt.get_int64(5);
+    dto.last_movement_at = stmt.is_null(6) ? "" : stmt.get_text(6);
+    dto.stock_status = dto.current_stock_base <= 0 ? "OUT"
+                       : (dto.low_stock_threshold_base > 0 && dto.current_stock_base <= dto.low_stock_threshold_base) ? "LOW" : "OK";
 
     return contracts::Result<contracts::IngredientDto>::ok(dto);
 }

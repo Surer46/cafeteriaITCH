@@ -46,6 +46,14 @@ public:
     // Requiere inventory.manage_products (Forbidden en otro caso). Un ingrediente sin compras
     // es de costo desconocido: la receta lo lista y no presenta margen.
     virtual Result<RecipeCostingDto> get_recipe_costing(const std::string& product_id) = 0;
+    // B14: da existencia controlada a un producto DIRECTO (is_prepared falso) que ya existía sin receta: crea un
+    // ingrediente por piezas con el mismo nombre (o enlaza `link_ingredient_id`, que debe contarse por piezas) y
+    // le asigna una receta de 1 pieza, para poder reabastecerlo y verlo en Existencias y Barra. Requiere
+    // inventory.manage_products. No cambia ventas pasadas ni inventa existencia: queda en 0 hasta registrar una compra.
+    virtual OperationResult enable_stock_for_direct_product(
+        const std::string& product_id,
+        const std::string& link_ingredient_id = ""
+    ) = 0;
     virtual OperationResult set_recipe(
         const std::string& product_id,
         const std::vector<RecipeItemDto>& items

@@ -43,6 +43,70 @@ bool validate_image_header(const std::vector<std::uint8_t>& bytes, std::string& 
     return false;
 }
 
+// Porciones que alcanzan con las existencias para un producto con receta vigente; -1 si no tiene receta.
+std::int64_t recipe_portions(storage::SqliteDatabase& db, const std::string& product_id) {
+    auto prep_rec = db.prepare(
+        "SELECT ri.quantity_base_units, i.current_stock "
+        "FROM recipes r "
+        "JOIN recipe_items ri ON r.id = ri.recipe_id "
+        "JOIN ingredients i ON ri.ingredient_id = i.id "
+        "WHERE r.id = ("
+        "    SELECT id FROM recipes WHERE product_id = ? ORDER BY version DESC LIMIT 1"
+        ");"
+    );
+    if (!prep_rec.is_success()) return -1;
+    auto stmt_rec = std::move(prep_rec.value());
+    stmt_rec.bind_text(1, product_id);
+    std::int64_t min_portions = -1;
+    while (true) {
+        auto s = stmt_rec.step();
+        if (!s.is_success() || !s.value()) break;
+        const std::int64_t qty_req = stmt_rec.get_int64(0);
+        const std::int64_t stock_avail = stmt_rec.get_int64(1);
+        if (qty_req > 0) {
+            std::int64_t portions = stock_avail / qty_req;
+            if (portions < 0) portions = 0;
+            if (min_portions < 0 || portions < min_portions) min_portions = portions;
+        }
+    }
+    return min_portions;
+}
+
+// stock_units y stock_tracked de un producto (B14): receta (preparado o directo enlazado) o partes de un combo.
+void fill_stock_info(storage::SqliteDatabase& db, contracts::ProductDto& dto) {
+    dto.stock_units = 0;
+    dto.stock_tracked = false;
+    if (dto.is_combo) {
+        struct Part { std::string id; std::int64_t qty; };
+        std::vector<Part> parts;
+        auto prep = db.prepare("SELECT component_product_id, quantity FROM combo_items WHERE combo_product_id = ? ORDER BY rowid;");
+        if (!prep.is_success()) return;
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, dto.id);
+        while (true) {
+            auto st = stmt.step();
+            if (!st.is_success() || !st.value()) break;
+            parts.push_back(Part{stmt.get_text(0), stmt.get_int64(1)});
+        }
+        bool all_tracked = !parts.empty();
+        std::int64_t min_units = -1;
+        for (const auto& part : parts) {
+            const std::int64_t p = recipe_portions(db, part.id);
+            if (p < 0) { all_tracked = false; continue; }
+            const std::int64_t units = part.qty > 0 ? p / part.qty : 0;
+            if (min_units < 0 || units < min_units) min_units = units;
+        }
+        dto.stock_tracked = all_tracked;
+        dto.stock_units = min_units > 0 ? min_units : 0;
+        return;
+    }
+    const std::int64_t p = recipe_portions(db, dto.id);
+    if (p >= 0) {
+        dto.stock_tracked = true;
+        dto.stock_units = p;
+    }
+}
+
 } // namespace
 
 SqliteCatalogService::SqliteCatalogService(
@@ -95,7 +159,7 @@ contracts::Result<std::vector<contracts::ProductDto>> SqliteCatalogService::sear
 
     std::stringstream sql;
     sql << "SELECT p.id, p.sku, p.barcode, p.name, p.category, p.price_cents, "
-        << "p.is_prepared, p.is_active, (CASE WHEN img.id IS NOT NULL THEN 1 ELSE 0 END) AS has_img "
+        << "p.is_prepared, p.is_active, (CASE WHEN img.id IS NOT NULL THEN 1 ELSE 0 END) AS has_img, p.is_combo "
         << "FROM products p "
         << "LEFT JOIN product_images img ON p.id = img.product_id "
         << "WHERE 1=1 ";
@@ -150,39 +214,8 @@ contracts::Result<std::vector<contracts::ProductDto>> SqliteCatalogService::sear
         dto.has_image = stmt.get_int64(8) != 0;
         dto.stock_units = 0;
 
-        // Si es producto preparado, calcular porciones disponibles según su receta vigente
-        if (dto.is_prepared) {
-            auto prep_rec = db_.prepare(
-                "SELECT ri.quantity_base_units, i.current_stock "
-                "FROM recipes r "
-                "JOIN recipe_items ri ON r.id = ri.recipe_id "
-                "JOIN ingredients i ON ri.ingredient_id = i.id "
-                "WHERE r.id = ("
-                "    SELECT id FROM recipes WHERE product_id = ? ORDER BY version DESC LIMIT 1"
-                ");"
-            );
-            if (prep_rec.is_success()) {
-                auto stmt_rec = std::move(prep_rec.value());
-                stmt_rec.bind_text(1, dto.id);
-                std::int64_t min_portions = -1;
-                while (true) {
-                    auto s = stmt_rec.step();
-                    if (!s.is_success() || !s.value()) break;
-                    std::int64_t qty_req = stmt_rec.get_int64(0);
-                    std::int64_t stock_avail = stmt_rec.get_int64(1);
-                    if (qty_req > 0) {
-                        std::int64_t portions = stock_avail / qty_req;
-                        if (portions < 0) portions = 0;
-                        if (min_portions < 0 || portions < min_portions) {
-                            min_portions = portions;
-                        }
-                    }
-                }
-                if (min_portions >= 0) {
-                    dto.stock_units = min_portions;
-                }
-            }
-        }
+        dto.is_combo = stmt.get_int64(9) != 0;
+        fill_stock_info(db_, dto);
 
         products.push_back(dto);
     }
@@ -196,7 +229,7 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::get_product_by_id
     }
     auto prep = db_.prepare(
         "SELECT p.id, p.sku, p.barcode, p.name, p.category, p.price_cents, "
-        "p.is_prepared, p.is_active, (CASE WHEN img.id IS NOT NULL THEN 1 ELSE 0 END) "
+        "p.is_prepared, p.is_active, (CASE WHEN img.id IS NOT NULL THEN 1 ELSE 0 END), p.is_combo "
         "FROM products p "
         "LEFT JOIN product_images img ON p.id = img.product_id "
         "WHERE p.id = ?;"
@@ -225,7 +258,8 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::get_product_by_id
     dto.is_prepared = stmt.get_int64(6) != 0;
     dto.is_active = stmt.get_int64(7) != 0;
     dto.has_image = stmt.get_int64(8) != 0;
-    dto.stock_units = 0;
+    dto.is_combo = stmt.get_int64(9) != 0;
+    fill_stock_info(db_, dto);
 
     return contracts::Result<contracts::ProductDto>::ok(dto);
 }
@@ -236,7 +270,7 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::get_product_by_sk
     }
     auto prep = db_.prepare(
         "SELECT p.id, p.sku, p.barcode, p.name, p.category, p.price_cents, "
-        "p.is_prepared, p.is_active, (CASE WHEN img.id IS NOT NULL THEN 1 ELSE 0 END) "
+        "p.is_prepared, p.is_active, (CASE WHEN img.id IS NOT NULL THEN 1 ELSE 0 END), p.is_combo "
         "FROM products p "
         "LEFT JOIN product_images img ON p.id = img.product_id "
         "WHERE p.sku = ? OR p.barcode = ?;"
@@ -266,7 +300,8 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::get_product_by_sk
     dto.is_prepared = stmt.get_int64(6) != 0;
     dto.is_active = stmt.get_int64(7) != 0;
     dto.has_image = stmt.get_int64(8) != 0;
-    dto.stock_units = 0;
+    dto.is_combo = stmt.get_int64(9) != 0;
+    fill_stock_info(db_, dto);
 
     return contracts::Result<contracts::ProductDto>::ok(dto);
 }
@@ -367,6 +402,18 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::create_product(co
         return contracts::Result<contracts::ProductDto>::fail(step_ins.error_code(), step_ins.error_message());
     }
 
+    // B14: un producto directo controla existencia por omisión (ingrediente por piezas enlazado, receta de 1 pieza).
+    bool tracked = false;
+    if (!input.is_prepared && (input.track_stock || !input.link_ingredient_id.empty())) {
+        auto linked = link_direct_stock(product_id, input.name, input.sku, input.link_ingredient_id);
+        if (!linked.is_success()) {
+            auto del = db_.prepare("DELETE FROM products WHERE id = ?;");
+            if (del.is_success()) { auto st = std::move(del.value()); st.bind_text(1, product_id); st.step(); }
+            return contracts::Result<contracts::ProductDto>::fail(linked.error_code(), linked.error_message());
+        }
+        tracked = true;
+    }
+
     if (account_service_) {
         account_service_->record_audit_event("PRODUCT_CREATED", "Producto creado: " + input.name + " (" + input.sku + ")");
     }
@@ -382,8 +429,103 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::create_product(co
     dto.is_active = true;
     dto.has_image = false;
     dto.stock_units = 0;
+    dto.stock_tracked = tracked;
 
     return contracts::Result<contracts::ProductDto>::ok(dto);
+}
+
+contracts::OperationResult SqliteCatalogService::link_direct_stock(
+    const std::string& product_id, const std::string& product_name, const std::string& sku, const std::string& link_ingredient_id
+) {
+    std::string ingredient_id = link_ingredient_id;
+    const auto ts = domain::now();
+    auto tx = db_.begin_transaction();
+    if (!tx.is_success()) return tx;
+    auto fail = [&](contracts::ErrorCode code, const std::string& msg) {
+        db_.rollback_transaction();
+        return contracts::OperationResult::fail(code, msg);
+    };
+
+    if (!ingredient_id.empty()) {
+        auto prep = db_.prepare("SELECT unit_dimension FROM ingredients WHERE id = ?;");
+        if (!prep.is_success()) return fail(prep.error_code(), prep.error_message());
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, ingredient_id);
+        auto st = stmt.step();
+        if (!st.is_success() || !st.value()) return fail(contracts::ErrorCode::NotFound, "No se encontró el ingrediente elegido.");
+        if (stmt.get_text(0) != "COUNT") return fail(contracts::ErrorCode::InvalidInput, "El ingrediente elegido no se cuenta por piezas.");
+    } else {
+        // Nombre del ingrediente = nombre del producto; si ya existe, se distingue con el SKU.
+        std::string ing_name = product_name;
+        for (int attempt = 0; attempt < 2; ++attempt) {
+            auto prep = db_.prepare("SELECT COUNT(*) FROM ingredients WHERE name = ?;");
+            if (!prep.is_success()) return fail(prep.error_code(), prep.error_message());
+            auto stmt = std::move(prep.value());
+            stmt.bind_text(1, ing_name);
+            auto st = stmt.step();
+            if (st.is_success() && st.value() && stmt.get_int64(0) == 0) break;
+            if (attempt == 1) return fail(contracts::ErrorCode::Conflict, "Ya existe un ingrediente con el nombre de este producto. Elija el ingrediente que lo representa.");
+            ing_name = product_name + " (" + sku + ")";
+        }
+        ingredient_id = generate_id("ing");
+        auto ins = db_.prepare(
+            "INSERT INTO ingredients (id, name, unit_dimension, base_unit, current_stock, low_stock_threshold, updated_at, updated_at_utc) "
+            "VALUES (?, ?, 'COUNT', 'pz', 0, 0, ?, ?);");
+        if (!ins.is_success()) return fail(ins.error_code(), ins.error_message());
+        auto stmt = std::move(ins.value());
+        stmt.bind_text(1, ingredient_id);
+        stmt.bind_text(2, ing_name);
+        stmt.bind_text(3, ts.local);
+        stmt.bind_text(4, ts.utc);
+        auto st = stmt.step();
+        if (!st.is_success()) return fail(st.error_code(), st.error_message());
+    }
+
+    const std::string recipe_id = generate_id("rcp");
+    {
+        auto ins = db_.prepare("INSERT INTO recipes (id, product_id, version, created_at, updated_at, updated_at_utc) VALUES (?, ?, 1, ?, ?, ?);");
+        if (!ins.is_success()) return fail(ins.error_code(), ins.error_message());
+        auto stmt = std::move(ins.value());
+        stmt.bind_text(1, recipe_id);
+        stmt.bind_text(2, product_id);
+        stmt.bind_text(3, ts.local);
+        stmt.bind_text(4, ts.local);
+        stmt.bind_text(5, ts.utc);
+        auto st = stmt.step();
+        if (!st.is_success()) return fail(st.error_code(), st.error_message());
+    }
+    {
+        auto ins = db_.prepare("INSERT INTO recipe_items (id, recipe_id, ingredient_id, quantity_base_units) VALUES (?, ?, ?, 1);");
+        if (!ins.is_success()) return fail(ins.error_code(), ins.error_message());
+        auto stmt = std::move(ins.value());
+        stmt.bind_text(1, generate_id("rcpit"));
+        stmt.bind_text(2, recipe_id);
+        stmt.bind_text(3, ingredient_id);
+        auto st = stmt.step();
+        if (!st.is_success()) return fail(st.error_code(), st.error_message());
+    }
+    auto commit = db_.commit_transaction();
+    if (!commit.is_success()) { db_.rollback_transaction(); return commit; }
+    return contracts::OperationResult::ok();
+}
+
+contracts::OperationResult SqliteCatalogService::enable_stock_for_direct_product(
+    const std::string& product_id, const std::string& link_ingredient_id
+) {
+    auto perm_res = check_permission_or_fail("inventory.manage_products");
+    if (!perm_res.is_success()) return perm_res;
+    auto product = get_product_by_id(product_id);
+    if (!product.is_success()) return contracts::OperationResult::fail(product.error_code(), product.error_message());
+    const auto& p = product.value();
+    if (p.is_combo) return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState, "Un combo toma sus existencias de los productos que lo forman.");
+    if (p.is_prepared) return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState, "Un producto preparado controla sus existencias con su receta.");
+    if (p.stock_tracked) return contracts::OperationResult::fail(contracts::ErrorCode::Conflict, "Este producto ya controla sus existencias.");
+    auto linked = link_direct_stock(product_id, p.name, p.sku, link_ingredient_id);
+    if (!linked.is_success()) return linked;
+    if (account_service_) {
+        account_service_->record_audit_event("PRODUCT_STOCK_ENABLED", "Existencia controlada para el producto: " + p.name + " (" + p.sku + ")");
+    }
+    return contracts::OperationResult::ok();
 }
 
 contracts::OperationResult SqliteCatalogService::update_product(const contracts::UpdateProductDto& input) {
@@ -752,6 +894,13 @@ contracts::OperationResult SqliteCatalogService::set_recipe(
     auto current_prod = get_product_by_id(product_id);
     if (!current_prod.is_success()) {
         return contracts::OperationResult::fail(current_prod.error_code(), current_prod.error_message());
+    }
+
+    if (current_prod.value().is_combo) {
+        return contracts::OperationResult::fail(
+            contracts::ErrorCode::InvalidState,
+            "Un combo no tiene receta: toma sus existencias de los productos que lo forman."
+        );
     }
 
     if (items.empty()) {

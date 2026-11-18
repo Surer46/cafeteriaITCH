@@ -79,6 +79,10 @@ struct ProductDto {
     bool is_prepared{false};
     bool is_active{true};
     bool has_image{false};
+    bool is_combo{false};       // B14: producto de precio fijo hecho de otros productos (ver IPromotionService)
+    // B14: ¿el inventario controla este producto? Preparado: tiene receta. Directo: tiene un ingrediente por piezas
+    // enlazado (receta de 1 pieza). Combo: todas sus partes lo controlan. false = se vende sin descontar existencias.
+    bool stock_tracked{false};
 };
 
 struct CreateProductDto {
@@ -88,6 +92,12 @@ struct CreateProductDto {
     std::string category;
     Money price{Money::zero()};
     bool is_prepared{false};
+    // B14, solo productos directos (is_prepared falso): por omisión el servicio crea un ingrediente por piezas con el
+    // mismo nombre y lo enlaza (receta de 1 pieza) para poder reabastecerlo y verlo en Existencias y Barra.
+    // link_ingredient_id enlaza uno que ya existe (debe contarse por piezas). track_stock = false lo crea sin
+    // existencia controlada (se vende sin descontar, como antes).
+    std::string link_ingredient_id;
+    bool track_stock{true};
 };
 
 struct UpdateProductDto {
@@ -133,6 +143,10 @@ struct IngredientDto {
     std::string base_unit;      // mg, ml, pz
     std::int64_t current_stock_base{0};
     std::int64_t low_stock_threshold_base{0};
+    // B14 (pantalla Existencias). stock_status: OUT (sin existencia: <= 0), LOW (<= umbral, con umbral > 0) u OK.
+    // last_movement_at: hora local del último movimiento de existencias; vacío si no tiene ninguno.
+    std::string stock_status{"OK"};
+    std::string last_movement_at;
 };
 
 struct CreateIngredientDto {
@@ -155,8 +169,12 @@ struct CartItemDto {
     std::string name;
     Money unit_price;
     std::int64_t quantity{1};
-    Money subtotal;
+    Money subtotal;             // cantidad * unit_price (precio original, sin descuento)
     std::string notes;
+    // B14: descuento de la línea (vista previa; se vuelve a calcular al cobrar). line_total = subtotal - line_discount.
+    Money line_discount{Money::zero()};
+    Money line_total{Money::zero()};
+    std::string promotion_name;  // promoción aplicada; vacío si ninguna
 };
 
 struct CartSummaryDto {

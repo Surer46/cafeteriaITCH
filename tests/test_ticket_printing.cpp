@@ -411,6 +411,58 @@ void test_thermal_paper_profiles() {
     }
 }
 
+// B14: la línea de descuento "Desc. <promoción>   -$x" cabe en 55 mm (28 columnas) y en 80 mm (42): se recorta el
+// nombre de la promoción, nunca el importe.
+void test_discount_lines_fit_profiles() {
+    std::cout << "[TEST] B14: descuento en el ticket a 55 mm y 80 mm..." << std::endl;
+    TicketDto t;
+    t.folio = "V-C1-00001";
+    t.created_at = "2026-11-18 09:30:00";
+    t.cashier_name = "Cajero";
+    TicketLineItemDto it;
+    it.product_name = "Café americano";
+    it.quantity = 2;
+    it.unit_price = Money::from_cents(3000);
+    it.subtotal = Money::from_cents(6000);
+    it.discount = Money::from_cents(600);
+    it.promotion_name = "Promoción de bienvenida de la mañana para toda la familia";
+    t.items.push_back(it);
+    TicketLineItemDto it2 = it;
+    it2.product_name = "Pan";
+    it2.subtotal = Money::from_cents(2000);
+    it2.quantity = 1;
+    it2.discount = Money::from_cents(123456);
+    it2.promotion_name = "2x1";
+    t.items.push_back(it2);
+    t.subtotal = Money::from_cents(8000);
+    t.discount = Money::from_cents(124056);
+    t.total = Money::from_cents(0);
+    t.cash_received = Money::from_cents(0);
+    t.change = Money::from_cents(0);
+
+    for (size_t cols : {static_cast<size_t>(28), static_cast<size_t>(42)}) {
+        const std::string text = t.to_formatted_text(cols);
+        std::istringstream in(text);
+        std::string line;
+        bool saw_long = false, saw_short = false, saw_total_discount = false;
+        while (std::getline(in, line)) {
+            TEST_CHECK(TicketDto::utf8_column_width(line) <= cols, "Línea de más de " << cols << " columnas: " << line);
+            if (line.find("Desc. Promoc") != std::string::npos) {
+                saw_long = true;
+                TEST_CHECK(line.find("-$6.00") != std::string::npos, "El importe del descuento no se recorta: " << line);
+                TEST_CHECK(TicketDto::utf8_column_width(line) == cols, "La línea de descuento ocupa el ancho completo: " << line);
+            }
+            if (line.find("Desc. 2x1") != std::string::npos) {
+                saw_short = true;
+                TEST_CHECK(line.find("-$1,234.56") != std::string::npos || line.find("-$1234.56") != std::string::npos, "Importe grande completo: " << line);
+            }
+            if (line.find("Descuento:") != std::string::npos) saw_total_discount = true;
+        }
+        TEST_CHECK(saw_long && saw_short && saw_total_discount, "Descuentos por línea y total presentes a " << cols << " columnas");
+    }
+    std::cout << "  -> Descuento en ticket de 55 mm (28 cols) y 80 mm (42 cols): cabe, importe intacto. OK." << std::endl;
+}
+
 class TestApp : public wxApp {
 public:
     bool OnInit() override { return true; }
@@ -438,6 +490,7 @@ int main(int argc, char** argv) {
     test_ticket_printout_lifecycle();
     test_physical_boundary_limits();
     test_thermal_paper_profiles();
+    test_discount_lines_fit_profiles();
     std::cout << "\n>>> TODAS LAS PRUEBAS DE IMPRESIÓN Y RENDERIZADO PASARON CON ÉXITO! <<<\n" << std::endl;
 
     wxEntryCleanup();

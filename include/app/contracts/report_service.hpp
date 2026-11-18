@@ -11,7 +11,11 @@ namespace app::contracts {
 struct DailySalesReportDto {
     std::string date;
     std::int64_t total_sales_count{0};
+    // total_amount es el NETO cobrado (ya con descuentos): coincide con los pagos. B14: gross_amount es la suma de
+    // los subtotales sin descuento y discount_amount la suma de descuentos; gross_amount - discount_amount == total_amount.
     Money total_amount{Money::zero()};
+    Money gross_amount{Money::zero()};
+    Money discount_amount{Money::zero()};
     Money cash_amount{Money::zero()};
     Money card_amount{Money::zero()};
     Money transfer_amount{Money::zero()};

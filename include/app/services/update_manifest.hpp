@@ -62,7 +62,13 @@ ManifestResult verify_and_parse_manifest(
     const std::vector<std::uint8_t>& manifest_bytes,
     const std::vector<std::uint8_t>& signature_file_bytes,
     const std::vector<PublicKey64>& keys,
-    const std::string& installed_version);
+    const std::string& installed_version,
+    // Extensión del archivo del instalador que el manifiesto debe nombrar. El programa real usa siempre ".exe"; las
+    // pruebas usan otra para no escribir ejecutables en %TEMP%. Una extensión inválida se trata como ".exe".
+    const std::string& installer_extension = ".exe");
+
+// ".exe" o un punto seguido de 1 a 8 letras o dígitos.
+bool is_valid_installer_extension(const std::string& extension);
 
 } // namespace app::services
 

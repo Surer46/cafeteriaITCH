@@ -9,6 +9,7 @@
 #include "app/services/sqlite_sale_service.hpp"
 #include "app/services/sqlite_print_config_service.hpp"
 #include "app/services/sqlite_update_service.hpp"
+#include "app/services/sqlite_promotion_service.hpp"
 #include "app/services/update_public_keys.hpp"
 #include "app/domain/unit_converter.hpp"
 #include <algorithm>
@@ -561,6 +562,10 @@ contracts::Result<contracts::RecipeCostingDto> MockCatalogService::get_recipe_co
     return contracts::Result<contracts::RecipeCostingDto>::ok(dto);
 }
 
+contracts::OperationResult MockCatalogService::enable_stock_for_direct_product(const std::string&, const std::string&) {
+    return contracts::OperationResult::ok();
+}
+
 contracts::OperationResult MockCatalogService::set_recipe(
     const std::string& product_id,
     const std::vector<contracts::RecipeItemDto>& items
@@ -592,6 +597,7 @@ void MockCartService::recalculate() {
     contracts::Money sum = contracts::Money::zero();
     for (auto& item : cart_.items) {
         item.subtotal = item.unit_price * item.quantity;
+        item.line_total = item.subtotal;
         items_count += item.quantity;
         sum += item.subtotal;
     }
@@ -1099,7 +1105,96 @@ ServiceRegistry ServiceRegistry::create_mock_registry() {
     reg.backup_service = std::make_shared<MockBackupService>();
     reg.print_config_service = std::make_shared<MockPrintConfigService>();
     reg.update_service = std::make_shared<MockUpdateService>();
+    reg.promotion_service = std::make_shared<MockPromotionService>();
     return reg;
+}
+
+// --- MockPromotionService ---
+
+contracts::Result<std::vector<contracts::PromotionDto>> MockPromotionService::list_promotions(const contracts::PromotionFilterDto&) {
+    return contracts::Result<std::vector<contracts::PromotionDto>>::ok(promotions_);
+}
+contracts::Result<contracts::PromotionDto> MockPromotionService::get_promotion(const std::string& promotion_id) {
+    for (const auto& p : promotions_) if (p.id == promotion_id) return contracts::Result<contracts::PromotionDto>::ok(p);
+    return contracts::Result<contracts::PromotionDto>::fail(contracts::ErrorCode::NotFound, "No se encontró la promoción.");
+}
+contracts::Result<contracts::PromotionDto> MockPromotionService::create_promotion(const contracts::CreatePromotionDto& in) {
+    contracts::PromotionDto p;
+    p.id = "promo-" + std::to_string(next_id_++);
+    p.name = in.name;
+    p.kind = in.kind;
+    p.percent_basis_points = in.percent_basis_points;
+    p.fixed_off = in.fixed_off;
+    p.buy_qty = in.buy_qty;
+    p.pay_qty = in.pay_qty;
+    p.scope_kind = in.scope_kind;
+    p.product_ids = in.product_ids;
+    if (!in.category.empty()) p.categories.push_back(in.category);
+    p.priority = in.priority;
+    p.is_active = in.is_active;
+    p.valid_from = in.valid_from;
+    p.valid_to = in.valid_to;
+    p.weekdays = in.weekdays;
+    p.time_from = in.time_from;
+    p.time_to = in.time_to;
+    p.summary_text = in.kind == "NXM" ? "Lleva " + std::to_string(in.buy_qty) + " y paga " + std::to_string(in.pay_qty) : "Descuento";
+    p.validity_text = "Siempre";
+    p.is_valid_now = in.is_active;
+    promotions_.push_back(p);
+    return contracts::Result<contracts::PromotionDto>::ok(p);
+}
+contracts::Result<contracts::PromotionDto> MockPromotionService::update_promotion(const contracts::UpdatePromotionDto& in) {
+    for (auto& p : promotions_) {
+        if (p.id == in.promotion_id) {
+            const std::string id = p.id;
+            promotions_.erase(std::remove_if(promotions_.begin(), promotions_.end(), [&](const contracts::PromotionDto& q) { return q.id == id; }), promotions_.end());
+            auto created = create_promotion(in.data);
+            if (created.is_success()) promotions_.back().id = id;
+            return created.is_success() ? get_promotion(id) : created;
+        }
+    }
+    return contracts::Result<contracts::PromotionDto>::fail(contracts::ErrorCode::NotFound, "No se encontró la promoción.");
+}
+contracts::OperationResult MockPromotionService::set_promotion_active(const std::string& promotion_id, bool active) {
+    for (auto& p : promotions_) if (p.id == promotion_id) { p.is_active = active; p.is_valid_now = active; return contracts::OperationResult::ok(); }
+    return contracts::OperationResult::fail(contracts::ErrorCode::NotFound, "No se encontró la promoción.");
+}
+contracts::Result<std::vector<contracts::ComboDto>> MockPromotionService::list_combos(bool include_inactive) {
+    std::vector<contracts::ComboDto> out;
+    for (const auto& c : combos_) if (include_inactive || c.is_active) out.push_back(c);
+    return contracts::Result<std::vector<contracts::ComboDto>>::ok(out);
+}
+contracts::Result<contracts::ComboDto> MockPromotionService::get_combo(const std::string& product_id) {
+    for (const auto& c : combos_) if (c.product_id == product_id) return contracts::Result<contracts::ComboDto>::ok(c);
+    return contracts::Result<contracts::ComboDto>::fail(contracts::ErrorCode::NotFound, "No se encontró el combo.");
+}
+contracts::Result<contracts::ComboDto> MockPromotionService::create_combo(const contracts::CreateComboDto& in) {
+    contracts::ComboDto c;
+    c.product_id = "combo-" + std::to_string(next_id_++);
+    c.sku = in.sku;
+    c.name = in.name;
+    c.category = in.category;
+    c.price = in.price;
+    c.components = in.components;
+    combos_.push_back(c);
+    return contracts::Result<contracts::ComboDto>::ok(c);
+}
+contracts::Result<contracts::ComboDto> MockPromotionService::update_combo(const contracts::UpdateComboDto& in) {
+    for (auto& c : combos_) {
+        if (c.product_id == in.product_id) {
+            c.name = in.name;
+            c.category = in.category;
+            c.price = in.price;
+            c.components = in.components;
+            return contracts::Result<contracts::ComboDto>::ok(c);
+        }
+    }
+    return contracts::Result<contracts::ComboDto>::fail(contracts::ErrorCode::NotFound, "No se encontró el combo.");
+}
+contracts::Result<contracts::ComboCostingDto> MockPromotionService::get_combo_costing(const std::string& product_id) {
+    contracts::ComboCostingDto dto;
+    dto.product_id = product_id;
+    return contracts::Result<contracts::ComboCostingDto>::ok(dto);
 }
 
 contracts::Result<contracts::UpdateStatusDto> MockUpdateService::get_update_status() {
@@ -1168,6 +1263,7 @@ ServiceRegistry ServiceRegistry::create_sqlite_registry(storage::SqliteDatabase&
         update_options.keys = configured_update_keys();  // vacío hasta que el usuario pegue su clave pública
         reg.update_service = std::make_shared<SqliteUpdateService>(db, account_svc, std::move(update_options));
     }
+    reg.promotion_service = std::make_shared<SqlitePromotionService>(db, account_svc, catalog_svc);
     return reg;
 }
 

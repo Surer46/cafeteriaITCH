@@ -825,6 +825,7 @@ void test_be03_catalog_ingredients_and_recipes() {
 
         // 2. CRUD de Productos y Eliminación Lógica
         CreateProductDto prod_in;
+        prod_in.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod_in.sku = "SKU-BEV-101";
         prod_in.barcode = "750123456001";
         prod_in.name = "Chocolaleche Fria";
@@ -1038,6 +1039,7 @@ void test_be03_catalog_ingredients_and_recipes() {
 
         // 7. Platillos Preparados, Recetas y Cálculo de Costo Proporcional (Regla AGENTS.md)
         CreateProductDto prep_prod_in;
+        prep_prod_in.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prep_prod_in.sku = "SKU-PREP-201";
         prep_prod_in.name = "Limonada Suiza Preparada";
         prep_prod_in.category = "Bebidas";
@@ -1096,6 +1098,7 @@ void test_be03_catalog_ingredients_and_recipes() {
         TEST_CHECK(pe_rule.is_success(), "Compra de 1 kg de limon por $50");
 
         CreateProductDto prod_rule_in;
+        prod_rule_in.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod_rule_in.sku = "SKU-RULE-TEST";
         prod_rule_in.name = "Platillo Test Regla AGENTS";
         prod_rule_in.category = "Platillos";
@@ -1428,6 +1431,7 @@ void test_i2_shifts_cart_and_sales() {
 
         // Crear producto Torta
         CreateProductDto prod_torta;
+        prod_torta.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod_torta.sku = "TORTA-01";
         prod_torta.barcode = "750100000001";
         prod_torta.name = "Torta Clasica I2";
@@ -1725,6 +1729,7 @@ void test_i2_permissions_and_line_isolation() {
 
         // Dueno crea un producto en catalogo
         CreateProductDto prod;
+        prod.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod.sku = "CAFE-ISO";
         prod.name = "Cafe Americano Iso";
         prod.category = "Bebidas";
@@ -1835,6 +1840,7 @@ void test_i2_sales_transaction_rollback_and_idempotency() {
 
         // Crear Hamburguesa ($65.00) con receta de 1 carne por hamburguesa
         CreateProductDto prod_burg;
+        prod_burg.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod_burg.sku = "BURGER-01";
         prod_burg.name = "Hamburguesa Sencilla";
         prod_burg.category = "Alimentos";
@@ -1850,6 +1856,7 @@ void test_i2_sales_transaction_rollback_and_idempotency() {
 
         // Crear Papas ($35.00) sin receta
         CreateProductDto prod_papas;
+        prod_papas.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod_papas.sku = "PAPAS-01";
         prod_papas.name = "Papas a la Francesa";
         prod_papas.category = "Alimentos";
@@ -2110,6 +2117,7 @@ void test_i2_recipes_idempotency_cart_editing_and_ticket_history() {
 
         // 3. Dueño crea producto Sandwich ($60.00) y asigna Receta Versión 1 (2 Pan)
         CreateProductDto prod_sand;
+        prod_sand.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod_sand.sku = "SAND-01";
         prod_sand.name = "Sándwich Especial";
         prod_sand.category = "Alimentos";
@@ -2348,6 +2356,7 @@ void test_i2_integrity_historical_tickets_and_reprint_auth() {
 
         // 4. Crear producto para pruebas
         CreateProductDto prod;
+        prod.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod.sku = "INTEG-PROD";
         prod.name = "Sandwich Gourmet Especial";
         prod.category = "Alimentos";
@@ -2585,6 +2594,7 @@ void test_i2_cart_atomic_rollback_and_overflow_integrity() {
 
         // Crear productos
         CreateProductDto prod1;
+        prod1.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod1.sku = "PROD-ROLL-1";
         prod1.name = "Cafe Americano";
         prod1.category = "Bebidas";
@@ -2595,6 +2605,7 @@ void test_i2_cart_atomic_rollback_and_overflow_integrity() {
         std::string p1_id = p1_res.value().id;
 
         CreateProductDto prod2;
+        prod2.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         prod2.sku = "PROD-ROLL-2";
         prod2.name = "Pan Dulce Concha";
         prod2.category = "Panaderia";
@@ -3435,6 +3446,7 @@ void test_b4_ids_clock_folios_and_migration() {
 
     // Producto nuevo y edición: updated_at cambia, created_at no
     CreateProductDto pd;
+    pd.track_stock = false;  // B14: se vende sin existencia controlada, como antes
     pd.sku = "SKU-B4"; pd.name = "Cafe B4"; pd.category = "Bebidas"; pd.price = Money::from_cents(2500); pd.is_prepared = false;
     auto prod = cat_svc->create_product(pd);
     TEST_CHECK(prod.is_success(), "Crear producto B4");
@@ -3706,6 +3718,7 @@ void test_b5_adjustments_movements_and_migration() {
     // Compra y venta con actor
     TEST_CHECK(inv_svc->register_purchase_entry("ing-a", 2, "kg", Money::from_cents(10000)).is_success(), "Compra de 2 kg");
     CreateProductDto pd;
+    pd.track_stock = false;  // B14: se vende sin existencia controlada, como antes
     pd.sku = "SKU-B5"; pd.name = "Limonada B5"; pd.category = "Bebidas"; pd.price = Money::from_cents(3500); pd.is_prepared = true;
     auto prod = cat_svc->create_product(pd);
     TEST_CHECK(prod.is_success(), "Crear producto");
@@ -3873,6 +3886,7 @@ void test_b5_costing_and_valuation() {
     };
     auto make_product = [&](const std::string& sku, std::int64_t price_cents, const std::vector<std::pair<std::string, std::int64_t>>& items) {
         CreateProductDto pd;
+        pd.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         pd.sku = sku; pd.name = "Producto " + sku; pd.category = "Pruebas"; pd.price = Money::from_cents(price_cents); pd.is_prepared = true;
         auto p = cat_svc->create_product(pd);
         TEST_CHECK(p.is_success(), "Crear producto " + sku);
@@ -4297,6 +4311,7 @@ void test_b6_registers_cart_sale_and_migration() {
             TEST_CHECK(account_svc->create_user(cu).is_success(), "Crear " + name);
         }
         CreateProductDto pd;
+        pd.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         pd.sku = "SKU-B6"; pd.name = "Cafe B6"; pd.category = "Bebidas"; pd.price = Money::from_cents(2500); pd.is_prepared = false;
         auto prod = cat_svc->create_product(pd);
         TEST_CHECK(prod.is_success(), "Crear producto");
@@ -4368,6 +4383,7 @@ void test_b6_registers_cart_sale_and_migration() {
         auto sale_svc = std::make_shared<SqliteSaleService>(db, account_svc, cart_svc, shift_svc);
         TEST_CHECK(account_svc->create_initial_owner("dueno_b6c", "Dueño", generate_random_secret(18), "d@cafeteria-itch.edu.mx").is_success(), "Alta del Dueño");
         CreateProductDto pd;
+        pd.track_stock = false;  // B14: se vende sin existencia controlada, como antes
         pd.sku = "SKU-B6C"; pd.name = "Te"; pd.category = "Bebidas"; pd.price = Money::from_cents(1500); pd.is_prepared = false;
         auto prod = cat_svc->create_product(pd);
         TEST_CHECK(prod.is_success(), "Crear producto");

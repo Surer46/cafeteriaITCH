@@ -222,6 +222,13 @@ target_compile_definitions(test_auto_backup PRIVATE SOURCE_MIGRATIONS_DIR="${CMA
 add_test(NAME AutoBackupTest COMMAND test_auto_backup)
 set_tests_properties(AutoBackupTest PROPERTIES TIMEOUT 900)
 
+# Tests B14: promociones, combos, existencia de productos directos y descuentos.
+add_executable(test_promotions test_promotions.cpp)
+target_link_libraries(test_promotions PRIVATE app_services app_storage app_contracts app_crypto sqlite3)
+target_compile_definitions(test_promotions PRIVATE SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations")
+add_test(NAME PromotionsTest COMMAND test_promotions)
+set_tests_properties(PromotionsTest PROPERTIES TIMEOUT 600)
+
 # Tests B11: actualizaciones (cliente HTTP falso + criptografía CNG real; sin red).
 if(WIN32)
     add_executable(test_update test_update.cpp)

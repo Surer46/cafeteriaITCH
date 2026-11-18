@@ -45,12 +45,19 @@ public:
 
     contracts::Result<contracts::RecipeDto> get_recipe(const std::string& product_id) override;
     contracts::Result<contracts::RecipeCostingDto> get_recipe_costing(const std::string& product_id) override;
+    contracts::OperationResult enable_stock_for_direct_product(
+        const std::string& product_id,
+        const std::string& link_ingredient_id = ""
+    ) override;
     contracts::OperationResult set_recipe(
         const std::string& product_id,
         const std::vector<contracts::RecipeItemDto>& items
     ) override;
 
 private:
+    // Crea (o enlaza) el ingrediente por piezas de un producto directo y le asigna una receta de 1 pieza.
+    contracts::OperationResult link_direct_stock(const std::string& product_id, const std::string& product_name,
+                                                 const std::string& sku, const std::string& link_ingredient_id);
     contracts::OperationResult check_permission_or_fail(std::string_view perm) const;
 
     storage::SqliteDatabase& db_;

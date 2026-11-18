@@ -41,8 +41,11 @@ struct TicketLineItemDto {
     std::string product_name;
     std::int64_t quantity{1};
     Money unit_price{Money::zero()};
-    Money subtotal{Money::zero()};
+    Money subtotal{Money::zero()};   // cantidad * precio, sin descuento
     std::string notes;
+    // B14: instantánea de la promoción aplicada al cobrar (no cambia si luego se edita la promoción).
+    Money discount{Money::zero()};
+    std::string promotion_name;
 };
 
 struct TicketDto {
@@ -271,6 +274,34 @@ struct TicketDto {
                             ss << sl << "\n";
                         }
                     }
+                }
+            }
+
+            if (item.discount.cents() > 0) {
+                // «  Desc. <promoción>            -$5.00»: si no cabe, se recorta el nombre de la promoción, nunca el importe.
+                const std::string amount = "-" + item.discount.to_string();
+                const std::string prefix = "  Desc. ";
+                const size_t amount_w = utf8_column_width(amount);
+                const size_t prefix_w = utf8_column_width(prefix);
+                if (max_cols > prefix_w + amount_w + 1) {
+                    size_t name_room = max_cols - prefix_w - amount_w - 1;
+                    std::string pname = item.promotion_name;
+                    if (utf8_column_width(pname) > name_room) {
+                        std::string cut;
+                        size_t cols = 0, i = 0;
+                        while (i < pname.size() && cols + 1 < name_room) {
+                            unsigned char c = static_cast<unsigned char>(pname[i]);
+                            size_t len = (c < 0x80) ? 1 : ((c & 0xE0) == 0xC0) ? 2 : ((c & 0xF0) == 0xE0) ? 3 : ((c & 0xF8) == 0xF0) ? 4 : 1;
+                            if (i + len > pname.size()) len = pname.size() - i;
+                            cut.append(pname, i, len);
+                            i += len;
+                            ++cols;
+                        }
+                        pname = cut + (name_room >= 2 ? "." : "");
+                    }
+                    ss << prefix << pad_right_utf8(pname, name_room + 1) << amount << "\n";
+                } else {
+                    ss << pad_right_utf8("", max_cols > amount_w ? max_cols - amount_w : 0) << amount << "\n";
                 }
             }
 
