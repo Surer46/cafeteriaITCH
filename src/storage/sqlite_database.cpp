@@ -490,6 +490,7 @@ contracts::Result<SqliteStatement> SqliteDatabase::prepare(const std::string& sq
     if (!db_) {
         return contracts::Result<SqliteStatement>::fail(contracts::ErrorCode::InvalidState, "Base de datos no inicializada");
     }
+    ++prepared_count_;
     sqlite3_stmt* stmt = nullptr;
     int rc = sqlite3_prepare_v2(db_, sql.c_str(), static_cast<int>(sql.length()), &stmt, nullptr);
     if (rc != SQLITE_OK) {

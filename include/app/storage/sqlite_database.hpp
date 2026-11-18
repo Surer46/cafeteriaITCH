@@ -73,6 +73,9 @@ public:
     contracts::OperationResult open(const std::string& db_path);
     void close();
     bool is_open() const { return db_ != nullptr; }
+    // Cuántas consultas se han preparado en esta conexión (solo para pruebas de rendimiento: dos lecturas
+    // seguidas dan cuántas consultas hizo una operación).
+    std::uint64_t prepared_statement_count() const { return prepared_count_; }
 
     contracts::OperationResult execute(const std::string& sql);
     contracts::OperationResult execute_script(const std::string& sql_script);
@@ -114,6 +117,7 @@ public:
 
 private:
     sqlite3* db_{nullptr};
+    std::uint64_t prepared_count_{0};
     std::function<void()> progress_callback_;
 };
 

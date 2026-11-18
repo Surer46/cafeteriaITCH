@@ -248,6 +248,13 @@ target_compile_definitions(test_promotions PRIVATE SOURCE_MIGRATIONS_DIR="${CMAK
 add_test(NAME PromotionsTest COMMAND test_promotions)
 set_tests_properties(PromotionsTest PROPERTIES TIMEOUT 600)
 
+# Tests B16: estado de existencia y último movimiento de los productos.
+add_executable(test_b16 test_b16.cpp)
+target_link_libraries(test_b16 PRIVATE app_services app_storage app_contracts app_crypto sqlite3)
+target_compile_definitions(test_b16 PRIVATE SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations")
+add_test(NAME ProductStockStatusTest COMMAND test_b16)
+set_tests_properties(ProductStockStatusTest PROPERTIES TIMEOUT 300)
+
 # Tests B11: actualizaciones (cliente HTTP falso + criptografía CNG real; sin red).
 if(WIN32)
     add_executable(test_update test_update.cpp)

@@ -83,6 +83,21 @@ struct ProductDto {
     // B14: ¿el inventario controla este producto? Preparado: tiene receta. Directo: tiene un ingrediente por piezas
     // enlazado (receta de 1 pieza). Combo: todas sus partes lo controlan. false = se vende sin descontar existencias.
     bool stock_tracked{false};
+    // B16: cómo está la existencia del producto, para la pantalla Existencias (la pantalla no lo calcula).
+    // stock_status usa las mismas palabras que IngredientDto: "OK" (suficiente), "LOW" (poco) y "OUT" (agotado).
+    //   - Directo con ingrediente enlazado: el estado de su ingrediente, con el umbral que el Dueño fija en Ingredientes.
+    //   - Preparado (con receta): "OUT" si stock_units es 0; "LOW" si alguno de sus ingredientes está en poco;
+    //     si no, "OK".
+    //   - Combo: "OUT" si stock_units es 0; "LOW" si alguna de sus partes está en poco; si no, "OK".
+    //     Solo hay estado cuando TODAS sus partes controlan existencia (stock_tracked, como siempre). Un combo con una
+    //     parte sin control tiene stock_tracked falso y por eso stock_status y last_movement_at vacíos; su stock_units
+    //     solo cuenta las partes que sí controlan.
+    //   - Sin control de existencia (stock_tracked falso): vacío. Un ingrediente sin umbral (0) nunca está en poco.
+    std::string stock_status;
+    // B16: hora local "AAAA-MM-DD HH:MM:SS" del movimiento de existencias más reciente del producto: el de su
+    // ingrediente (directo) o el más reciente entre los ingredientes de su receta o las partes de su combo
+    // (compras, ventas, mermas y ajustes). Vacío si todavía no hay ningún movimiento o si stock_tracked es falso.
+    std::string last_movement_at;
 };
 
 struct CreateProductDto {
