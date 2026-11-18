@@ -18,7 +18,7 @@ Comprobaciones exigidas por especificación y auditoría:
    - LVM_GETCOLUMNWIDTH >= ancho medido del encabezado y texto más largo + 8 px (excepto Descripción con puntos suspensivos).
    - Sin estilo WS_HSCROLL visible en la lista en ambos perfiles (Estándar y Touch).
 6. Matriz de permisos con ToggleSwitch (F5):
-   - 21 interruptores visibles (uno por permiso visible en SQLite).
+   - 22 interruptores visibles (uno por permiso visible en SQLite).
    - Tamaño del interruptor >= 44x24 en Estándar y >= 60x32 en Touch (GetWindowRect).
    - Alto de fila >= 52 en Estándar y >= 68 en Touch.
    - Título y descripción no vacíos, iguales a SQLite; título encima de descripción, sin recorte ni solapamiento con el interruptor.
@@ -61,6 +61,7 @@ from gui_dpi import (
     set_window_logical_size,
     get_list_item_rect,
     select_list_row,
+    LVM_GETITEMCOUNT,
     measure_text_extent,
     get_client_size,
     get_client_screen_rect,
@@ -448,7 +449,7 @@ def verify_list_columns(hwnd_list, profile_name):
     ext_si, _ = measure_text_extent(hwnd_list, "Sí")
     assert col_widths[2] >= ext_si + pad8, f"Columna 2 ('Sistema') {col_widths[2]}px < {ext_si + pad8}px en {profile_name}"
 
-    ext_num, _ = measure_text_extent(hwnd_list, "21")
+    ext_num, _ = measure_text_extent(hwnd_list, "22")
     assert col_widths[3] >= ext_num + pad8, f"Columna 3 ('Permisos') {col_widths[3]}px < {ext_num + pad8}px en {profile_name}"
 
     client_w, _ = get_client_size(hwnd_list)
@@ -732,11 +733,15 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         print(f"[DPI] DPI detectado: {format_dpi_info(dpi1)}.")
 
         db_perms = load_visible_permissions_from_db(db_path)
-        assert len(db_perms) == 21, f"Se esperaban 21 permisos visibles en SQLite, encontrados {len(db_perms)}"
+        assert len(db_perms) == 22, f"Se esperaban 22 permisos visibles en SQLite, encontrados {len(db_perms)}"
         upd_perm = next((p for p in db_perms if p["id"] == "updates.manage"), None)
         assert upd_perm is not None, "Falta permiso 'updates.manage' en SQLite"
         assert upd_perm["title"] == "Actualizar el programa", f"Título inesperado para updates.manage: {upd_perm}"
         assert upd_perm["section"] == "BackOffice", f"Grupo inesperado para updates.manage: {upd_perm}"
+        clo_perm = next((p for p in db_perms if p["id"] == "shift.close_others"), None)
+        assert clo_perm is not None, "Falta permiso 'shift.close_others' en SQLite"
+        assert clo_perm["title"] == "Cerrar turno de otro usuario", f"Título inesperado para shift.close_others: {clo_perm}"
+        assert clo_perm["section"] == "Caja y Reportes", f"Grupo inesperado para shift.close_others: {clo_perm}"
 
         # Navegar a BackOffice > Roles y permisos
         main_ctrls1 = get_child_controls(hwnd_main1)
@@ -796,6 +801,10 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         row_upd_c = find_toggle_by_perm_id(hwnd_main1, db_perms, "updates.manage")
         assert user32.SendMessageW(row_upd_c["h_sw"], BM_GETCHECK, 0, 0) == 0, (
             "Permiso 'updates.manage' ('Actualizar el programa') debe iniciar desactivado para Cajero"
+        )
+        row_clo_c = find_toggle_by_perm_id(hwnd_main1, db_perms, "shift.close_others")
+        assert user32.SendMessageW(row_clo_c["h_sw"], BM_GETCHECK, 0, 0) == 0, (
+            "Permiso 'shift.close_others' ('Cerrar turno de otro usuario') debe iniciar desactivado para Cajero"
         )
 
         # Interacción completa sobre 'audit.view': clic interruptor, clic título, clic descripción y Espacio con foco
@@ -858,6 +867,29 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert user32.SendMessageW(row_upd_d["h_sw"], BM_GETCHECK, 0, 0) == 1, (
             "Dueño debe tener 'updates.manage' ('Actualizar el programa') activado por omisión"
         )
+        row_clo_d = find_toggle_by_perm_id(hwnd_main1, db_perms, "shift.close_others")
+        assert user32.SendMessageW(row_clo_d["h_sw"], BM_GETCHECK, 0, 0) == 1, (
+            "Dueño debe tener 'shift.close_others' ('Cerrar turno de otro usuario') activado por omisión"
+        )
+        # Verificar en UI que 'Cerrar turno de otro usuario' está en sección 'Caja y Reportes'
+        clo_scroll_statics = [c for c in get_direct_children(row_clo_d["h_scroll"]) if c[1].lower() == "static"]
+        hdr_caja_y = next(get_rect(h)[1] for (h, _, txt) in clo_scroll_statics if txt == "Caja y Reportes")
+        hdr_bo_y = next(get_rect(h)[1] for (h, _, txt) in clo_scroll_statics if txt == "BackOffice")
+        clo_row_y = get_rect(row_clo_d["h_row"])[1]
+        assert hdr_caja_y < clo_row_y < hdr_bo_y, (
+            f"'Cerrar turno de otro usuario' debe estar en sección 'Caja y Reportes': "
+            f"caja_y={hdr_caja_y}, row_y={clo_row_y}, bo_y={hdr_bo_y}"
+        )
+        # Encargado (si existe en la lista de roles) no debe tenerlo activado por omisión
+        if user32.SendMessageW(hwnd_role_list, LVM_GETITEMCOUNT, 0, 0) >= 3:
+            select_list_item(hwnd_role_list, 2)
+            time.sleep(0.35)
+            row_clo_other = find_toggle_by_perm_id(hwnd_main1, db_perms, "shift.close_others")
+            assert user32.SendMessageW(row_clo_other["h_sw"], BM_GETCHECK, 0, 0) == 0, (
+                "Solo el Dueño debe tener 'Cerrar turno de otro usuario' encendido por omisión"
+            )
+            select_list_item(hwnd_role_list, 1)
+            time.sleep(0.35)
 
         row_sell_d = find_toggle_by_perm_id(hwnd_main1, db_perms, "pos.sell")
         assert user32.IsWindowEnabled(row_sell_d["h_sw"]) == 0, "Interruptores de permisos deben estar deshabilitados para Dueño"
@@ -1051,8 +1083,8 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
 
         ctrls_after_toggle = get_child_controls(hwnd_main1)
         counter_2 = get_perm_counter_text(hwnd_main1)
-        assert counter_2 == "2 de 21 permisos", f"Contador esperado '2 de 21 permisos', encontrado '{counter_2}'"
-        print("[OK] Dos permisos activados exitosamente ('pos.sell' e 'inventory.view'); contador = '2 de 21 permisos'.")
+        assert counter_2 == "2 de 22 permisos", f"Contador esperado '2 de 22 permisos', encontrado '{counter_2}'"
+        print("[OK] Dos permisos activados exitosamente ('pos.sell' e 'inventory.view'); contador = '2 de 22 permisos'.")
 
         btn_save_act = next((h for (h, cls, txt) in ctrls_after_toggle if cls.lower() == "button" and txt == "Guardar"), None)
         assert btn_save_act is not None and user32.IsWindowEnabled(btn_save_act) == 1
@@ -1195,7 +1227,7 @@ def run_f1_test_for_binary(exe_path, work_dir, config_name):
         assert user32.SendMessageW(row2_shift["h_sw"], BM_GETCHECK, 0, 0) == 0, "Permiso 'shift.operate' debe permanecer desactivado"
 
         counter2 = get_perm_counter_text(hwnd_main2)
-        assert counter2 == "2 de 21 permisos", f"Contador tras reapertura incorrecto: '{counter2}'"
+        assert counter2 == "2 de 22 permisos", f"Contador tras reapertura incorrecto: '{counter2}'"
 
         btn2_save = next((h for (h, cls, txt) in p2_ctrls if cls.lower() == "button" and txt == "Guardar"), None)
         btn2_del = next((h for (h, cls, txt) in p2_ctrls if cls.lower() == "button" and txt == "Eliminar"), None)

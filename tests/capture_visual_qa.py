@@ -703,12 +703,13 @@ def main():
             time.sleep(0.25)
         capture_window(hwnd_main, os.path.join(out_dir, "31_inventory_stock.png"))
 
-        # CAPTURA 30: Punto de Venta con promoción aplicada (2x1 Capuchino + descuento en carrito)
+        # Sembrar promoción 2x1 y combo de muestra antes de capturar Promociones (32), Combos (33) y POS (30)
         con_p = sqlite3.connect(db_path)
         try:
             cap_row = con_p.execute("SELECT id FROM products WHERE name LIKE '%Capuchino%' LIMIT 1").fetchone()
+            bag_row = con_p.execute("SELECT id FROM products WHERE name LIKE '%Baguette%' LIMIT 1").fetchone()
+            now_str = time.strftime("%Y-%m-%d %H:%M:%S")
             if cap_row:
-                now_str = time.strftime("%Y-%m-%d %H:%M:%S")
                 con_p.execute(
                     """
                     INSERT OR REPLACE INTO promotions
@@ -722,9 +723,56 @@ def main():
                     "INSERT INTO promotion_targets (promotion_id, product_id, category) VALUES ('promo-qa-2x1', ?, NULL)",
                     (cap_row[0],),
                 )
-                con_p.commit()
+            if cap_row and bag_row:
+                con_p.execute(
+                    """
+                    INSERT OR REPLACE INTO products
+                    (id, sku, barcode, name, category, price_cents, is_prepared, is_active, created_at, updated_at, is_combo)
+                    VALUES ('prod-qa-combo', 'CMB-QA', NULL, 'Combo Desayuno', 'Combos', 9500, 0, 1, ?, ?, 1)
+                    """,
+                    (now_str, now_str),
+                )
+                con_p.execute("DELETE FROM combo_items WHERE combo_product_id = 'prod-qa-combo'")
+                con_p.execute(
+                    "INSERT INTO combo_items (combo_product_id, component_product_id, quantity) VALUES ('prod-qa-combo', ?, 1)",
+                    (bag_row[0],),
+                )
+                con_p.execute(
+                    "INSERT INTO combo_items (combo_product_id, component_product_id, quantity) VALUES ('prod-qa-combo', ?, 1)",
+                    (cap_row[0],),
+                )
+            con_p.commit()
         finally:
             con_p.close()
+
+        # CAPTURA 32 y 33: Inventario > Promociones y combos
+        btn_promo_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Promociones y combos"), None)
+        assert btn_promo_qa is not None, "Subsección Promociones y combos no encontrada para capturas 32-33"
+        _f7_click_btn(btn_promo_qa)
+        time.sleep(0.45)
+        promo_lists_qa = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)],
+            key=lambda x: x[1][0],
+        )
+        if promo_lists_qa:
+            select_list_row(promo_lists_qa[0][0], 0)
+            time.sleep(0.3)
+        capture_window(hwnd_main, os.path.join(out_dir, "32_inventory_promotions.png"))
+
+        btn_tab_cmb_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Combos"), None)
+        assert btn_tab_cmb_qa is not None, "Pestaña Combos no encontrada para captura 33"
+        _f7_click_btn(btn_tab_cmb_qa)
+        time.sleep(0.4)
+        cmb_lists_qa = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "syslistview32" and user32.IsWindowVisible(h)],
+            key=lambda x: x[1][0],
+        )
+        if cmb_lists_qa:
+            select_list_row(cmb_lists_qa[0][0], 0)
+            time.sleep(0.3)
+        capture_window(hwnd_main, os.path.join(out_dir, "33_inventory_combos.png"))
+
+        # CAPTURA 30: Punto de Venta con promoción aplicada (2x1 Capuchino + descuento en carrito)
 
         btn_pos_30 = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Punto de Venta" in t), None)
         assert btn_pos_30 is not None, "Botón Punto de Venta no encontrado para captura 30"

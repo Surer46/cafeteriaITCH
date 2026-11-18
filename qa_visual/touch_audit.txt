@@ -640,6 +640,172 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Existencias | button | Solo con poco o agotado | 200.8x48.0 | OK
   Existencias | list_row | SysListView32#0 (3 filas) | 905.6x43.2 | OK
 
+=== Promociones (total=37, marcados=0) ===
+  Promociones | button | Estándar | 137.6x48.0 | OK
+  Promociones | button | Punto de Venta | 220.0x56.0 | OK
+  Promociones | button | Inventario | 220.0x56.0 | OK
+  Promociones | button | Caja y Reportes | 220.0x56.0 | OK
+  Promociones | button | BackOffice | 220.0x56.0 | OK
+  Promociones | button | Existencias | 95.2x48.0 | OK
+  Promociones | button | Reabastecimiento | 144.0x48.0 | OK
+  Promociones | button | Productos y recetas | 156.8x48.0 | OK
+  Promociones | button | Ingredientes | 104.0x48.0 | OK
+  Promociones | button | Promociones y combos | 180.0x48.0 | OK
+  Promociones | button | Barra | 64.0x48.0 | OK
+  Promociones | button | Promociones | 140.0x48.0 | OK
+  Promociones | button | Combos | 120.0x48.0 | OK
+  Promociones | button | Nueva promoción | 151.2x48.0 | OK
+  Promociones | button | Actualizar | 98.4x48.0 | OK
+  Promociones | edit | <edit> | 345.6x48.0 | OK
+  Promociones | button | Solo activas | 115.2x48.0 | OK
+  Promociones | edit | <edit> | 411.2x48.0 | OK
+  Promociones | button | Porcentaje | 104.8x48.0 | OK
+  Promociones | button | Monto menos por pieza | 194.4x48.0 | OK
+  Promociones | button | Lleva N, paga M | 140.8x48.0 | OK
+  Promociones | edit | <edit> | 411.2x48.0 | OK
+  Promociones | button | Productos | 199.2x48.0 | OK
+  Promociones | button | Una categoría | 205.6x48.0 | OK
+  Promociones | edit | <edit> | 411.2x48.0 | OK
+  Promociones | edit | <edit> | 197.6x48.0 | OK
+  Promociones | edit | <edit> | 205.6x48.0 | OK
+  Promociones | button | Lun | 57.6x48.0 | OK
+  Promociones | button | Mar | 58.4x48.0 | OK
+  Promociones | button | Mié | 57.6x48.0 | OK
+  Promociones | button | Jue | 57.6x48.0 | OK
+  Promociones | button | Vie | 56.0x48.0 | OK
+  Promociones | button | Sáb | 57.6x48.0 | OK
+  Promociones | button | Dom | 63.2x48.0 | OK
+  Promociones | edit | <edit> | 197.6x48.0 | OK
+  Promociones | edit | <edit> | 205.6x48.0 | OK
+  Promociones | button | Guardar promoción | 404.8x48.0 | OK
+  Promociones | list_row | SysListView32#0 (1 filas) | 405.6x43.2 | OK
+
+=== Promociones (teclado) (total=51, marcados=0) ===
+  Promociones (teclado) | button | Estándar | 137.6x48.0 | OK
+  Promociones (teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Promociones (teclado) | button | Inventario | 220.0x56.0 | OK
+  Promociones (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Promociones (teclado) | button | BackOffice | 220.0x56.0 | OK
+  Promociones (teclado) | button | Existencias | 95.2x48.0 | OK
+  Promociones (teclado) | button | Reabastecimiento | 144.0x48.0 | OK
+  Promociones (teclado) | button | Productos y recetas | 156.8x48.0 | OK
+  Promociones (teclado) | button | Ingredientes | 104.0x48.0 | OK
+  Promociones (teclado) | button | Promociones y combos | 180.0x48.0 | OK
+  Promociones (teclado) | button | Barra | 64.0x48.0 | OK
+  Promociones (teclado) | button | 0 | 136.0x64.0 | OK
+  Promociones (teclado) | button | 1 | 64.0x64.0 | OK
+  Promociones (teclado) | button | 2 | 64.0x64.0 | OK
+  Promociones (teclado) | button | 3 | 64.0x64.0 | OK
+  Promociones (teclado) | button | 4 | 64.0x64.0 | OK
+  Promociones (teclado) | button | 5 | 64.0x64.0 | OK
+  Promociones (teclado) | button | 6 | 64.0x64.0 | OK
+  Promociones (teclado) | button | 7 | 64.0x64.0 | OK
+  Promociones (teclado) | button | 8 | 64.0x64.0 | OK
+  Promociones (teclado) | button | 9 | 64.0x64.0 | OK
+  Promociones (teclado) | button | . | 64.0x64.0 | OK
+  Promociones (teclado) | button | Borrar | 88.0x64.0 | OK
+  Promociones (teclado) | button | Limpiar | 88.0x64.0 | OK
+  Promociones (teclado) | button | Listo | 88.0x136.0 | OK
+  Promociones (teclado) | button | Promociones | 140.0x48.0 | OK
+  Promociones (teclado) | button | Combos | 120.0x48.0 | OK
+  Promociones (teclado) | button | Nueva promoción | 151.2x48.0 | OK
+  Promociones (teclado) | button | Actualizar | 98.4x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 345.6x48.0 | OK
+  Promociones (teclado) | button | Solo activas | 115.2x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 411.2x48.0 | OK
+  Promociones (teclado) | button | Porcentaje | 104.8x48.0 | OK
+  Promociones (teclado) | button | Monto menos por pieza | 194.4x48.0 | OK
+  Promociones (teclado) | button | Lleva N, paga M | 140.8x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 411.2x48.0 | OK
+  Promociones (teclado) | button | Productos | 199.2x48.0 | OK
+  Promociones (teclado) | button | Una categoría | 205.6x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 411.2x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 197.6x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 205.6x48.0 | OK
+  Promociones (teclado) | button | Lun | 57.6x48.0 | OK
+  Promociones (teclado) | button | Mar | 58.4x48.0 | OK
+  Promociones (teclado) | button | Mié | 57.6x48.0 | OK
+  Promociones (teclado) | button | Jue | 57.6x48.0 | OK
+  Promociones (teclado) | button | Vie | 56.0x48.0 | OK
+  Promociones (teclado) | button | Sáb | 57.6x48.0 | OK
+  Promociones (teclado) | button | Dom | 63.2x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 197.6x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 205.6x48.0 | OK
+  Promociones (teclado) | button | Guardar promoción | 404.8x48.0 | OK
+  Promociones (teclado) | list_row | SysListView32#0 (1 filas) | 405.6x43.2 | OK
+
+=== Combos (total=27, marcados=0) ===
+  Combos | button | Estándar | 137.6x48.0 | OK
+  Combos | button | Punto de Venta | 220.0x56.0 | OK
+  Combos | button | Inventario | 220.0x56.0 | OK
+  Combos | button | Caja y Reportes | 220.0x56.0 | OK
+  Combos | button | BackOffice | 220.0x56.0 | OK
+  Combos | button | Existencias | 95.2x48.0 | OK
+  Combos | button | Reabastecimiento | 144.0x48.0 | OK
+  Combos | button | Productos y recetas | 156.8x48.0 | OK
+  Combos | button | Ingredientes | 104.0x48.0 | OK
+  Combos | button | Promociones y combos | 180.0x48.0 | OK
+  Combos | button | Barra | 64.0x48.0 | OK
+  Combos | button | Promociones | 140.0x48.0 | OK
+  Combos | button | Combos | 120.0x48.0 | OK
+  Combos | button | Nuevo combo | 124.0x48.0 | OK
+  Combos | button | Actualizar | 98.4x48.0 | OK
+  Combos | edit | <edit> | 281.6x48.0 | OK
+  Combos | button | Ver dados de baja | 179.2x48.0 | OK
+  Combos | edit | <edit> | 238.4x48.0 | OK
+  Combos | edit | <edit> | 164.8x48.0 | OK
+  Combos | edit | <edit> | 411.2x48.0 | OK
+  Combos | switch/combo | comboBox | 199.2x48.0 | OK
+  Combos | edit | <edit> | 205.6x48.0 | OK
+  Combos | switch/combo | comboBox | 268.0x48.0 | OK
+  Combos | edit | <edit> | 136.8x48.0 | OK
+  Combos | button | Agregar parte | 199.2x48.0 | OK
+  Combos | button | Quitar parte | 205.6x48.0 | OK
+  Combos | button | Guardar combo | 404.8x48.0 | OK
+
+=== Combos (teclado) (total=41, marcados=0) ===
+  Combos (teclado) | button | Estándar | 137.6x48.0 | OK
+  Combos (teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Combos (teclado) | button | Inventario | 220.0x56.0 | OK
+  Combos (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Combos (teclado) | button | BackOffice | 220.0x56.0 | OK
+  Combos (teclado) | button | Existencias | 95.2x48.0 | OK
+  Combos (teclado) | button | Reabastecimiento | 144.0x48.0 | OK
+  Combos (teclado) | button | Productos y recetas | 156.8x48.0 | OK
+  Combos (teclado) | button | Ingredientes | 104.0x48.0 | OK
+  Combos (teclado) | button | Promociones y combos | 180.0x48.0 | OK
+  Combos (teclado) | button | Barra | 64.0x48.0 | OK
+  Combos (teclado) | button | 0 | 136.0x64.0 | OK
+  Combos (teclado) | button | 1 | 64.0x64.0 | OK
+  Combos (teclado) | button | 2 | 64.0x64.0 | OK
+  Combos (teclado) | button | 3 | 64.0x64.0 | OK
+  Combos (teclado) | button | 4 | 64.0x64.0 | OK
+  Combos (teclado) | button | 5 | 64.0x64.0 | OK
+  Combos (teclado) | button | 6 | 64.0x64.0 | OK
+  Combos (teclado) | button | 7 | 64.0x64.0 | OK
+  Combos (teclado) | button | 8 | 64.0x64.0 | OK
+  Combos (teclado) | button | 9 | 64.0x64.0 | OK
+  Combos (teclado) | button | . | 64.0x64.0 | OK
+  Combos (teclado) | button | Borrar | 88.0x64.0 | OK
+  Combos (teclado) | button | Limpiar | 88.0x64.0 | OK
+  Combos (teclado) | button | Listo | 88.0x136.0 | OK
+  Combos (teclado) | button | Promociones | 140.0x48.0 | OK
+  Combos (teclado) | button | Combos | 120.0x48.0 | OK
+  Combos (teclado) | button | Nuevo combo | 124.0x48.0 | OK
+  Combos (teclado) | button | Actualizar | 98.4x48.0 | OK
+  Combos (teclado) | edit | <edit> | 281.6x48.0 | OK
+  Combos (teclado) | button | Ver dados de baja | 179.2x48.0 | OK
+  Combos (teclado) | edit | <edit> | 238.4x48.0 | OK
+  Combos (teclado) | edit | <edit> | 164.8x48.0 | OK
+  Combos (teclado) | edit | <edit> | 411.2x48.0 | OK
+  Combos (teclado) | switch/combo | comboBox | 199.2x48.0 | OK
+  Combos (teclado) | edit | <edit> | 205.6x48.0 | OK
+  Combos (teclado) | switch/combo | comboBox | 268.0x48.0 | OK
+  Combos (teclado) | edit | <edit> | 136.8x48.0 | OK
+  Combos (teclado) | button | Agregar parte | 199.2x48.0 | OK
+  Combos (teclado) | button | Quitar parte | 205.6x48.0 | OK
+  Combos (teclado) | button | Guardar combo | 404.8x48.0 | OK
+
 === Dialogo Cobro (total=18, marcados=0) ===
   Dialogo Cobro | switch/combo | comboBox | 380.0x48.0 | OK
   Dialogo Cobro | edit | <edit> | 383.2x48.0 | OK

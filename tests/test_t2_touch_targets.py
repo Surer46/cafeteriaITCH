@@ -790,6 +790,52 @@ def run_suite(label, exe_path, write_audit=False):
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Existencias", scale)
         record_audit("Existencias", items, overlaps, lrows)
 
+        # --- 7f. Promociones y combos (Promociones, teclado y Combos) ---
+        click_subnav(hwnd_main, "Promociones y combos")
+        time.sleep(0.45)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Promociones", scale)
+        record_audit("Promociones", items, overlaps, lrows)
+
+        btn_tab_promos = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Promociones"), None)
+        btn_tab_combos = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Combos"), None)
+        assert btn_tab_promos and btn_tab_combos, "Botones de pestaña Promociones/Combos no encontrados"
+
+        # Activar teclado numérico en campo Porcentaje de Promociones
+        pr_panel_p = user32.GetParent(btn_tab_promos)
+        btn_new_p = next((h for (h, c, t) in enum_children(pr_panel_p) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Nueva promoción"), None)
+        assert btn_new_p is not None, "Botón Nueva promoción no encontrado"
+        list_card_p = user32.GetParent(btn_new_p)
+        promo_edits = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(pr_panel_p) if c.lower() == "edit" and user32.IsWindowVisible(h) and get_rect(h)[0] > get_rect(list_card_p)[2]],
+            key=lambda x: (x[1][1], x[1][0]),
+        )
+        assert len(promo_edits) >= 2, "Campo Porcentaje en Promociones no encontrado"
+        click_control_at(promo_edits[1][0])
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Promociones (teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Promociones"
+        record_audit("Promociones (teclado)", items, overlaps, lrows)
+
+        # Cambiar a pestaña Combos y auditar + teclado en Precio
+        click_button(btn_tab_combos)
+        time.sleep(0.4)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Combos", scale)
+        record_audit("Combos", items, overlaps, lrows)
+
+        btn_new_c = next((h for (h, c, t) in enum_children(pr_panel_p) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Nuevo combo"), None)
+        assert btn_new_c is not None, "Botón Nuevo combo no encontrado"
+        list_card_c = user32.GetParent(btn_new_c)
+        combo_edits = sorted(
+            [(h, get_rect(h)) for (h, c, _t) in enum_children(pr_panel_p) if c.lower() == "edit" and user32.IsWindowVisible(h) and get_rect(h)[0] > get_rect(list_card_c)[2]],
+            key=lambda x: (x[1][1], x[1][0]),
+        )
+        assert len(combo_edits) >= 2, "Campo Precio en Combos no encontrado"
+        click_control_at(combo_edits[1][0])
+        time.sleep(0.25)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Combos (teclado)", scale)
+        assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Combos"
+        record_audit("Combos (teclado)", items, overlaps, lrows)
+
         # --- 8. Dialogos de Venta: Cobro, Ticket e Historial de tickets ---
         click_sidebar_section(hwnd_main, "Punto de Venta")
         time.sleep(0.45)
