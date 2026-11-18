@@ -342,6 +342,7 @@ contracts::Result<std::vector<contracts::PermissionDto>> MockAccountService::lis
         {"inventory.manage_thresholds", "Fijar la cantidad mínima de cada ingrediente para que el sistema avise.", "inventory", "Definir avisos de poco inventario", "Inventario", 150},
         {"inventory.promotions", "Crear y cambiar promociones y combos.", "inventory", "Administrar promociones y combos", "Inventario", 160},
         {"shift.operate", "Abrir turno, registrar entradas y salidas de dinero y hacer el corte.", "shift", "Abrir y cerrar caja", "Caja y Reportes", 210},
+        {"shift.close_others", "Cerrar el turno que abrió otro usuario. Queda registrado quién lo cerró y de quién era.", "shift", "Cerrar turno de otro usuario", "Caja y Reportes", 215},
         {"reports.view", "Consultar los reportes de ventas e inventario.", "reports", "Ver reportes", "Caja y Reportes", 220},
         {"audit.view", "Consultar el historial de lo que cada persona hizo en el sistema.", "audit", "Ver la bitácora", "Caja y Reportes", 230},
         {"users.manage", "Crear cuentas de usuario, cambiarlas o desactivarlas.", "users", "Administrar cuentas", "BackOffice", 310},
@@ -694,9 +695,88 @@ contracts::Result<contracts::ShiftDto> MockShiftService::open_shift(
     return contracts::Result<contracts::ShiftDto>::ok(current_shift_);
 }
 
-contracts::OperationResult MockShiftService::close_shift(contracts::Money) {
-    current_shift_.is_open = false;
+contracts::ShiftCloseoutDto MockShiftService::build_closeout() const {
+    contracts::ShiftCloseoutDto d;
+    d.shift_id = current_shift_.id;
+    d.register_name = current_shift_.register_name;
+    d.opened_by_user_id = current_shift_.cashier_user_id;
+    d.opened_by_name = current_shift_.cashier_name;
+    d.opened_at = current_shift_.opened_at;
+    d.initial_cash = current_shift_.initial_cash;
+    d.sales_count = 12;
+    d.gross_sales = contracts::Money::from_major_minor(3000, 0);
+    d.discount_total = contracts::Money::from_major_minor(70, 0);
+    d.net_sales = contracts::Money::from_major_minor(2930, 0);
+    d.cash_sales = contracts::Money::from_major_minor(2000, 0);
+    d.card_sales = contracts::Money::from_major_minor(930, 0);
+    std::int64_t in = 0, out = 0;
+    for (const auto& m : movements_) (m.kind == contracts::CashMovementKind::Inflow ? in : out) += m.amount.cents();
+    d.cash_inflows = contracts::Money::from_cents(in);
+    d.cash_outflows = contracts::Money::from_cents(out);
+    d.expected_cash = contracts::Money::from_cents(d.initial_cash.cents() + d.cash_sales.cents() + in - out);
+    d.movements = movements_;
+    return d;
+}
+
+contracts::OperationResult MockShiftService::close_shift(contracts::Money final_cash) {
+    auto r = close_shift_with_count("", final_cash, "Sin motivo registrado");
+    if (!r.is_success()) return contracts::OperationResult::fail(r.error_code(), r.error_message());
     return contracts::OperationResult::ok();
+}
+
+contracts::Result<contracts::ShiftCloseoutDto> MockShiftService::preview_closeout(const std::string&) {
+    return contracts::Result<contracts::ShiftCloseoutDto>::ok(build_closeout());
+}
+
+contracts::Result<contracts::ShiftCloseoutDto> MockShiftService::close_shift_with_count(
+    const std::string&, contracts::Money counted_cash, const std::string& reason) {
+    using R = contracts::Result<contracts::ShiftCloseoutDto>;
+    if (!current_shift_.is_open) return R::fail(contracts::ErrorCode::Conflict, "Ese turno ya fue cerrado. No se puede cerrar dos veces.");
+    auto d = build_closeout();
+    d.difference_cents = counted_cash.cents() - d.expected_cash.cents();
+    if (d.difference_cents != 0 && reason.size() < 3)
+        return R::fail(contracts::ErrorCode::InvalidInput, "Indica el motivo de la diferencia (de 3 a 200 caracteres)");
+    d.is_closed = true;
+    d.snapshot_saved = true;
+    d.closed_at = "2026-09-24 22:00:00";
+    d.closed_by_user_id = current_shift_.cashier_user_id;
+    d.closed_by_name = current_shift_.cashier_name;
+    d.counted_cash = counted_cash;
+    d.difference_reason = d.difference_cents != 0 ? reason : "";
+    current_shift_.is_open = false;
+    closed_.push_back(d);
+    return R::ok(d);
+}
+
+contracts::Result<contracts::ShiftCloseoutDto> MockShiftService::get_closeout(const std::string& shift_id) {
+    for (const auto& c : closed_) if (c.shift_id == shift_id) return contracts::Result<contracts::ShiftCloseoutDto>::ok(c);
+    if (shift_id == current_shift_.id) return contracts::Result<contracts::ShiftCloseoutDto>::ok(build_closeout());
+    return contracts::Result<contracts::ShiftCloseoutDto>::fail(contracts::ErrorCode::NotFound, "No se encontró ese turno");
+}
+
+contracts::Result<contracts::ClosedShiftListDto> MockShiftService::list_closed_shifts(const std::string&, const std::string&, int) {
+    contracts::ClosedShiftListDto l;
+    l.items = closed_;
+    for (auto& i : l.items) i.movements.clear();
+    return contracts::Result<contracts::ClosedShiftListDto>::ok(l);
+}
+
+contracts::Result<contracts::CashMovementDto> MockShiftService::record_cash_movement(
+    contracts::CashMovementKind kind, contracts::Money amount, const std::string& description) {
+    using R = contracts::Result<contracts::CashMovementDto>;
+    if (!current_shift_.is_open) return R::fail(contracts::ErrorCode::NotFound, "Abre un turno antes de registrar movimientos de caja");
+    if (amount.cents() <= 0) return R::fail(contracts::ErrorCode::InvalidInput, "El importe debe ser mayor que cero");
+    if (description.size() < 3) return R::fail(contracts::ErrorCode::InvalidInput, "Escribe una descripción de 3 a 200 caracteres");
+    if (kind == contracts::CashMovementKind::Outflow && amount.cents() > build_closeout().expected_cash.cents())
+        return R::fail(contracts::ErrorCode::InvalidInput, "No hay tanto efectivo en caja para esa salida");
+    contracts::CashMovementDto m;
+    m.id = "cmov-mock-" + std::to_string(movements_.size() + 1);
+    m.kind = kind;
+    m.amount = amount;
+    m.description = description;
+    m.created_at = "2026-09-24 12:00:00";
+    movements_.push_back(m);
+    return R::ok(m);
 }
 
 // --- MockInventoryService ---
@@ -1013,6 +1093,68 @@ contracts::Result<contracts::DailySalesReportDto> MockReportService::get_daily_s
     report.payments_total = contracts::Money::from_major_minor(2930, 0);
     report.payments_mismatch_cents = 0;
     return contracts::Result<contracts::DailySalesReportDto>::ok(report);
+}
+
+contracts::Result<contracts::SalesByDayReportDto> MockReportService::sales_by_day(const std::string& f, const std::string& t) {
+    contracts::SalesByDayReportDto r; r.from_date = f; r.to_date = t;
+    contracts::SalesByDayRowDto row; row.date = f; row.sales_count = 12;
+    row.gross = contracts::Money::from_major_minor(3000, 0); row.discount = contracts::Money::from_major_minor(70, 0);
+    row.net = contracts::Money::from_major_minor(2930, 0); row.cash = contracts::Money::from_major_minor(2000, 0);
+    row.card = contracts::Money::from_major_minor(930, 0);
+    r.rows.push_back(row);
+    r.totals.sales_count = 12; r.totals.gross = row.gross; r.totals.discount = row.discount; r.totals.net = row.net;
+    r.totals.cash = row.cash; r.totals.card = row.card; r.totals.payments_total = row.net;
+    return contracts::Result<contracts::SalesByDayReportDto>::ok(r);
+}
+contracts::Result<contracts::SalesByProductReportDto> MockReportService::sales_by_product(const std::string& f, const std::string& t) {
+    contracts::SalesByProductReportDto r; r.from_date = f; r.to_date = t;
+    contracts::SalesByProductRowDto row; row.product_id = "prod-1"; row.product_name = "Café americano"; row.pieces = 20;
+    row.gross = contracts::Money::from_major_minor(600, 0); row.net = row.gross;
+    r.rows.push_back(row);
+    r.totals.sales_count = 12; r.totals.pieces = 20; r.totals.gross = row.gross; r.totals.net = row.net; r.totals.payments_total = row.net; r.totals.cash = row.net;
+    return contracts::Result<contracts::SalesByProductReportDto>::ok(r);
+}
+contracts::Result<contracts::SalesByPaymentReportDto> MockReportService::sales_by_payment_method(const std::string& f, const std::string& t) {
+    contracts::SalesByPaymentReportDto r; r.from_date = f; r.to_date = t;
+    r.rows.push_back({"EFECTIVO", 8, contracts::Money::from_major_minor(2000, 0)});
+    r.rows.push_back({"TARJETA", 4, contracts::Money::from_major_minor(930, 0)});
+    r.totals.sales_count = 12; r.totals.net = contracts::Money::from_major_minor(2930, 0); r.totals.payments_total = r.totals.net;
+    return contracts::Result<contracts::SalesByPaymentReportDto>::ok(r);
+}
+contracts::Result<contracts::SalesByCashierReportDto> MockReportService::sales_by_cashier(const std::string& f, const std::string& t) {
+    contracts::SalesByCashierReportDto r; r.from_date = f; r.to_date = t;
+    contracts::SalesByCashierRowDto row; row.user_id = "user-01"; row.cashier_name = "Cajero 01"; row.sales_count = 12;
+    row.gross = contracts::Money::from_major_minor(3000, 0); row.discount = contracts::Money::from_major_minor(70, 0);
+    row.net = contracts::Money::from_major_minor(2930, 0);
+    r.rows.push_back(row);
+    r.totals.sales_count = 12; r.totals.gross = row.gross; r.totals.discount = row.discount; r.totals.net = row.net; r.totals.payments_total = row.net;
+    return contracts::Result<contracts::SalesByCashierReportDto>::ok(r);
+}
+contracts::Result<contracts::InventoryLossReportDto> MockReportService::inventory_losses(const std::string& f, const std::string& t) {
+    contracts::InventoryLossReportDto r; r.from_date = f; r.to_date = t;
+    contracts::InventoryLossRowDto row; row.ingredient_id = "ing-2"; row.ingredient_name = "Leche entera"; row.base_unit = "ml";
+    row.waste_quantity_base = 500; row.waste_estimated_cost = contracts::Money::from_major_minor(12, 50); row.has_known_cost = true;
+    r.rows.push_back(row);
+    r.total_waste_estimated_cost = row.waste_estimated_cost;
+    return contracts::Result<contracts::InventoryLossReportDto>::ok(r);
+}
+contracts::Result<contracts::InventoryMovementsReportDto> MockReportService::inventory_movements(const std::string& f, const std::string& t, int) {
+    contracts::InventoryMovementsReportDto r; r.from_date = f; r.to_date = t;
+    r.rows.push_back({"2026-09-24 10:00:00", "Leche entera", "WASTE", -500, "ml", "Se derramó", "Cajero 01"});
+    return contracts::Result<contracts::InventoryMovementsReportDto>::ok(r);
+}
+contracts::Result<contracts::PurchasesSummaryReportDto> MockReportService::purchases_summary(const std::string& f, const std::string& t) {
+    contracts::PurchasesSummaryReportDto r; r.from_date = f; r.to_date = t;
+    contracts::PurchasesSummaryRowDto row; row.ingredient_id = "ing-3"; row.ingredient_name = "Café de grano"; row.base_unit = "mg";
+    row.purchases_count = 1; row.base_units_purchased = 1000000; row.total_cost = contracts::Money::from_major_minor(180, 0);
+    r.rows.push_back(row); r.total_cost = row.total_cost;
+    return contracts::Result<contracts::PurchasesSummaryReportDto>::ok(r);
+}
+contracts::Result<contracts::ReportExportResultDto> MockReportService::export_report_csv(
+    contracts::ReportKind, const std::string&, const std::string&, const std::string&, bool) {
+    // El simulado no escribe archivos: solo sirve para desarrollar la interfaz.
+    return contracts::Result<contracts::ReportExportResultDto>::fail(
+        contracts::ErrorCode::InvalidInput, "La exportación no está disponible en el modo de demostración");
 }
 
 // --- MockBackupService ---

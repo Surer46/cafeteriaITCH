@@ -1,6 +1,7 @@
 #ifndef APP_CONTRACTS_REPORT_SERVICE_HPP
 #define APP_CONTRACTS_REPORT_SERVICE_HPP
 
+#include <cstdint>
 #include <string>
 #include <vector>
 #include "app/contracts/result.hpp"
@@ -27,11 +28,144 @@ struct DailySalesReportDto {
     std::int64_t payments_mismatch_cents{0};
 };
 
+// ---------------------------------------------------------------------------------------------------------------
+// B15: reportes por rango de fechas (AAAA-MM-DD, hora local, ambos extremos incluidos; máximo 366 días).
+// Todos los importes son centavos enteros. En los reportes de ventas: gross - discount = net, y net coincide con
+// los pagos registrados (payments_mismatch_cents = 0). Las ventas anuladas no existen en el sistema todavía.
+// ---------------------------------------------------------------------------------------------------------------
+struct SalesTotalsDto {
+    std::int64_t sales_count{0};
+    std::int64_t pieces{0};   // solo se llena en el reporte por producto
+    Money gross{Money::zero()};
+    Money discount{Money::zero()};
+    Money net{Money::zero()};
+    Money cash{Money::zero()};
+    Money card{Money::zero()};
+    Money transfer{Money::zero()};
+    Money payments_total{Money::zero()};
+    std::int64_t payments_mismatch_cents{0};   // net - payments_total
+};
+
+struct SalesByDayRowDto {
+    std::string date;   // AAAA-MM-DD
+    std::int64_t sales_count{0};
+    Money gross{Money::zero()};
+    Money discount{Money::zero()};
+    Money net{Money::zero()};
+    Money cash{Money::zero()};
+    Money card{Money::zero()};
+    Money transfer{Money::zero()};
+};
+struct SalesByDayReportDto { std::string from_date, to_date; std::vector<SalesByDayRowDto> rows; SalesTotalsDto totals; };
+
+struct SalesByProductRowDto {
+    std::string product_id;
+    std::string product_name;   // nombre al momento de la venta
+    std::int64_t pieces{0};
+    Money gross{Money::zero()};
+    Money discount{Money::zero()};
+    Money net{Money::zero()};
+};
+struct SalesByProductReportDto { std::string from_date, to_date; std::vector<SalesByProductRowDto> rows; SalesTotalsDto totals; };
+
+struct SalesByPaymentRowDto {
+    std::string method;   // EFECTIVO, TARJETA, TRANSFERENCIA
+    std::int64_t payments_count{0};
+    Money amount{Money::zero()};
+};
+struct SalesByPaymentReportDto { std::string from_date, to_date; std::vector<SalesByPaymentRowDto> rows; SalesTotalsDto totals; };
+
+struct SalesByCashierRowDto {
+    std::string user_id;
+    std::string cashier_name;   // nombre al momento de la venta
+    std::int64_t sales_count{0};
+    Money gross{Money::zero()};
+    Money discount{Money::zero()};
+    Money net{Money::zero()};
+};
+struct SalesByCashierReportDto { std::string from_date, to_date; std::vector<SalesByCashierRowDto> rows; SalesTotalsDto totals; };
+
+// Mermas y ajustes por ingrediente. Los ajustes positivos y negativos van separados (no netos). El costo estimado
+// usa la valuación vigente del ingrediente (promedio móvil), no el costo de cuando ocurrió; 0 si no hay costo conocido
+// (has_known_cost = false).
+struct InventoryLossRowDto {
+    std::string ingredient_id;
+    std::string ingredient_name;
+    std::string base_unit;
+    std::int64_t waste_quantity_base{0};          // positivo = cantidad perdida
+    std::int64_t adjustment_in_quantity_base{0};  // ajustes que sumaron existencia
+    std::int64_t adjustment_out_quantity_base{0}; // ajustes que restaron (positivo = cantidad restada)
+    Money waste_estimated_cost{Money::zero()};
+    Money adjustment_in_estimated_cost{Money::zero()};
+    Money adjustment_out_estimated_cost{Money::zero()};
+    bool has_known_cost{false};
+};
+struct InventoryLossReportDto {
+    std::string from_date, to_date;
+    std::vector<InventoryLossRowDto> rows;
+    Money total_waste_estimated_cost{Money::zero()};
+    Money total_adjustment_in_estimated_cost{Money::zero()};
+    Money total_adjustment_out_estimated_cost{Money::zero()};
+};
+
+struct InventoryMovementRowDto {
+    std::string created_at;
+    std::string ingredient_name;
+    std::string movement_type;   // PURCHASE, SALE, ADJUSTMENT, WASTE, TRANSFER
+    std::int64_t quantity_base{0};   // con signo
+    std::string base_unit;
+    std::string reason;
+    std::string actor_name;
+};
+struct InventoryMovementsReportDto {
+    std::string from_date, to_date;
+    std::vector<InventoryMovementRowDto> rows;   // del más reciente al más antiguo
+    bool truncated{false};                       // más movimientos que el límite
+};
+
+struct PurchasesSummaryRowDto {
+    std::string ingredient_id;
+    std::string ingredient_name;
+    std::string base_unit;
+    std::int64_t purchases_count{0};
+    std::int64_t base_units_purchased{0};
+    Money total_cost{Money::zero()};
+};
+struct PurchasesSummaryReportDto { std::string from_date, to_date; std::vector<PurchasesSummaryRowDto> rows; Money total_cost{Money::zero()}; };
+
+enum class ReportKind {
+    SalesByDay, SalesByProduct, SalesByPaymentMethod, SalesByCashier,
+    InventoryLosses, InventoryMovements, PurchasesSummary
+};
+
+struct ReportExportResultDto {
+    std::string file_name;        // solo el nombre, sin carpeta
+    std::int64_t rows_written{0};
+};
+
 class IReportService {
 public:
     virtual ~IReportService() = default;
 
     virtual Result<DailySalesReportDto> get_daily_sales_summary(const std::string& date_iso) = 0;
+
+    // --- B15 (aditivo): todos requieren reports.view ---
+    virtual Result<SalesByDayReportDto> sales_by_day(const std::string& from_date, const std::string& to_date) = 0;
+    virtual Result<SalesByProductReportDto> sales_by_product(const std::string& from_date, const std::string& to_date) = 0;
+    virtual Result<SalesByPaymentReportDto> sales_by_payment_method(const std::string& from_date, const std::string& to_date) = 0;
+    virtual Result<SalesByCashierReportDto> sales_by_cashier(const std::string& from_date, const std::string& to_date) = 0;
+    virtual Result<InventoryLossReportDto> inventory_losses(const std::string& from_date, const std::string& to_date) = 0;
+    // limit: omisión 1000, máximo 5000.
+    virtual Result<InventoryMovementsReportDto> inventory_movements(const std::string& from_date, const std::string& to_date,
+                                                                    int limit = 1000) = 0;
+    virtual Result<PurchasesSummaryReportDto> purchases_summary(const std::string& from_date, const std::string& to_date) = 0;
+
+    // Escribe el reporte como CSV en `file_path` (UTF-8 con BOM, coma, CRLF, importes con dos decimales y punto, fechas locales,
+    // encabezados en español). Si el archivo existe y overwrite = false devuelve Conflict. Escribe a un temporal en
+    // la misma carpeta y renombra al terminar. Sin límite de filas. Audita REPORT_EXPORTED (tipo, rango, nombre).
+    virtual Result<ReportExportResultDto> export_report_csv(ReportKind kind, const std::string& from_date,
+                                                           const std::string& to_date, const std::string& file_path,
+                                                           bool overwrite = false) = 0;
 };
 
 } // namespace app::contracts
