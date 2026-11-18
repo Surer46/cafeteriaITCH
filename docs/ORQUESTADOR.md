@@ -164,7 +164,7 @@ otas-pc.md`. `ctest` vuelve a estar disponible, pero **no correr `UpdateTest` ha
   - **Claude Code Terminal libre.** Bloque corto posible, sin redactar: estado «Poco» y último movimiento de productos en `ProductDto` para Existencias.
   - **Pendientes:** pasada al 100 % de T8 a T13; claves de firma y prueba manual con UAC (usuario); T6 tuvo un fallo intermitente el 2026-11-17.
   - **Reanudar:** `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend). Orquestador: conversación `6fbbf53f-3bf2-4bac-8571-90797a3e1b3e` (Claude, app de escritorio, carpeta `C:\Cafeteria_ITCH`).
-  - **Copia de las tres conversaciones** en `C:\Cafeteria_ITCHespaldo-conversaciones6-11-18\` (fuera del repositorio; solo en esta PC).
+  - **Copia de las tres conversaciones** en `C:\Cafeteria_ITCH\respaldo-conversaciones\2026-11-18\` (fuera del repositorio; solo en esta PC).
 - **Pausa del 2026-11-17:**
   - **`main` en `5731ec1`** (más este registro), con T8 a T11, B13 y B13b integrados. Sin subir a GitHub desde `27e890e`.
   - **Sin integrar ni auditar, en el worktree del backend:**
