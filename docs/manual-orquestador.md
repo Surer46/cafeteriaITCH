@@ -2,22 +2,13 @@
 
 Vigente desde el 2026-11-18. Reúne las reglas de trabajo del orquestador que antes solo estaban en la memoria de Claude (app de escritorio). Lo lee cualquier modelo que haga de orquestador. El estado del proyecto, las decisiones y la cola de bloques están en `docs/ORQUESTADOR.md`; los roles y la propiedad de archivos, en `docs/coordinacion-agentes.md`.
 
-## 1. Roles (decisión del usuario, 2026-11-18)
+## 1. Roles (decisión del usuario, 2026-11-19)
 
-Tras la prueba de Neon (calibración con B16 y redacción de B17), el usuario repartió el trabajo del orquestador según lo que mejor hizo cada uno: Neon encontró más problemas al revisar código; Claude redacta y asigna.
+**Claude (app de escritorio) es el único orquestador:** redacta y asigna, responde los planes del backend, audita (sección 4) y lleva Git. Es más fácil de manejar con un solo responsable.
 
-| Quién | Hace | No hace |
-|---|---|---|
-| **Neon** (auditor, AntiGravity) | Revisa el código de cada entrega, corre la verificación (sección 4) y escribe la auditoría con evidencia y veredicto (aceptado, aceptado con observaciones o no aceptado). Sus hallazgos pendientes los pasa como seguimientos. | Redactar prompts, responder planes, commits, `git merge`, `git push`, editar `docs/ORQUESTADOR.md` o `prompts-para-pegar.md`, editar código o pruebas. |
-| **Claude** (orquestador, app de escritorio) | Redacta los prompts y asigna el trabajo, responde los planes del backend, convierte los seguimientos de las auditorías en bloques, y lleva Git: commit del bloque aceptado, integración en `main` y subida cuando el usuario la pide. Mantiene `docs/ORQUESTADOR.md`, `docs/specs.md` y `prompts-para-pegar.md`. | Auditar desde cero (lo hace Neon). Lee el veredicto de Neon y solo lo comprueba si algo no cuadra (contradice la entrega, el plan o una decisión del usuario). |
-| **Usuario** | Decide negocio y desacuerdos, pega los prompts, publica las versiones. | — |
+**Gemini 4 Neon (AntiGravity) es apoyo de diagnóstico**, solo cuando el usuario lo pide porque Claude tiene los tokens medidos: investigar un fallo concreto (una prueba que falla, un error de compilación, una sospecha en el código) y dejar un informe en `Auditorias/diagnostico-neon-AAAA-MM-DD-<tema>.md` con evidencia (`archivo:línea`, comandos y código de salida). No redacta prompts, no da veredictos de aceptación, no hace commits ni edita código, pruebas ni documentos de estado, y nunca corre pruebas a la vez que otro agente. Claude decide qué hacer con el diagnóstico.
 
-**Flujo de un bloque:**
-1. Claude redacta el prompt (sección 3) y lo deja en `prompts-para-pegar.md`.
-2. El ejecutor trabaja y guarda su entrega en `..\entregas\`.
-3. Neon audita. Backend: revisa la rama en el worktree; para la verificación del conjunto pide a Claude que integre la rama en `main` y corre la verificación ahí. Frontend: audita los cambios sin confirmar de `main`.
-4. Si Neon acepta, Claude hace el commit (frontend) o deja la integración (backend) y registra la auditoría en `docs/ORQUESTADOR.md`. Si no acepta, Claude redacta la corrección (bloque con letra, por ejemplo `T14b`).
-5. Neon nunca verifica en `main` mientras Gemini edita `main` (`git status` limpio salvo el bloque que audita) ni a la vez que CTest u otras pruebas GUI.
+Historial: del 2026-11-18 al 2026-11-19 Neon fue primero orquestador operativo en prueba y luego auditor (B16, T14, T14b). Lo hizo bien (encontró problemas que Claude no vio, entre ellos el uso de memoria liberada de `numeric_keypad.cpp`), pero el reparto entre dos orquestadores resultó más difícil de manejar; ver sección 9.
 
 ## 2. Archivos
 
@@ -27,7 +18,7 @@ Tras la prueba de Neon (calibración con B16 y redacción de B17), el usuario re
 - Los bloques se numeran sin huecos: backend `B<n>`, frontend `T<n>` (`B16` y `T14` son los últimos al 2026-11-18). Una corrección del mismo bloque lleva letra (`T10b`).
 - En el repositorio, rutas con marcadores: `<copia principal>`, `<worktree del backend>`, `<toolchain>` (ver `docs/entorno.md`). Nada propio de una PC va a GitHub; eso vive en `..\notas-pc.md`.
 - **`..\prompts-para-pegar.md`** (fuera del repositorio): solo los prompts pendientes de pegar, numerados, con el destino en el título, rutas reales y **solo caracteres ASCII** (sin acentos, «», ≥ ni ▾: se pierden al pegar). Se quita cada prompt cuando ya se pegó.
-- **Auditorías de Neon:** el archivo normal en `Auditorias/` (`auditoria-AAAA-MM-DD-<bloque>.md`), sin línea de revisión pendiente; Claude lo confirma en el repositorio al registrar el bloque.
+- **Diagnósticos de Neon:** `Auditorias/diagnostico-neon-AAAA-MM-DD-<tema>.md`; Claude los confirma en el repositorio y los cita en la auditoría del bloque.
 - **Entregas de los ejecutores:** además de su terminal, cada ejecutor guarda su entrega en `..\entregas\entrega-AAAA-MM-DD-<bloque>.md` (fuera del repositorio). Todo prompt nuevo lo pide en su última línea.
 
 ## 3. Cómo se redacta un prompt
@@ -68,7 +59,7 @@ Las decisiones de negocio no se inventan: si falta una, se pregunta al usuario y
 
 ## 5. Integración y Git
 
-- Solo Claude (orquestador) hace commits, merges y subidas; Neon (auditor) y los ejecutores frontend no hacen commits, y el backend solo en su rama.
+- Solo Claude (orquestador) hace commits, merges y subidas; Neon y el frontend no hacen commits, y el backend solo en su rama.
 - Backend: commit del ejecutor en `backend/<bloque>`; `git merge --no-ff backend/<bloque>` en `main` con mensaje «Merge branch 'backend/<bloque>' (…)»; verificar el conjunto.
 - Frontend: un commit del orquestador por bloque aceptado.
 - No integrar en `main` mientras Gemini edita `main`.
@@ -96,4 +87,5 @@ Español llano. Resultado primero, luego lo necesario para decidir. Sin afirmar 
 
 - **Calibración con B16 (auditoría a ciegas):** todas sus afirmaciones fueron correctas y encontró seis observaciones que el supervisor no vio (`Auditorias/revision-neon-2026-11-18-B16.md`).
 - **Redacción de B17:** precisa (citas exactas, pendientes cerrados con evidencia), con dos correcciones menores y las lecciones de la sección 3.
-- **Decisión del usuario:** Neon audita y Claude redacta y asigna (sección 1).
+- **Auditor (T14 en High, T14b en Medium):** igual de minucioso en los dos esfuerzos; llamó «intermitente» a una prueba que falló 4 de 6 veces.
+- **Decisión final del usuario (2026-11-19):** Claude, único orquestador; Neon, solo diagnósticos a pedido (sección 1).
