@@ -6,7 +6,8 @@ Vigente desde el 2026-11-08. Complementa `AGENTS.md`; si hay conflicto, manda `A
 
 | Agente | Modelo | Fortalezas observadas | Debilidades observadas | Papel |
 |---|---|---|---|---|
-| **Orquestador** (Claude, app de escritorio) | Fable 5.2 (antes Opus 5.5) | Auditoría independiente, compilación desde cero, lectura de capturas con medición en píxeles | Caro si implementa; no debe escribir código de producción | Redacta prompts, vigila terminales, audita, mantiene `docs/specs.md`, planes, tareas y auditorías |
+| **Orquestador; desde 2026-11-18, supervisor** (Claude, app de escritorio) | Opus 5.5 | Auditoría independiente, compilación desde cero, lectura de capturas con medición en píxeles | Caro si implementa; no debe escribir código de producción | Redacta prompts, vigila terminales, audita, mantiene `docs/specs.md`, planes, tareas y auditorías |
+| **Orquestador operativo** (en prueba desde 2026-11-18) | Gemini 4 Neon, en AntiGravity | Por evaluar | Por evaluar | Redacta prompts y audita con evidencia; sus borradores pasan por el supervisor. Sin commits ni integraciones. Reglas en `docs/manual-orquestador.md` |
 | **Claude Code Terminal** | `opusplan`: Opus 5.5 planifica, Sonnet 5.5 ejecuta | Razonamiento de dominio, transacciones SQLite, aritmética racional de costos, permisos en servicios, diseño de pruebas C++ | Más caro por token que Gemini | **Dueño del backend**: contratos, dominio, almacenamiento, migraciones, servicios y CTest |
 | **AntiGravity** | Desde 2026-11-13: modo Orchestrator (Argon), Gemini 4 Argon planifica y Gemini 4 Hydrogen ejecuta. Antes Gemini 4 Hydrogen (F0, F5) y Gemini 3.8 Flash (high); las observaciones de esta fila son de 3.8 Flash | Rápido y barato; buen cableado de paneles wxWidgets sobre contratos existentes; scripts Win32/Python de prueba GUI y capturas | Exagera resultados; tiende a debilitar pruebas; bloques de razonamiento de 7–9 min; demasiadas lecturas | **Dueño del frontend**: paneles, diálogos, tema, pruebas GUI en Python y capturas |
 
@@ -38,7 +39,7 @@ La interfaz consume contratos; nunca los cambia. Si AntiGravity necesita un mét
 
 1. El orquestador escribe un prompt pequeño en `prompts-<agente>-AAAA-MM-DD.md`, sin «», ≥ ni ▾ (se pierden al pegar).
 2. Claude Code Terminal recibe trabajo de backend en modo plan: el plan de Opus se revisa antes de que Sonnet ejecute.
-3. Cada entrega lista archivos, comandos con código de salida, resultados y límites.
+3. Cada entrega lista archivos, comandos con código de salida, resultados y límites. Desde el 2026-11-18, además de la terminal, el ejecutor la guarda en `..\entregas\entrega-AAAA-MM-DD-<bloque>.md` (fuera del repositorio).
 4. El orquestador audita (con `git diff` desde el último commit aceptado) y registra el resultado. Nada se marca `[x]` sin auditoría.
 5. Los agentes **no hacen commits**. El orquestador hace un commit por bloque aceptado, así cada auditoría parte de una línea base limpia.
 6. **Regla de dos pasadas (decisión del usuario, 2026-11-08):** si AntiGravity no cierra un detalle de interfaz tras dos pasadas sobre el mismo tema, el detalle se asigna a Claude Code Terminal, sin una tercera pasada de Gemini.
