@@ -6,7 +6,7 @@ La especificación completa está en [`docs/specs.md`](docs/specs.md); las regla
 
 ## Avance
 
-**Al 2026-11-18: cerca del 71 % hacia la versión 1.0 y del 83 % hacia un piloto en caja.**
+**Al 2026-11-18: cerca del 73 % hacia la versión 1.0 y del 85 % hacia un piloto en caja.**
 
 Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cierra con pruebas del ejecutable real y, donde aplica, revisión humana y hardware.
 
@@ -14,7 +14,7 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 |---|---|---|
 | **I1** Base nativa, SQLite y alta del Dueño | 100 % | Cerrada. |
 | **I2** Venta, cobro, caja e impresión | 85 % | Software terminado; la cancelación del diálogo de impresión moderno de Windows 11 ya funciona. Faltan la revisión visual humana (0 de 7 casos), la impresora térmica real (55 y 80 mm), el monitor táctil y el escalado de pantalla al 150 y 200 % (100 y 125 % verificados). La pantalla Catálogo visual sigue como marcador. |
-| **I3** Inventario, ingredientes, recetas, promociones y combos | 85 % | Backend completo: ingredientes, compras, mermas y ajustes, movimientos, avisos de poco inventario, costo y margen por receta con promedio móvil, combos de precio fijo y promociones (porcentaje, monto fijo y N×M, con vigencia por fechas, días y horario; gana la de mayor prioridad). Pantallas listas: Ingredientes, Reabastecimiento, Barra, Productos y recetas, Existencias, y descuentos en Venta, Cobro y ticket. Falta la pantalla Promociones y combos (bloque T13, redactado). |
+| **I3** Inventario, ingredientes, recetas, promociones y combos | 95 % | Software completo: ingredientes, compras, mermas y ajustes, movimientos, avisos de poco inventario, costo y margen por receta con promedio móvil, combos de precio fijo y promociones (porcentaje, monto fijo y N×M, con vigencia por fechas, días y horario; gana la de mayor prioridad), con sus pantallas: Ingredientes, Reabastecimiento, Barra, Productos y recetas, Existencias, Promociones y combos, y descuentos en Venta, Cobro y ticket. Faltan la pasada de pruebas al 100 % de escala y la revisión humana. |
 | **I4** Corte de turno y reportes | 60 % | Backend completo: vista previa y cierre del turno con arqueo, diferencia y motivo, instantánea guardada, historial de turnos cerrados, entradas y salidas de efectivo, permiso para cerrar el turno de otro usuario; reportes por rango de fechas (día, producto, método de pago, cajero, mermas y ajustes, movimientos, compras) con totales que cuadran y exportación a CSV para Excel. Listos en pantalla: Caja y turnos, Bitácora. Faltan la pantalla del corte con arqueo y la de Reportes. |
 | **I5** Respaldos y restauración | 90 % | Pantalla BackOffice → Respaldos: respaldo manual verificado a la carpeta o USB que elija el Dueño, restauración guiada con copia previa y cierre del programa, limpieza de respaldos antiguos con vista previa; solo el Dueño restaura. Respaldo automático al cerrar turno (activado por omisión, sin frenar la caja) con su estado en pantalla, copia a una segunda carpeta o USB y lista de respaldos con restauración desde la lista. Probado al 100 y al 125 %; falta probarlo en la PC de la caja. Servidor externo aplazado por decisión del usuario. |
 | **I6** Usuarios, roles y permisos | 95 % | Pantallas de Usuarios y de Roles. Los permisos se muestran con título, descripción e interruptores, agrupados por sección. Falta dar más alto a la lista de permisos (se hará en I7) y la revisión humana. |
@@ -22,11 +22,11 @@ Son estimaciones del trabajo de cada etapa, no mediciones. Una etapa solo se cie
 
 ### Pantallas reales hoy
 
-Venta (con descuentos de promociones), cobro y ticket; Caja y turnos; Bitácora; Usuarios y cuentas; Roles y permisos; Respaldos; Actualizaciones; Configuración (pantalla del equipo e impresión); Ingredientes; Reabastecimiento; Barra; Productos y recetas; Existencias. Siguen como marcadores: Catálogo visual, Promociones y combos, y Reportes.
+Venta (con descuentos de promociones), cobro y ticket; Caja y turnos; Bitácora; Usuarios y cuentas; Roles y permisos; Respaldos; Actualizaciones; Configuración (pantalla del equipo e impresión); Ingredientes; Reabastecimiento; Barra; Productos y recetas; Existencias; Promociones y combos. Siguen como marcadores: Catálogo visual y Reportes.
 
 ### Lo que frena la entrega
 
-1. Pantallas pendientes: Promociones y combos (I3), corte con arqueo y Reportes (I4), y el rediseño de pantalla completa (I7).
+1. Pantallas pendientes: corte con arqueo y Reportes (I4) y el rediseño de pantalla completa (I7).
 2. Revisión humana de I2 (casos en `frontend/qa-visual.md`), I5 e I6.
 3. Decisiones de negocio abiertas en la sección 9 de `docs/specs.md` (anulaciones y devoluciones, pagos mixtos, facturación).
 4. Datos de la PC de caja y de la impresora térmica; claves de firma de actualizaciones y prueba manual con UAC.
@@ -57,8 +57,8 @@ ctest --test-dir build_release --output-on-failure
 
 Repetir con `build_debug` y `-DCMAKE_BUILD_TYPE=Debug`. Las pruebas se ejecutan siempre en ambas configuraciones.
 
-- **CTest (20):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `ShiftCloseoutTest`, `ReportsRangeTest`, `TicketPrintingTest`, `DataDirPolicyTest`, `PackageTest` (solo en Release; en Debug queda omitida), `StartupTest`, `LoginLockoutTest`, `AuthorizationTest`, `StartupTimingSmokeTest`, `Sha256Test`, `HashMemorySmokeTest`, `InstallerTest` (solo en Release con Inno Setup; si no, omitida), `AutoBackupTest`, `PromotionsTest`, `UpdateTest` y `EndSessionTest` (solo en Release).
-- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`, `test_t2_touch_targets.py`, `test_t4_numeric_keypad.py`, `test_t5_fullscreen.py`, `test_t6_backups.py`, `test_t7_updates.py`, `test_t10_restock_bar.py`, `test_t11_products_recipes.py`, `test_t12_discounts_stock.py`. Válidas con Windows al 100 y al 125 % (módulo común `tests/gui_dpi.py`); con otro escalado se detienen. No deben correr a la vez que CTest, porque `EndSessionTest` también abre el programa. Las pantallas de T8 a T12 se verificaron al 125 %; falta su pasada al 100 %. `test_f1_roles_panel.py` falla hasta T13: espera 21 permisos y B15 añadió el 22.º.
+- **CTest (21):** `ContractsTest`, `StorageTest`, `BackupTest`, `ReportsTest`, `ShiftCloseoutTest`, `ReportsRangeTest`, `TicketPrintingTest`, `DataDirPolicyTest`, `PackageTest` (solo en Release; en Debug queda omitida), `StartupTest`, `LoginLockoutTest`, `AuthorizationTest`, `StartupTimingSmokeTest`, `Sha256Test`, `HashMemorySmokeTest`, `InstallerTest` (solo en Release con Inno Setup; si no, omitida), `AutoBackupTest`, `PromotionsTest`, `ProductStockStatusTest`, `UpdateTest` y `EndSessionTest` (solo en Release).
+- **Pruebas con el ejecutable real** (abren ventanas; una a la vez): `tests/test_i1_integration.py`, `test_i2_integration.py`, `test_fe08_fe09_visual_integration.py`, `test_f1_roles_panel.py`, `test_f2_audit_log.py`, `test_f2b_subnav.py`, `test_f7_ingredients_panel.py`, `test_t1_touch_profile.py`, `test_t2_touch_targets.py`, `test_t4_numeric_keypad.py`, `test_t5_fullscreen.py`, `test_t6_backups.py`, `test_t7_updates.py`, `test_t10_restock_bar.py`, `test_t11_products_recipes.py`, `test_t12_discounts_stock.py`, `test_t13_promotions_combos.py`. Válidas con Windows al 100 y al 125 % (módulo común `tests/gui_dpi.py`); con otro escalado se detienen. No deben correr a la vez que CTest, porque `EndSessionTest` también abre el programa. Las pantallas de T8 a T13 se verificaron al 125 %; falta su pasada al 100 %.
 - **Capturas:** `tests/capture_visual_qa.py` las deja en `qa_visual/screenshots/`.
 
 Generar el paquete portable (solo desde Release):
