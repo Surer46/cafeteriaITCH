@@ -792,6 +792,102 @@ def main():
             time.sleep(0.35)
         capture_window(hwnd_main, os.path.join(out_dir, "30_pos_discount.png"))
 
+        # CAPTURAS 34, 35, 36 (T14): Corte con arqueo, Historial de cortes y Reportes
+        btn_cr_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Caja y Reportes" in t), None)
+        assert btn_cr_qa is not None, "Botón Caja y Reportes no encontrado para T14"
+        _f7_click_btn(btn_cr_qa)
+        time.sleep(0.35)
+        btn_ct_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Caja y turnos"), None)
+        if btn_ct_qa:
+            _f7_click_btn(btn_ct_qa)
+            time.sleep(0.35)
+
+        def _qa_is_desc(child_h, anc_h):
+            cur = child_h
+            while cur:
+                if cur == anc_h:
+                    return True
+                cur = user32.GetParent(cur)
+            return False
+
+        def _qa_find_edits_in(parent_h):
+            return sorted(
+                [(h, get_rect(h)) for (h, c, _t) in get_child_controls(hwnd_main)
+                 if c.lower() == "edit" and user32.IsWindowVisible(h) and (parent_h is None or _qa_is_desc(h, parent_h))],
+                key=lambda x: (x[1][1], x[1][0]),
+            )
+
+        btn_reg_mv = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Registrar movimiento"), None)
+        btn_close_sh_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Cerrar Turno de Caja" in t), None)
+        if btn_reg_mv and btn_close_sh_qa:
+            mv_card = user32.GetParent(btn_reg_mv)
+            co_scroll = user32.GetParent(btn_close_sh_qa)
+            mv_edits = _qa_find_edits_in(mv_card)
+            if len(mv_edits) >= 2:
+                set_text(mv_edits[0][0], "150.00")
+                set_text(mv_edits[1][0], "Cambio en billetes")
+                _f7_click_btn(btn_reg_mv)
+                time.sleep(0.3)
+                btn_out_mv = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Salida de efectivo"), None)
+                if btn_out_mv:
+                    _f7_click_btn(btn_out_mv)
+                    time.sleep(0.15)
+                set_text(mv_edits[0][0], "40.00")
+                set_text(mv_edits[1][0], "Compra de hielo")
+                _f7_click_btn(btn_reg_mv)
+                time.sleep(0.35)
+            co_edits = _qa_find_edits_in(co_scroll)
+            if co_edits:
+                set_text(co_edits[0][0], "650.00")
+                time.sleep(0.25)
+            capture_window(hwnd_main, os.path.join(out_dir, "34_cash_closeout.png"))
+
+            # Cerrar turno para mostrar historial en captura 35
+            if len(co_edits) >= 2:
+                set_text(co_edits[1][0], "Arqueo QA")
+            post_click_button(btn_close_sh_qa)
+            time.sleep(0.45)
+            dlg_cfm = find_windows_by_pid(proc.pid, "Confirmar Cierre de Turno")
+            if dlg_cfm:
+                b_yes = next((h for (h, c, t) in get_child_controls(dlg_cfm[0][0]) if c.lower() == "button" and ("Sí" in t or "Yes" in t)), None)
+                if b_yes:
+                    post_click_button(b_yes)
+                    time.sleep(0.55)
+            dlg_cls = find_windows_by_pid(proc.pid, "Turno Cerrado")
+            if dlg_cls:
+                b_ok = next((h for (h, c, _t) in get_child_controls(dlg_cls[0][0]) if c.lower() == "button"), None)
+                if b_ok:
+                    post_click_button(b_ok)
+                    time.sleep(0.4)
+
+            btn_hist_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Cortes anteriores"), None)
+            if btn_hist_qa:
+                _f7_click_btn(btn_hist_qa)
+                time.sleep(0.45)
+            capture_window(hwnd_main, os.path.join(out_dir, "35_cash_closeout_history.png"))
+
+            # Reabrir turno para que las capturas posteriores en POS tengan turno abierto
+            btn_cur_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Turno actual"), None)
+            if btn_cur_qa:
+                _f7_click_btn(btn_cur_qa)
+                time.sleep(0.35)
+            btn_reopen_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Abrir Turno de Caja" in t), None)
+            if btn_reopen_qa:
+                post_click_button(btn_reopen_qa)
+                time.sleep(0.55)
+                dlg_re = find_windows_by_pid(proc.pid, "Turno Abierto")
+                if dlg_re:
+                    b_re = next((h for (h, c, _t) in get_child_controls(dlg_re[0][0]) if c.lower() == "button"), None)
+                    if b_re:
+                        post_click_button(b_re)
+                        time.sleep(0.4)
+
+        btn_rep_qa = next((h for (h, t) in _f7_list_buttons(hwnd_main) if t == "Reportes"), None)
+        if btn_rep_qa:
+            _f7_click_btn(btn_rep_qa)
+            time.sleep(0.45)
+            capture_window(hwnd_main, os.path.join(out_dir, "36_reports.png"))
+
         # Volver a Inventario > Productos y recetas antes de restaurar Touch para no alterar pasos 15+
         btn_inv_back = next((h for (h, t) in _f7_list_buttons(hwnd_main) if "Inventario" in t), None)
         if btn_inv_back:

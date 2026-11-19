@@ -41,6 +41,12 @@ private:
         bool is_low{false};
     };
 
+    static void apply_stock_status(
+        StockEntryRow& row,
+        const std::string& stock_status,
+        std::int64_t stock_units,
+        const std::string& last_movement_at,
+        bool tracked);
     void build_ui();
     void update_permissions_ui();
     void apply_filters();

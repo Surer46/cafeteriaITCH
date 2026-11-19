@@ -512,17 +512,20 @@ def open_shift_ui(pid, hwnd_main, initial_cash="500.00"):
     dismiss_messagebox(pid, "Turno Abierto")
 
 
-def close_shift_ui(pid, hwnd_main, final_cash="500.00"):
+def close_shift_ui(pid, hwnd_main, final_cash="500.00", reason="Arqueo de turno"):
     open_section_and_subnav(hwnd_main, "Caja y Reportes", "Caja y turnos")
+    btn_close = wait_until(lambda: find_button(hwnd_main, text_contains="Cerrar Turno de Caja"), desc="Botón Cerrar Turno")
+    co_parent = user32.GetParent(btn_close)
     edits = wait_until(
         lambda: sorted(
-            [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+            [h for (h, c, _t) in enum_children(co_parent) if c.lower() == "edit" and user32.IsWindowVisible(h)],
             key=lambda h: get_rect(h)[1],
         ),
-        desc="Campo cierre Caja",
+        desc="Campos de arqueo Caja",
     )
     set_edit_text(edits[0], final_cash)
-    btn_close = wait_until(lambda: find_button(hwnd_main, text_contains="Cerrar Turno de Caja"), desc="Botón Cerrar Turno")
+    if len(edits) >= 2 and reason:
+        set_edit_text(edits[1], reason)
     click_hwnd(btn_close, settle=0.25)
     dismiss_yes_messagebox(pid, "Confirmar Cierre de Turno")
     return dismiss_messagebox(pid, "Turno Cerrado")

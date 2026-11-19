@@ -251,6 +251,8 @@ if(wxWidgets_FOUND)
         src/frontend/pos_panel.hpp
         src/frontend/cash_shift_panel.cpp
         src/frontend/cash_shift_panel.hpp
+        src/frontend/reports_panel.cpp
+        src/frontend/reports_panel.hpp
         src/frontend/audit_log_panel.cpp
         src/frontend/audit_log_panel.hpp
         src/frontend/inventory_ingredients_panel.cpp

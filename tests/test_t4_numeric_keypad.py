@@ -798,8 +798,12 @@ def run_t4_suite(exe_path, build_label):
             click_sidebar_section(hwnd_main, "Caja y Reportes")
             click_subnav(hwnd_main, "Caja y turnos")
             time.sleep(0.25)
-            cash_edits_open = [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)]
             btn_close_shift = next(h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and "Cerrar Turno" in t)
+            co_scroll = user32.GetParent(btn_close_shift)
+            cash_edits_open = sorted(
+                [h for (h, c, _t) in enum_children(co_scroll) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+                key=lambda h: get_rect(h)[1],
+            )
             real_mouse_click_ctrl(cash_edits_open[0], hwnd_main)
             assert_keypad_geometry(
                 hwnd_main, hwnd_main, cash_edits_open[0],
@@ -808,6 +812,8 @@ def run_t4_suite(exe_path, build_label):
             )
             enter_number_via_keypad(hwnd_main, hwnd_main, ["Limpiar", "2", "7", "0", ".", "0", "0"])
             assert get_edit_text(cash_edits_open[0]) == "270.00"
+            if len(cash_edits_open) >= 2:
+                set_edit_text(cash_edits_open[1], "Diferencia de prueba T4")
             real_mouse_click_ctrl(btn_close_shift, hwnd_main, settle=0.2)
             dismiss_messagebox(proc.pid, "Confirmar Cierre de Turno", btn_text_pref="Sí")
             dismiss_messagebox(proc.pid, "Turno Cerrado")

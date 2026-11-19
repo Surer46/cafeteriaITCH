@@ -81,7 +81,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta (teclado) | button | Cancelar pedido | 258.4x48.0 | OK
   Venta (teclado) | list_row | SysListView32#0 (1 filas) | 615.2x43.2 | OK
 
-=== Caja y turnos (total=10, marcados=0) ===
+=== Caja y turnos (total=12, marcados=0) ===
   Caja y turnos | button | Estándar | 137.6x48.0 | OK
   Caja y turnos | button | Punto de Venta | 220.0x56.0 | OK
   Caja y turnos | button | Inventario | 220.0x56.0 | OK
@@ -90,10 +90,12 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos | button | Caja y turnos | 108.0x48.0 | OK
   Caja y turnos | button | Bitácora | 74.4x48.0 | OK
   Caja y turnos | button | Reportes | 79.2x48.0 | OK
+  Caja y turnos | button | Turno actual | 120.0x48.0 | OK
+  Caja y turnos | button | Cortes anteriores | 150.4x48.0 | OK
   Caja y turnos | edit | <edit> | 140.0x48.0 | OK
   Caja y turnos | button | Abrir Turno de Caja | 238.4x48.0 | OK
 
-=== Caja y turnos (teclado) (total=24, marcados=0) ===
+=== Caja y turnos (teclado) (total=26, marcados=0) ===
   Caja y turnos (teclado) | button | Estándar | 137.6x48.0 | OK
   Caja y turnos (teclado) | button | Punto de Venta | 220.0x56.0 | OK
   Caja y turnos (teclado) | button | Inventario | 220.0x56.0 | OK
@@ -116,10 +118,12 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos (teclado) | button | Borrar | 88.0x64.0 | OK
   Caja y turnos (teclado) | button | Limpiar | 88.0x64.0 | OK
   Caja y turnos (teclado) | button | Listo | 88.0x136.0 | OK
+  Caja y turnos (teclado) | button | Turno actual | 120.0x48.0 | OK
+  Caja y turnos (teclado) | button | Cortes anteriores | 150.4x48.0 | OK
   Caja y turnos (teclado) | edit | <edit> | 140.0x48.0 | OK
   Caja y turnos (teclado) | button | Abrir Turno de Caja | 238.4x48.0 | OK
 
-=== Caja y turnos (abierto) (total=10, marcados=0) ===
+=== Caja y turnos (abierto) (total=19, marcados=0) ===
   Caja y turnos (abierto) | button | Estándar | 137.6x48.0 | OK
   Caja y turnos (abierto) | button | Punto de Venta | 220.0x56.0 | OK
   Caja y turnos (abierto) | button | Inventario | 220.0x56.0 | OK
@@ -128,10 +132,19 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos (abierto) | button | Caja y turnos | 108.0x48.0 | OK
   Caja y turnos (abierto) | button | Bitácora | 74.4x48.0 | OK
   Caja y turnos (abierto) | button | Reportes | 79.2x48.0 | OK
-  Caja y turnos (abierto) | edit | <edit> | 140.0x48.0 | OK
-  Caja y turnos (abierto) | button | Cerrar Turno de Caja | 224.8x48.0 | OK
+  Caja y turnos (abierto) | button | Turno actual | 120.0x48.0 | OK
+  Caja y turnos (abierto) | button | Cortes anteriores | 150.4x48.0 | OK
+  Caja y turnos (abierto) | button | Actualizar | 104.8x48.0 | OK
+  Caja y turnos (abierto) | button | Entrada de efectivo | 198.4x48.0 | OK
+  Caja y turnos (abierto) | button | Salida de efectivo | 204.8x48.0 | OK
+  Caja y turnos (abierto) | edit | <edit> | 128.8x48.0 | OK
+  Caja y turnos (abierto) | edit | <edit> | 272.8x48.0 | OK
+  Caja y turnos (abierto) | button | Registrar movimiento | 179.2x48.0 | OK
+  Caja y turnos (abierto) | edit | <edit> | 461.6x48.0 | OK
+  Caja y turnos (abierto) | edit | <edit> | 461.6x48.0 | OK
+  Caja y turnos (abierto) | button | Cerrar Turno de Caja | 461.6x48.0 | OK
 
-=== Caja y turnos (abierto, teclado) (total=24, marcados=0) ===
+=== Caja y turnos (abierto, teclado) (total=33, marcados=0) ===
   Caja y turnos (abierto, teclado) | button | Estándar | 137.6x48.0 | OK
   Caja y turnos (abierto, teclado) | button | Punto de Venta | 220.0x56.0 | OK
   Caja y turnos (abierto, teclado) | button | Inventario | 220.0x56.0 | OK
@@ -154,8 +167,70 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos (abierto, teclado) | button | Borrar | 88.0x64.0 | OK
   Caja y turnos (abierto, teclado) | button | Limpiar | 88.0x64.0 | OK
   Caja y turnos (abierto, teclado) | button | Listo | 88.0x136.0 | OK
-  Caja y turnos (abierto, teclado) | edit | <edit> | 140.0x48.0 | OK
-  Caja y turnos (abierto, teclado) | button | Cerrar Turno de Caja | 224.8x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Turno actual | 120.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Cortes anteriores | 150.4x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Actualizar | 104.8x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Entrada de efectivo | 198.4x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Salida de efectivo | 204.8x48.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 128.8x48.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 272.8x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Registrar movimiento | 179.2x48.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 461.6x48.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 461.6x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Cerrar Turno de Caja | 461.6x48.0 | OK
+
+=== Corte (teclado) (total=33, marcados=0) ===
+  Corte (teclado) | button | Estándar | 137.6x48.0 | OK
+  Corte (teclado) | button | Punto de Venta | 220.0x56.0 | OK
+  Corte (teclado) | button | Inventario | 220.0x56.0 | OK
+  Corte (teclado) | button | Caja y Reportes | 220.0x56.0 | OK
+  Corte (teclado) | button | BackOffice | 220.0x56.0 | OK
+  Corte (teclado) | button | Caja y turnos | 108.0x48.0 | OK
+  Corte (teclado) | button | Bitácora | 74.4x48.0 | OK
+  Corte (teclado) | button | Reportes | 79.2x48.0 | OK
+  Corte (teclado) | button | 0 | 136.0x64.0 | OK
+  Corte (teclado) | button | 1 | 64.0x64.0 | OK
+  Corte (teclado) | button | 2 | 64.0x64.0 | OK
+  Corte (teclado) | button | 3 | 64.0x64.0 | OK
+  Corte (teclado) | button | 4 | 64.0x64.0 | OK
+  Corte (teclado) | button | 5 | 64.0x64.0 | OK
+  Corte (teclado) | button | 6 | 64.0x64.0 | OK
+  Corte (teclado) | button | 7 | 64.0x64.0 | OK
+  Corte (teclado) | button | 8 | 64.0x64.0 | OK
+  Corte (teclado) | button | 9 | 64.0x64.0 | OK
+  Corte (teclado) | button | . | 64.0x64.0 | OK
+  Corte (teclado) | button | Borrar | 88.0x64.0 | OK
+  Corte (teclado) | button | Limpiar | 88.0x64.0 | OK
+  Corte (teclado) | button | Listo | 88.0x136.0 | OK
+  Corte (teclado) | button | Turno actual | 120.0x48.0 | OK
+  Corte (teclado) | button | Cortes anteriores | 150.4x48.0 | OK
+  Corte (teclado) | button | Actualizar | 104.8x48.0 | OK
+  Corte (teclado) | button | Entrada de efectivo | 198.4x48.0 | OK
+  Corte (teclado) | button | Salida de efectivo | 204.8x48.0 | OK
+  Corte (teclado) | edit | <edit> | 128.8x48.0 | OK
+  Corte (teclado) | edit | <edit> | 272.8x48.0 | OK
+  Corte (teclado) | button | Registrar movimiento | 179.2x48.0 | OK
+  Corte (teclado) | edit | <edit> | 461.6x48.0 | OK
+  Corte (teclado) | edit | <edit> | 461.6x48.0 | OK
+  Corte (teclado) | button | Cerrar Turno de Caja | 461.6x48.0 | OK
+
+=== Historial de cortes (total=16, marcados=0) ===
+  Historial de cortes | button | Estándar | 137.6x48.0 | OK
+  Historial de cortes | button | Punto de Venta | 220.0x56.0 | OK
+  Historial de cortes | button | Inventario | 220.0x56.0 | OK
+  Historial de cortes | button | Caja y Reportes | 220.0x56.0 | OK
+  Historial de cortes | button | BackOffice | 220.0x56.0 | OK
+  Historial de cortes | button | Caja y turnos | 108.0x48.0 | OK
+  Historial de cortes | button | Bitácora | 74.4x48.0 | OK
+  Historial de cortes | button | Reportes | 79.2x48.0 | OK
+  Historial de cortes | button | Turno actual | 120.0x48.0 | OK
+  Historial de cortes | button | Cortes anteriores | 150.4x48.0 | OK
+  Historial de cortes | button | Hoy | 75.2x48.0 | OK
+  Historial de cortes | button | Esta semana | 118.4x48.0 | OK
+  Historial de cortes | button | Este mes | 95.2x48.0 | OK
+  Historial de cortes | button | Buscar | 95.2x48.0 | OK
+  Historial de cortes | edit | <edit> | 112.0x48.0 | OK
+  Historial de cortes | edit | <edit> | 112.0x48.0 | OK
 
 === Bitácora (total=13, marcados=0) ===
   Bitácora | button | Estándar | 137.6x48.0 | OK
@@ -173,6 +248,27 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Bitácora | edit | <edit> | 120.0x48.0 | OK
   Bitácora | list_row | SysListView32#0 (4 filas) | 864.8x43.2 | OK
   Bitácora | popup_option | Bitacora:TipoEvento (rows=5) | h_opt=44.0 (popup=220.0) | OK
+
+=== Reportes (total=18, marcados=0) ===
+  Reportes | button | Estándar | 137.6x48.0 | OK
+  Reportes | button | Punto de Venta | 220.0x56.0 | OK
+  Reportes | button | Inventario | 220.0x56.0 | OK
+  Reportes | button | Caja y Reportes | 220.0x56.0 | OK
+  Reportes | button | BackOffice | 220.0x56.0 | OK
+  Reportes | button | Caja y turnos | 108.0x48.0 | OK
+  Reportes | button | Bitácora | 74.4x48.0 | OK
+  Reportes | button | Reportes | 79.2x48.0 | OK
+  Reportes | switch/combo | comboBox | 240.0x48.0 | OK
+  Reportes | button | Consultar | 110.4x48.0 | OK
+  Reportes | button | Exportar a CSV | 144.8x48.0 | OK
+  Reportes | button | Hoy | 68.0x48.0 | OK
+  Reportes | button | Ayer | 72.0x48.0 | OK
+  Reportes | button | Esta semana | 118.4x48.0 | OK
+  Reportes | button | Este mes | 92.0x48.0 | OK
+  Reportes | button | Mes pasado | 113.6x48.0 | OK
+  Reportes | edit | <edit> | 110.4x48.0 | OK
+  Reportes | edit | <edit> | 110.4x48.0 | OK
+  Reportes | popup_option | Reportes:Tipo (rows=7) | h_opt=44.0 (popup=308.0) | OK
 
 === Usuarios y cuentas (total=14, marcados=0) ===
   Usuarios y cuentas | button | Estándar | 137.6x48.0 | OK

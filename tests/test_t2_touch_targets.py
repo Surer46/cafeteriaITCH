@@ -548,6 +548,41 @@ def run_suite(label, exe_path, write_audit=False):
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Caja y turnos (abierto, teclado)", scale)
         assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Caja final"
         record_audit("Caja y turnos (abierto, teclado)", items, overlaps, lrows)
+        btn_listo_m = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Listo"), None)
+        if btn_listo_m:
+            click_button(btn_listo_m)
+            time.sleep(0.2)
+
+        # --- 2c. Corte (teclado en Efectivo contado) + Historial de cortes ---
+        btn_close_t2 = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and "Cerrar Turno" in t), None)
+        if btn_close_t2:
+            co_scroll_t2 = user32.GetParent(btn_close_t2)
+            co_edits_t2 = sorted(
+                [h for (h, c, _t) in enum_children(co_scroll_t2) if c.lower() == "edit" and user32.IsWindowVisible(h)],
+                key=lambda h: get_rect(h)[1],
+            )
+            if co_edits_t2:
+                click_control_at(co_edits_t2[0])
+                time.sleep(0.25)
+                items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Corte (teclado)", scale)
+                assert any(it["label"] == "Listo" for it in items), "Teclado numérico no visible en Corte"
+                record_audit("Corte (teclado)", items, overlaps, lrows)
+                btn_listo_co = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Listo"), None)
+                if btn_listo_co:
+                    click_button(btn_listo_co)
+                    time.sleep(0.2)
+
+        btn_hist_tab = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Cortes anteriores"), None)
+        assert btn_hist_tab is not None, "Pestaña 'Cortes anteriores' no encontrada"
+        click_button(btn_hist_tab)
+        time.sleep(0.35)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Historial de cortes", scale)
+        record_audit("Historial de cortes", items, overlaps, lrows)
+
+        btn_cur_tab = next((h for (h, c, t) in enum_children(hwnd_main) if c.lower() == "button" and user32.IsWindowVisible(h) and t == "Turno actual"), None)
+        if btn_cur_tab:
+            click_button(btn_cur_tab)
+            time.sleep(0.25)
 
         # --- 3. Bitacora (con filas + desplegable abierta) ---
         click_subnav(hwnd_main, "Bitácora")
@@ -560,6 +595,15 @@ def run_suite(label, exe_path, write_audit=False):
         pop_audit = audit_combo_dropdown(p2.pid, hwnd_main, cb_audit, "Bitacora:TipoEvento", ev_cnt, scale)
         items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Bitácora", scale)
         record_audit("Bitácora", items, overlaps, lrows, [pop_audit])
+
+        # --- 3b. Reportes (selector + presets + tabla) ---
+        click_subnav(hwnd_main, "Reportes")
+        time.sleep(0.45)
+        cb_rep = next((h for (h, c, t) in enum_children(hwnd_main) if user32.IsWindowVisible(h) and ("combobox" in c.lower() or t == "comboBox")), None)
+        assert cb_rep is not None, "Selector de Reportes no encontrado"
+        pop_rep = audit_combo_dropdown(p2.pid, hwnd_main, cb_rep, "Reportes:Tipo", 7, scale)
+        items, overlaps, lrows = audit_window_touch_targets(hwnd_main, "Reportes", scale)
+        record_audit("Reportes", items, overlaps, lrows, [pop_rep])
 
         # --- 4. Usuarios y cuentas (inicial + usuario seleccionado + Nuevo Usuario) ---
         click_sidebar_section(hwnd_main, "BackOffice")

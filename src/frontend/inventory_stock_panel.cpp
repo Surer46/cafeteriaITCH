@@ -251,6 +251,31 @@ void InventoryStockPanel::build_ui() {
     Bind(wxEVT_SIZE, &InventoryStockPanel::on_size, this);
 }
 
+void InventoryStockPanel::apply_stock_status(
+    StockEntryRow& row,
+    const std::string& stock_status,
+    std::int64_t stock_units,
+    const std::string& last_movement_at,
+    bool tracked) {
+    if (!tracked) {
+        row.status_label = "Sin control";
+        row.last_movement = "—";
+        return;
+    }
+    if (stock_status == "OUT" || (stock_status.empty() && stock_units <= 0)) {
+        row.status_label = "Agotado";
+        row.is_out = true;
+        row.is_low_or_out = true;
+    } else if (stock_status == "LOW") {
+        row.status_label = "Poco";
+        row.is_low = true;
+        row.is_low_or_out = true;
+    } else {
+        row.status_label = "Suficiente";
+    }
+    row.last_movement = last_movement_at.empty() ? "Sin movimientos" : last_movement_at;
+}
+
 void InventoryStockPanel::refresh_data() {
     if (destroying_ || IsBeingDeleted()) return;
     can_view_ = account_service_ && account_service_->has_permission("inventory.view");
@@ -283,18 +308,7 @@ void InventoryStockPanel::refresh_data() {
         row.name = ing.name;
         row.type_label = "Ingrediente";
         row.stock_label = format_stock_ingredient_readable(ing.current_stock_base, ing.unit_dimension);
-        if (ing.stock_status == "OUT") {
-            row.status_label = "Agotado";
-            row.is_out = true;
-            row.is_low_or_out = true;
-        } else if (ing.stock_status == "LOW") {
-            row.status_label = "Poco";
-            row.is_low = true;
-            row.is_low_or_out = true;
-        } else {
-            row.status_label = "Suficiente";
-        }
-        row.last_movement = ing.last_movement_at.empty() ? "Sin movimientos" : ing.last_movement_at;
+        apply_stock_status(row, ing.stock_status, ing.current_stock_base, ing.last_movement_at, true);
         all_rows_.push_back(std::move(row));
     }
 
@@ -308,35 +322,20 @@ void InventoryStockPanel::refresh_data() {
     for (const auto& p : prod_res.value()) {
         StockEntryRow row;
         row.name = p.name;
-        row.last_movement = "—";
         if (p.is_combo) {
             row.type_label = "Combo";
-            row.stock_label = format_portions_readable(p.stock_units);
-            row.is_out = (p.stock_units <= 0);
-            row.is_low_or_out = row.is_out;
-            row.status_label = row.is_out ? "Agotado" : "Suficiente";
+            row.stock_label = p.stock_tracked
+                ? format_portions_readable(p.stock_units)
+                : (p.stock_units > 0 ? format_portions_readable(p.stock_units) : "Sin control de existencia");
+            apply_stock_status(row, p.stock_status, p.stock_units, p.last_movement_at, p.stock_tracked);
         } else if (p.is_prepared) {
             row.type_label = "Preparado";
-            if (!p.stock_tracked) {
-                row.stock_label = "Sin control de existencia";
-                row.status_label = "Sin control";
-            } else {
-                row.stock_label = format_portions_readable(p.stock_units);
-                row.is_out = (p.stock_units <= 0);
-                row.is_low_or_out = row.is_out;
-                row.status_label = row.is_out ? "Agotado" : "Suficiente";
-            }
+            row.stock_label = p.stock_tracked ? format_portions_readable(p.stock_units) : "Sin control de existencia";
+            apply_stock_status(row, p.stock_status, p.stock_units, p.last_movement_at, p.stock_tracked);
         } else {
             row.type_label = "Directo";
-            if (!p.stock_tracked) {
-                row.stock_label = "Sin control de existencia";
-                row.status_label = "Sin control";
-            } else {
-                row.stock_label = format_pieces_readable(p.stock_units);
-                row.is_out = (p.stock_units <= 0);
-                row.is_low_or_out = row.is_out;
-                row.status_label = row.is_out ? "Agotado" : "Suficiente";
-            }
+            row.stock_label = p.stock_tracked ? format_pieces_readable(p.stock_units) : "Sin control de existencia";
+            apply_stock_status(row, p.stock_status, p.stock_units, p.last_movement_at, p.stock_tracked);
         }
         all_rows_.push_back(std::move(row));
     }

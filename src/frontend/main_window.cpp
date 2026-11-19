@@ -8,6 +8,7 @@
 #include "src/frontend/update_notes_dialog.hpp"
 #include "src/frontend/pos_panel.hpp"
 #include "src/frontend/cash_shift_panel.hpp"
+#include "src/frontend/reports_panel.hpp"
 #include "src/frontend/audit_log_panel.hpp"
 #include "src/frontend/inventory_ingredients_panel.hpp"
 #include "src/frontend/inventory_restock_panel.hpp"
@@ -351,6 +352,9 @@ void MainWindow::update_content_view() {
         });
     } else if (current_section_ == SectionId::CashAndReports && current_subsection_ == "Bitácora") {
         current_view_ = new AuditLogPanel(content_container_, services_.account_service);
+    } else if (current_section_ == SectionId::CashAndReports && current_subsection_ == "Reportes") {
+        current_view_ = new ReportsPanel(
+            content_container_, services_.report_service, services_.account_service);
     } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Usuarios y cuentas") {
         current_view_ = new BackofficeUsersPanel(content_container_, services_.account_service);
     } else if (current_section_ == SectionId::BackOffice && current_subsection_ == "Roles y permisos") {
