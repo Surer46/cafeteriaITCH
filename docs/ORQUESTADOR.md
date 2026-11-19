@@ -169,7 +169,17 @@ otas-pc.md`. `ctest` vuelve a estar disponible, pero **no correr `UpdateTest` ha
 
 ## Reanudar agentes
 
-- **Pausa del 2026-11-18, mediodía (retomar aquí):**
+- **Pausa del 2026-11-19 (retomar aquí):**
+  - **`main` en `7bcb348`** (más este registro), con T14 + T14b aceptados: **I3 e I4 completos en software**. 13 commits sin subir a GitHub desde `f3c6481`.
+  - **Claude es otra vez el único orquestador**; Neon solo hace diagnósticos a pedido del usuario (`docs/manual-orquestador.md`, sección 1).
+  - **B17** (prompt de Neon aprobado, `Prompts/prompts-2026-11-18-B17.md`): el worktree del backend ya está en la rama `backend/b17` (creada desde `a17f451`), sin cambios. Al volver: ver si Claude Code Terminal entregó su plan y responderlo; vigilar que la copia por tandas de `restore_from` no cambie cómo restaura hoy y que la inyección de fallo exista solo en CTest.
+  - **T14c redactado y sin pegar** (sección 2 de `prompts-para-pegar.md`, `Prompts/prompts-2026-11-19-T14c.md`): uso de memoria liberada en `numeric_keypad.cpp` y esperas de `test_f2_audit_log` (debe pasar cinco veces seguidas). Auditarlo al volver.
+  - **Después:** I7 (pantalla completa sin espacios vacíos, alto de la lista de permisos de I6, notas de espacio de T11).
+  - **Compilar con `--parallel 1`**: la PC tiene poca memoria virtual libre y `build_debug` dio OOM con `--parallel 2`.
+  - **Pendientes:** pasada al 100 % de T8 a T14; claves de firma y prueba manual con UAC; preguntas abiertas al usuario anotadas en la entrada de B17.
+  - **Reanudar:** `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c` (Gemini, frontend) y `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f` (en el worktree del backend). Orquestador: conversación `6fbbf53f-3bf2-4bac-8571-90797a3e1b3e`. La conversación de Neon no está en `.gemini\antigravity-cli\conversations` (probablemente se abrió fuera de la CLI): su identificador no quedó registrado.
+  - **Copia de las conversaciones** en `C:\Cafeteria_ITCH\respaldo-conversaciones\2026-11-19\`.
+- **Pausa del 2026-11-18, mediodía:**
   - **`main` en `35968e1`** (más este registro), con T13 aceptado: **I3 completo en software**.
   - **T14 redactado y sin pegar** (sección 1 de `prompts-para-pegar.md`, `Prompts/prompts-2026-11-18-T14.md`): corte con arqueo, historial de cortes y Reportes con CSV. Con él se completa I4 en software.
   - **B16 aceptado e integrado después de esta pausa** (ver la entrada de B16 arriba).
