@@ -68,7 +68,7 @@ Las decisiones de negocio no se inventan: si falta una, se pregunta al usuario y
 
 ## 5. Integración y Git
 
-- Durante la prueba, solo el supervisor hace commits, merges y subidas.
+- Solo Claude (orquestador) hace commits, merges y subidas; Neon (auditor) y los ejecutores frontend no hacen commits, y el backend solo en su rama.
 - Backend: commit del ejecutor en `backend/<bloque>`; `git merge --no-ff backend/<bloque>` en `main` con mensaje «Merge branch 'backend/<bloque>' (…)»; verificar el conjunto.
 - Frontend: un commit del orquestador por bloque aceptado.
 - No integrar en `main` mientras Gemini edita `main`.
