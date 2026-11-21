@@ -206,6 +206,8 @@ void BackofficeUpdatesPanel::setup_ui() {
     pnl_error_->Hide();
     st_sizer->Add(pnl_error_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
 
+    st_sizer->AddStretchSpacer(1);
+
     btn_check_now_ = new wxButton(card_status_, wxID_ANY, wxT("Buscar ahora"));
     Theme::style_button_primary(btn_check_now_, prim_h);
     Theme::setup_button_icon(btn_check_now_, "search", wxSize(18, 18), Theme::ColorSurface);
@@ -214,7 +216,6 @@ void BackofficeUpdatesPanel::setup_ui() {
     st_sizer->Add(btn_check_now_, 0, wxALL, FromDIP(16));
 
     card_status_->SetSizer(st_sizer);
-    scroll_sizer_->Add(card_status_, 0, wxEXPAND | wxBOTTOM, gap);
 
     // =========================================================================
     // 2. Tarjeta: Versión nueva disponible / descarga / aceptada
@@ -288,6 +289,7 @@ void BackofficeUpdatesPanel::setup_ui() {
     lbl_usb_desc_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_usb_desc_->Wrap(FromDIP(640));
     usb_sizer->Add(lbl_usb_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    usb_sizer->AddStretchSpacer(1);
 
     btn_usb_update_ = new wxButton(card_usb_, wxID_ANY, wxT("Actualizar desde un archivo (USB)"));
     Theme::style_button_secondary(btn_usb_update_, prim_h);
@@ -297,7 +299,11 @@ void BackofficeUpdatesPanel::setup_ui() {
     usb_sizer->Add(btn_usb_update_, 0, wxALL, FromDIP(16));
 
     card_usb_->SetSizer(usb_sizer);
-    scroll_sizer_->Add(card_usb_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+
+    cards_row_sizer_ = new wxBoxSizer(wxVERTICAL);
+    cards_row_sizer_->Add(card_status_, 0, wxEXPAND | wxBOTTOM, gap);
+    cards_row_sizer_->Add(card_usb_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+    scroll_sizer_->Add(cards_row_sizer_, 0, wxEXPAND);
 
     scroll_->SetSizer(scroll_sizer_);
     scroll_->Bind(wxEVT_SIZE, [this](wxSizeEvent& ev) {
@@ -315,16 +321,40 @@ void BackofficeUpdatesPanel::update_scroll_layout() {
     }
     const wxSize client = scroll_->GetClientSize();
     const int avail_w = client.GetWidth();
+    const int gap = FromDIP(12);
+    const bool want_wide = (avail_w >= FromDIP(1100));
+
+    if (cards_row_sizer_ && (!layout_initialized_ || want_wide != wide_layout_)) {
+        layout_initialized_ = true;
+        wide_layout_ = want_wide;
+        cards_row_sizer_->Detach(card_status_);
+        cards_row_sizer_->Detach(card_usb_);
+        cards_row_sizer_->SetOrientation(wide_layout_ ? wxHORIZONTAL : wxVERTICAL);
+        if (wide_layout_) {
+            cards_row_sizer_->Add(card_status_, 1, wxEXPAND | wxRIGHT, gap);
+            cards_row_sizer_->Add(card_usb_, 1, wxEXPAND);
+        } else {
+            cards_row_sizer_->Add(card_status_, 0, wxEXPAND | wxBOTTOM, gap);
+            cards_row_sizer_->Add(card_usb_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+        }
+        if (auto* row_item = scroll_sizer_->GetItem(cards_row_sizer_)) {
+            row_item->SetProportion(wide_layout_ ? 1 : 0);
+        }
+    }
+
     if (avail_w > FromDIP(240)) {
         const int wrap_w = std::max(FromDIP(220), avail_w - FromDIP(64));
+        const int card_wrap_w = wide_layout_
+            ? std::max(FromDIP(220), (avail_w - gap) / 2 - FromDIP(48))
+            : wrap_w;
         if (lbl_check_result_) {
-            lbl_check_result_->Wrap(std::max(FromDIP(200), wrap_w - FromDIP(180)));
+            lbl_check_result_->Wrap(std::max(FromDIP(160), card_wrap_w - FromDIP(180)));
         }
         if (lbl_info_ && pnl_info_ && pnl_info_->IsShown()) {
-            lbl_info_->Wrap(wrap_w - FromDIP(24));
+            lbl_info_->Wrap(std::max(FromDIP(160), card_wrap_w - FromDIP(24)));
         }
         if (lbl_error_ && pnl_error_ && pnl_error_->IsShown()) {
-            lbl_error_->Wrap(wrap_w - FromDIP(24));
+            lbl_error_->Wrap(std::max(FromDIP(160), card_wrap_w - FromDIP(24)));
         }
         if (lbl_avail_summary_) {
             lbl_avail_summary_->Wrap(wrap_w);
@@ -333,7 +363,11 @@ void BackofficeUpdatesPanel::update_scroll_layout() {
             lbl_dl_error_->Wrap(wrap_w - FromDIP(24));
         }
         if (lbl_usb_desc_) {
-            lbl_usb_desc_->Wrap(wrap_w);
+            lbl_usb_desc_->SetLabel(
+                wxT("Si descargaste una versión nueva en otra computadora y la copiaste en una memoria USB, ")
+                wxT("puedes elegir los archivos aquí para dejarla lista e instalarla al cerrar el programa.")
+            );
+            lbl_usb_desc_->Wrap(card_wrap_w);
         }
         if (lbl_feedback_ && pnl_feedback_ && pnl_feedback_->IsShown()) {
             lbl_feedback_->Wrap(wrap_w);
@@ -349,7 +383,7 @@ void BackofficeUpdatesPanel::update_scroll_layout() {
     const wxSize min_sz = scroll_sizer_->GetMinSize();
     const int virt_w = std::max(client.GetWidth(), 0);
     const int virt_h = std::max(client.GetHeight(), min_sz.GetHeight());
-    scroll_->SetVirtualSize(virt_w, min_sz.GetHeight());
+    scroll_->SetVirtualSize(virt_w, wide_layout_ ? virt_h : min_sz.GetHeight());
     scroll_sizer_->SetDimension(scroll_->CalcScrolledPosition(wxPoint(0, 0)), wxSize(virt_w, virt_h));
     scroll_sizer_->Layout();
 }

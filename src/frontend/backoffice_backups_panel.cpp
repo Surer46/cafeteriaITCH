@@ -6,6 +6,7 @@
 #include <wx/filename.h>
 #include <wx/statline.h>
 #include <wx/stdpaths.h>
+#include <wx/wrapsizer.h>
 #include <algorithm>
 #include <cctype>
 #include <cstdlib>
@@ -357,7 +358,7 @@ void BackofficeBackupsPanel::setup_access_denied_ui() {
 }
 
 void BackofficeBackupsPanel::setup_ui() {
-    const int gap_card = FromDIP(12);
+    const int gap_card = FromDIP(Theme::is_touch() ? 8 : 10);
     const int btn_h = btn_height_for_profile();
     const int prim_h = primary_btn_height_for_profile();
     const int field_h = field_height_for_profile();
@@ -442,9 +443,9 @@ void BackofficeBackupsPanel::setup_ui() {
         auto* lbl_st_title = new wxStaticText(card_status_, wxID_ANY, wxT("Estado del respaldo"));
         lbl_st_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
         lbl_st_title->SetForegroundColour(Theme::ColorBrandDeep);
-        status_sizer->Add(lbl_st_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+        status_sizer->Add(lbl_st_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(Theme::is_touch() ? 10 : 14));
 
-        auto* st_grid = new wxFlexGridSizer(0, 2, FromDIP(8), FromDIP(14));
+        auto* st_grid = new wxFlexGridSizer(0, 2, FromDIP(Theme::is_touch() ? 4 : 6), FromDIP(14));
         st_grid->AddGrowableCol(1, 1);
 
         auto* lbl_k_date = new wxStaticText(card_status_, wxID_ANY, wxT("Último respaldo:"));
@@ -485,7 +486,7 @@ void BackofficeBackupsPanel::setup_ui() {
         auto_last_col->Add(lbl_auto_last_detail_, 0, wxEXPAND | wxTOP, FromDIP(2));
         st_grid->Add(auto_last_col, 1, wxEXPAND);
 
-        status_sizer->Add(st_grid, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+        status_sizer->Add(st_grid, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(Theme::is_touch() ? 8 : 12));
 
         pnl_last_error_ = new wxPanel(card_status_, wxID_ANY);
         pnl_last_error_->SetBackgroundColour(Theme::ColorErrorSoft);
@@ -554,10 +555,9 @@ void BackofficeBackupsPanel::setup_ui() {
         auto_text_col->Add(lbl_auto_desc_, 0, wxEXPAND | wxTOP, FromDIP(4));
 
         auto_row->Add(auto_text_col, 1, wxALIGN_CENTER_VERTICAL);
-        status_sizer->Add(auto_row, 0, wxEXPAND | wxALL, FromDIP(16));
+        status_sizer->Add(auto_row, 0, wxEXPAND | wxALL, FromDIP(Theme::is_touch() ? 10 : 14));
 
         card_status_->SetSizer(status_sizer);
-        scroll_sizer_->Add(card_status_, 0, wxEXPAND | wxBOTTOM, gap_card);
 
         // =====================================================================
         // 2. Tarjeta: Segunda carpeta o USB
@@ -569,7 +569,7 @@ void BackofficeBackupsPanel::setup_ui() {
         auto* lbl_sec_title = new wxStaticText(card_secondary_, wxID_ANY, wxT("Segunda carpeta o USB"));
         lbl_sec_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
         lbl_sec_title->SetForegroundColour(Theme::ColorBrandDeep);
-        sec_sizer->Add(lbl_sec_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+        sec_sizer->Add(lbl_sec_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(Theme::is_touch() ? 10 : 14));
 
         lbl_secondary_desc_ = new wxStaticText(
             card_secondary_,
@@ -579,7 +579,7 @@ void BackofficeBackupsPanel::setup_ui() {
         lbl_secondary_desc_->SetFont(Theme::get_font_body());
         lbl_secondary_desc_->SetForegroundColour(Theme::ColorTextSecondary);
         lbl_secondary_desc_->Wrap(FromDIP(640));
-        sec_sizer->Add(lbl_secondary_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+        sec_sizer->Add(lbl_secondary_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
 
         auto* sec_path_row = new wxBoxSizer(wxHORIZONTAL);
         auto* lbl_k_sec = new wxStaticText(card_secondary_, wxID_ANY, wxT("Carpeta elegida:"));
@@ -591,7 +591,7 @@ void BackofficeBackupsPanel::setup_ui() {
         lbl_secondary_dir_->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
         lbl_secondary_dir_->SetForegroundColour(Theme::ColorTextSecondary);
         sec_path_row->Add(lbl_secondary_dir_, 1, wxALIGN_CENTER_VERTICAL);
-        sec_sizer->Add(sec_path_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+        sec_sizer->Add(sec_path_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
 
         auto* sec_btn_row = new wxBoxSizer(wxHORIZONTAL);
         btn_choose_secondary_ = new wxButton(card_secondary_, wxID_ANY, wxT("Elegir carpeta"));
@@ -608,10 +608,14 @@ void BackofficeBackupsPanel::setup_ui() {
         btn_clear_secondary_->Enable(false);
         btn_clear_secondary_->Bind(wxEVT_BUTTON, &BackofficeBackupsPanel::on_clear_secondary_dir, this);
         sec_btn_row->Add(btn_clear_secondary_, 0);
-        sec_sizer->Add(sec_btn_row, 0, wxEXPAND | wxALL, FromDIP(16));
+        sec_sizer->AddStretchSpacer(1);
+        sec_sizer->Add(sec_btn_row, 0, wxEXPAND | wxALL, FromDIP(Theme::is_touch() ? 10 : 14));
 
         card_secondary_->SetSizer(sec_sizer);
-        scroll_sizer_->Add(card_secondary_, 0, wxEXPAND | wxBOTTOM, gap_card);
+        top_row_ = new wxBoxSizer(wxVERTICAL);
+        top_row_->Add(card_status_, 0, wxEXPAND | wxBOTTOM, gap_card);
+        top_row_->Add(card_secondary_, 0, wxEXPAND);
+        scroll_sizer_->Add(top_row_, 0, wxEXPAND | wxBOTTOM, gap_card);
 
         // =====================================================================
         // 3 y 4. Fila horizontal: Hacer respaldo ahora | Restaurar desde un respaldo
@@ -625,7 +629,7 @@ void BackofficeBackupsPanel::setup_ui() {
         auto* lbl_man_title = new wxStaticText(card_manual_, wxID_ANY, wxT("Hacer respaldo ahora"));
         lbl_man_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
         lbl_man_title->SetForegroundColour(Theme::ColorBrandDeep);
-        manual_sizer->Add(lbl_man_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
+        manual_sizer->Add(lbl_man_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(Theme::is_touch() ? 10 : 14));
 
         lbl_manual_desc_ = new wxStaticText(
             card_manual_,
@@ -635,7 +639,7 @@ void BackofficeBackupsPanel::setup_ui() {
         lbl_manual_desc_->SetFont(Theme::get_font_body());
         lbl_manual_desc_->SetForegroundColour(Theme::ColorTextSecondary);
         lbl_manual_desc_->Wrap(FromDIP(340));
-        manual_sizer->Add(lbl_manual_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
+        manual_sizer->Add(lbl_manual_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(Theme::is_touch() ? 6 : 10));
         manual_sizer->AddStretchSpacer(1);
 
         btn_backup_now_ = new wxButton(card_manual_, wxID_ANY, wxT("Hacer un respaldo ahora"));
@@ -643,7 +647,7 @@ void BackofficeBackupsPanel::setup_ui() {
         Theme::setup_button_icon(btn_backup_now_, "inventory_2", wxSize(20, 20), Theme::ColorSurface);
         Theme::ensure_button_min_size(btn_backup_now_, 240, prim_h);
         btn_backup_now_->Bind(wxEVT_BUTTON, &BackofficeBackupsPanel::on_backup_now, this);
-        manual_sizer->Add(btn_backup_now_, 0, wxALL, FromDIP(14));
+        manual_sizer->Add(btn_backup_now_, 0, wxALL, FromDIP(Theme::is_touch() ? 10 : 14));
 
         card_manual_->SetSizer(manual_sizer);
         actions_row->Add(card_manual_, 1, wxEXPAND | wxRIGHT, gap_card);
@@ -663,7 +667,7 @@ void BackofficeBackupsPanel::setup_ui() {
     auto* lbl_list_title = new wxStaticText(card_list_, wxID_ANY, wxT("Lista de respaldos"));
     lbl_list_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     lbl_list_title->SetForegroundColour(Theme::ColorBrandDeep);
-    list_card_sizer->Add(lbl_list_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    list_card_sizer->Add(lbl_list_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(Theme::is_touch() ? 10 : 14));
 
     lbl_list_desc_ = new wxStaticText(
         card_list_,
@@ -673,12 +677,12 @@ void BackofficeBackupsPanel::setup_ui() {
     lbl_list_desc_->SetFont(Theme::get_font_body());
     lbl_list_desc_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_list_desc_->Wrap(FromDIP(640));
-    list_card_sizer->Add(lbl_list_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+    list_card_sizer->Add(lbl_list_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
 
     lbl_list_summary_ = new wxStaticText(card_list_, wxID_ANY, wxT("Mostrando 0 respaldo(s)."));
     lbl_list_summary_->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_list_summary_->SetForegroundColour(Theme::ColorText);
-    list_card_sizer->Add(lbl_list_summary_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    list_card_sizer->Add(lbl_list_summary_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
 
     list_backups_ = new wxListCtrl(
         card_list_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL
@@ -699,7 +703,7 @@ void BackofficeBackupsPanel::setup_ui() {
     });
     list_backups_->Bind(wxEVT_LIST_ITEM_SELECTED, &BackofficeBackupsPanel::on_backup_list_selected, this);
     list_backups_->Bind(wxEVT_LIST_ITEM_DESELECTED, &BackofficeBackupsPanel::on_backup_list_selected, this);
-    list_card_sizer->Add(list_backups_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
+    list_card_sizer->Add(list_backups_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
 
     auto* list_btn_row = new wxBoxSizer(wxHORIZONTAL);
     btn_load_more_ = new wxButton(card_list_, wxID_ANY, wxT("Ver más"));
@@ -728,10 +732,9 @@ void BackofficeBackupsPanel::setup_ui() {
         lbl_list_restore_restricted_->SetForegroundColour(Theme::ColorTextSecondary);
         list_btn_row->Add(lbl_list_restore_restricted_, 1, wxALIGN_CENTER_VERTICAL);
     }
-    list_card_sizer->Add(list_btn_row, 0, wxEXPAND | wxALL, FromDIP(16));
+    list_card_sizer->Add(list_btn_row, 0, wxEXPAND | wxALL, FromDIP(Theme::is_touch() ? 10 : 14));
 
     card_list_->SetSizer(list_card_sizer);
-    scroll_sizer_->Add(card_list_, 0, wxEXPAND | wxBOTTOM, can_manage_ ? gap_card : FromDIP(4));
 
     if (can_manage_) {
         // =====================================================================
@@ -744,19 +747,19 @@ void BackofficeBackupsPanel::setup_ui() {
     auto* lbl_cl_title = new wxStaticText(card_cleanup_, wxID_ANY, wxT("Limpieza de respaldos antiguos"));
     lbl_cl_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     lbl_cl_title->SetForegroundColour(Theme::ColorBrandDeep);
-    cleanup_sizer->Add(lbl_cl_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    cleanup_sizer->Add(lbl_cl_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(Theme::is_touch() ? 10 : 14));
 
     lbl_cleanup_desc_ = new wxStaticText(
         card_cleanup_,
         wxID_ANY,
         cleanup_description_text()
     );
-    lbl_cleanup_desc_->SetFont(Theme::get_font_body());
+    lbl_cleanup_desc_->SetFont(Theme::get_font_small());
     lbl_cleanup_desc_->SetForegroundColour(Theme::ColorTextSecondary);
-    lbl_cleanup_desc_->Wrap(FromDIP(640));
-    cleanup_sizer->Add(lbl_cleanup_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    lbl_cleanup_desc_->Wrap(FromDIP(420));
+    cleanup_sizer->Add(lbl_cleanup_desc_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
 
-    auto* policy_row = new wxBoxSizer(wxHORIZONTAL);
+    auto* policy_row = new wxWrapSizer(wxHORIZONTAL, wxWRAPSIZER_DEFAULT_FLAGS);
 
     auto* col_n = new wxBoxSizer(wxVERTICAL);
     auto* lbl_n = new wxStaticText(card_cleanup_, wxID_ANY, wxT("Conservar al menos (respaldos):"));
@@ -764,11 +767,11 @@ void BackofficeBackupsPanel::setup_ui() {
     lbl_n->SetForegroundColour(Theme::ColorText);
     col_n->Add(lbl_n, 0, wxBOTTOM, FromDIP(4));
     box_keep_last_ = ui::make_text_field(
-        card_cleanup_, txt_keep_last_, field_h, 110, Theme::get_font_body(wxFONTWEIGHT_BOLD)
+        card_cleanup_, txt_keep_last_, field_h, 90, Theme::get_font_body(wxFONTWEIGHT_BOLD)
     );
     txt_keep_last_->Bind(wxEVT_TEXT, &BackofficeBackupsPanel::on_policy_field_edited, this);
     col_n->Add(box_keep_last_, 0);
-    policy_row->Add(col_n, 0, wxALIGN_BOTTOM | wxRIGHT, FromDIP(16));
+    policy_row->Add(col_n, 0, wxALIGN_BOTTOM | wxRIGHT | wxBOTTOM, FromDIP(8));
 
     auto* col_d = new wxBoxSizer(wxVERTICAL);
     auto* lbl_d = new wxStaticText(card_cleanup_, wxID_ANY, wxT("Y los de los últimos (días):"));
@@ -776,38 +779,38 @@ void BackofficeBackupsPanel::setup_ui() {
     lbl_d->SetForegroundColour(Theme::ColorText);
     col_d->Add(lbl_d, 0, wxBOTTOM, FromDIP(4));
     box_keep_days_ = ui::make_text_field(
-        card_cleanup_, txt_keep_days_, field_h, 110, Theme::get_font_body(wxFONTWEIGHT_BOLD)
+        card_cleanup_, txt_keep_days_, field_h, 90, Theme::get_font_body(wxFONTWEIGHT_BOLD)
     );
     txt_keep_days_->Bind(wxEVT_TEXT, &BackofficeBackupsPanel::on_policy_field_edited, this);
     col_d->Add(box_keep_days_, 0);
-    policy_row->Add(col_d, 0, wxALIGN_BOTTOM | wxRIGHT, FromDIP(16));
+    policy_row->Add(col_d, 0, wxALIGN_BOTTOM | wxRIGHT | wxBOTTOM, FromDIP(8));
 
     btn_save_policy_ = new wxButton(card_cleanup_, wxID_ANY, wxT("Guardar"));
     Theme::style_button_primary(btn_save_policy_, btn_h);
     Theme::setup_button_icon(btn_save_policy_, "check_circle", wxSize(18, 18), Theme::ColorSurface);
-    Theme::ensure_button_min_size(btn_save_policy_, 120, btn_h);
+    Theme::ensure_button_min_size(btn_save_policy_, 115, btn_h);
     btn_save_policy_->Bind(wxEVT_BUTTON, &BackofficeBackupsPanel::on_save_policy, this);
-    policy_row->Add(btn_save_policy_, 0, wxALIGN_BOTTOM);
+    policy_row->Add(btn_save_policy_, 0, wxALIGN_BOTTOM | wxBOTTOM, FromDIP(8));
 
-    cleanup_sizer->Add(policy_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    cleanup_sizer->Add(policy_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
 
-    auto* cleanup_btn_row = new wxBoxSizer(wxHORIZONTAL);
+    auto* cleanup_btn_row = new wxWrapSizer(wxHORIZONTAL, wxWRAPSIZER_DEFAULT_FLAGS);
     btn_preview_cleanup_ = new wxButton(card_cleanup_, wxID_ANY, wxT("Revisar qué se borraría"));
     Theme::style_button_secondary(btn_preview_cleanup_, btn_h);
     Theme::setup_button_icon(btn_preview_cleanup_, "search", wxSize(18, 18), Theme::ColorTextSecondary);
-    Theme::ensure_button_min_size(btn_preview_cleanup_, 220, btn_h);
+    Theme::ensure_button_min_size(btn_preview_cleanup_, 195, btn_h);
     btn_preview_cleanup_->Bind(wxEVT_BUTTON, &BackofficeBackupsPanel::on_preview_cleanup, this);
-    cleanup_btn_row->Add(btn_preview_cleanup_, 0, wxRIGHT, FromDIP(12));
+    cleanup_btn_row->Add(btn_preview_cleanup_, 0, wxRIGHT | wxBOTTOM, FromDIP(8));
 
     btn_execute_cleanup_ = new wxButton(card_cleanup_, wxID_ANY, wxT("Borrar respaldos antiguos"));
     Theme::style_button_destructive(btn_execute_cleanup_, btn_h);
     Theme::setup_button_icon(btn_execute_cleanup_, "delete", wxSize(18, 18), Theme::ColorSurface);
-    Theme::ensure_button_min_size(btn_execute_cleanup_, 220, btn_h);
+    Theme::ensure_button_min_size(btn_execute_cleanup_, 195, btn_h);
     btn_execute_cleanup_->Enable(false);
     btn_execute_cleanup_->Bind(wxEVT_BUTTON, &BackofficeBackupsPanel::on_execute_cleanup, this);
-    cleanup_btn_row->Add(btn_execute_cleanup_, 0);
+    cleanup_btn_row->Add(btn_execute_cleanup_, 0, wxBOTTOM, FromDIP(8));
 
-    cleanup_sizer->Add(cleanup_btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    cleanup_sizer->Add(cleanup_btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(2));
 
     lbl_cleanup_summary_ = new wxStaticText(
         card_cleanup_,
@@ -816,8 +819,8 @@ void BackofficeBackupsPanel::setup_ui() {
     );
     lbl_cleanup_summary_->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_cleanup_summary_->SetForegroundColour(Theme::ColorText);
-    lbl_cleanup_summary_->Wrap(FromDIP(640));
-    cleanup_sizer->Add(lbl_cleanup_summary_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    lbl_cleanup_summary_->Wrap(FromDIP(420));
+    cleanup_sizer->Add(lbl_cleanup_summary_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
 
     list_cleanup_ = new wxListCtrl(
         card_cleanup_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL
@@ -830,16 +833,24 @@ void BackofficeBackupsPanel::setup_ui() {
     list_cleanup_->InsertColumn(1, wxT("Carpeta"), wxLIST_FORMAT_LEFT, FromDIP(210));
     list_cleanup_->InsertColumn(2, wxT("Fecha"), wxLIST_FORMAT_LEFT, FromDIP(155));
     list_cleanup_->InsertColumn(3, wxT("Tamaño (MB)"), wxLIST_FORMAT_RIGHT, FromDIP(110));
-    list_cleanup_->SetMinSize(wxSize(-1, FromDIP(Theme::is_touch() ? 180 : 140)));
+    list_cleanup_->SetMinSize(wxSize(FromDIP(220), FromDIP(Theme::is_touch() ? 180 : 140)));
     list_cleanup_->Bind(wxEVT_SIZE, [this](wxSizeEvent& ev) {
         ev.Skip();
         auto_size_cleanup_columns();
     });
-    cleanup_sizer->Add(list_cleanup_, 0, wxEXPAND | wxALL, FromDIP(16));
+    cleanup_sizer->Add(list_cleanup_, 1, wxEXPAND | wxALL, FromDIP(10));
 
         card_cleanup_->SetSizer(cleanup_sizer);
-        scroll_sizer_->Add(card_cleanup_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
     }
+
+    bottom_row_ = new wxBoxSizer(wxVERTICAL);
+    if (card_cleanup_) {
+        bottom_row_->Add(card_list_, 0, wxEXPAND | wxBOTTOM, gap_card);
+        bottom_row_->Add(card_cleanup_, 0, wxEXPAND);
+    } else {
+        bottom_row_->Add(card_list_, 0, wxEXPAND);
+    }
+    scroll_sizer_->Add(bottom_row_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
 
     scroll_->SetSizer(scroll_sizer_);
     scroll_->Bind(wxEVT_SIZE, [this](wxSizeEvent& ev) {
@@ -904,9 +915,79 @@ void BackofficeBackupsPanel::update_scroll_layout() {
     }
     const wxSize client = scroll_->GetClientSize();
     const int avail_w = client.GetWidth();
+    const int gap_card = FromDIP(Theme::is_touch() ? 8 : 10);
+    const bool want_wide = (avail_w >= FromDIP(1100));
+
+    if (!layout_initialized_ || want_wide != wide_layout_) {
+        layout_initialized_ = true;
+        wide_layout_ = want_wide;
+        if (top_row_ && card_status_ && card_secondary_) {
+            top_row_->Detach(card_status_);
+            top_row_->Detach(card_secondary_);
+            top_row_->SetOrientation(wide_layout_ ? wxHORIZONTAL : wxVERTICAL);
+            if (wide_layout_) {
+                top_row_->Add(card_status_, 1, wxEXPAND | wxRIGHT, gap_card);
+                top_row_->Add(card_secondary_, 1, wxEXPAND);
+            } else {
+                top_row_->Add(card_status_, 0, wxEXPAND | wxBOTTOM, gap_card);
+                top_row_->Add(card_secondary_, 0, wxEXPAND);
+            }
+        }
+        if (bottom_row_ && card_list_) {
+            bottom_row_->Detach(card_list_);
+            if (card_cleanup_) {
+                bottom_row_->Detach(card_cleanup_);
+            }
+            bottom_row_->SetOrientation(wide_layout_ ? wxHORIZONTAL : wxVERTICAL);
+            if (list_backups_) {
+                list_backups_->SetMinSize(wxSize(
+                    FromDIP(220),
+                    FromDIP(wide_layout_ ? 70 : (Theme::is_touch() ? 240 : 190))
+                ));
+            }
+            if (list_cleanup_) {
+                list_cleanup_->SetMinSize(wxSize(
+                    FromDIP(220),
+                    FromDIP(wide_layout_ ? 60 : (Theme::is_touch() ? 180 : 140))
+                ));
+            }
+            if (wide_layout_) {
+                if (card_cleanup_) {
+                    bottom_row_->Add(card_list_, 11, wxEXPAND | wxRIGHT, gap_card);
+                    bottom_row_->Add(card_cleanup_, 10, wxEXPAND);
+                } else {
+                    bottom_row_->Add(card_list_, 1, wxEXPAND);
+                }
+            } else {
+                if (card_cleanup_) {
+                    bottom_row_->Add(card_list_, 0, wxEXPAND | wxBOTTOM, gap_card);
+                    bottom_row_->Add(card_cleanup_, 0, wxEXPAND);
+                } else {
+                    bottom_row_->Add(card_list_, 0, wxEXPAND);
+                }
+            }
+            if (auto* b_item = scroll_sizer_->GetItem(bottom_row_)) {
+                b_item->SetProportion(wide_layout_ ? 1 : 0);
+            }
+        }
+        if (card_list_) {
+            card_list_->SetMinSize(wide_layout_ ? wxSize(FromDIP(260), -1) : wxDefaultSize);
+        }
+        if (card_cleanup_) {
+            card_cleanup_->SetMinSize(wide_layout_ ? wxSize(FromDIP(260), -1) : wxDefaultSize);
+        }
+    }
+
     if (avail_w > FromDIP(240)) {
         const int wrap_w = std::max(FromDIP(200), avail_w - FromDIP(56));
-        const int half_wrap = std::max(FromDIP(180), (avail_w - FromDIP(12)) / 2 - FromDIP(44));
+        const int half_wrap = std::max(FromDIP(180), (avail_w - gap_card) / 2 - FromDIP(44));
+        const int top_wrap = wide_layout_ ? half_wrap : wrap_w;
+        const int list_wrap = (wide_layout_ && card_cleanup_)
+            ? std::max(FromDIP(200), (avail_w * 11) / 21 - FromDIP(52))
+            : wrap_w;
+        const int cleanup_wrap = wide_layout_
+            ? std::max(FromDIP(200), (avail_w * 10) / 21 - FromDIP(52))
+            : wrap_w;
         const int restore_wrap = can_manage_ ? half_wrap : wrap_w;
         if (lbl_feedback_ && pnl_feedback_ && pnl_feedback_->IsShown()) {
             lbl_feedback_->SetMaxSize(wxSize(std::max(FromDIP(180), avail_w - FromDIP(40)), -1));
@@ -914,12 +995,12 @@ void BackofficeBackupsPanel::update_scroll_layout() {
             pnl_feedback_->Layout();
         }
         if (lbl_last_error_ && pnl_last_error_ && pnl_last_error_->IsShown()) {
-            set_wrapped_text(lbl_last_error_, last_error_text_, std::max(FromDIP(180), wrap_w - FromDIP(160)));
+            set_wrapped_text(lbl_last_error_, last_error_text_, std::max(FromDIP(160), top_wrap - FromDIP(140)));
             pnl_last_error_->InvalidateBestSize();
             pnl_last_error_->Layout();
         }
         if (lbl_auto_warning_ && pnl_auto_warning_ && pnl_auto_warning_->IsShown()) {
-            set_wrapped_text(lbl_auto_warning_, auto_warning_text_, std::max(FromDIP(180), wrap_w - FromDIP(160)));
+            set_wrapped_text(lbl_auto_warning_, auto_warning_text_, std::max(FromDIP(160), top_wrap - FromDIP(140)));
             pnl_auto_warning_->InvalidateBestSize();
             pnl_auto_warning_->Layout();
         }
@@ -927,14 +1008,14 @@ void BackofficeBackupsPanel::update_scroll_layout() {
             set_wrapped_text(
                 lbl_auto_desc_,
                 wxT("Guarda una copia automática al cerrar el turno de caja."),
-                std::max(FromDIP(180), wrap_w - FromDIP(90))
+                std::max(FromDIP(160), top_wrap - FromDIP(90))
             );
         }
         if (lbl_secondary_desc_) {
             set_wrapped_text(
                 lbl_secondary_desc_,
                 wxT("Ahí se guarda una copia de cada respaldo automático, en la subcarpeta CafeteriaITCH."),
-                wrap_w
+                top_wrap
             );
         }
         if (lbl_manual_desc_) {
@@ -962,18 +1043,21 @@ void BackofficeBackupsPanel::update_scroll_layout() {
             set_wrapped_text(
                 lbl_list_desc_,
                 wxT("Respaldos guardados por el programa, del más reciente al más antiguo."),
-                wrap_w
+                list_wrap
             );
         }
         if (lbl_cleanup_desc_) {
             set_wrapped_text(
                 lbl_cleanup_desc_,
                 cleanup_description_text(),
-                wrap_w
+                cleanup_wrap
             );
         }
-        if (lbl_cleanup_summary_ && !cleanup_summary_text_.empty()) {
-            set_wrapped_text(lbl_cleanup_summary_, cleanup_summary_text_, wrap_w);
+        if (lbl_cleanup_summary_) {
+            const wxString summary_txt = cleanup_summary_text_.empty()
+                ? wxT("Pulsa \"Revisar qué se borraría\" para ver qué copias antiguas se pueden eliminar.")
+                : cleanup_summary_text_;
+            set_wrapped_text(lbl_cleanup_summary_, summary_txt, cleanup_wrap);
         }
         for (CardPanel* cp : {card_status_, card_secondary_, card_manual_, card_restore_, card_list_, card_cleanup_}) {
             if (cp) {
@@ -986,9 +1070,11 @@ void BackofficeBackupsPanel::update_scroll_layout() {
     const wxSize min_sz = scroll_sizer_->GetMinSize();
     const int virt_w = std::max(client.GetWidth(), 0);
     const int virt_h = std::max(client.GetHeight(), min_sz.GetHeight());
-    scroll_->SetVirtualSize(virt_w, min_sz.GetHeight());
+    scroll_->SetVirtualSize(virt_w, wide_layout_ ? virt_h : min_sz.GetHeight());
     scroll_sizer_->SetDimension(scroll_->CalcScrolledPosition(wxPoint(0, 0)), wxSize(virt_w, virt_h));
     scroll_sizer_->Layout();
+    auto_size_backup_list_columns();
+    auto_size_cleanup_columns();
 }
 
 void BackofficeBackupsPanel::refresh_all() {

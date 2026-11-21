@@ -70,22 +70,24 @@ void BackofficePrintConfigPanel::setup_ui() {
     auto* lbl_title = new wxStaticText(card, wxID_ANY, wxT("Configuración de Impresora Térmica"));
     lbl_title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     lbl_title->SetForegroundColour(Theme::ColorBrandDeep);
-    card_sizer->Add(lbl_title, 0, wxALL, FromDIP(16));
+    card_sizer->Add(lbl_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
 
-    auto* lbl_subtitle = new wxStaticText(card, wxID_ANY,
+    lbl_subtitle_ = new wxStaticText(card, wxID_ANY,
         wxT("Seleccione la impresora instalada y el ancho nominal del papel para esta estación.\n")
         wxT("El sistema adaptará el formateo y la paginación al perfil elegido.\n")
         wxT("Verifique que el tamaño de papel (55 mm o 80 mm) esté configurado en el controlador de la impresora.")
     );
-    lbl_subtitle->SetFont(Theme::get_font_small());
-    lbl_subtitle->SetForegroundColour(Theme::ColorTextSecondary);
-    card_sizer->Add(lbl_subtitle, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
+    lbl_subtitle_->SetFont(Theme::get_font_small());
+    lbl_subtitle_->SetForegroundColour(Theme::ColorTextSecondary);
+    card_sizer->Add(lbl_subtitle_, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(10));
 
     // Contenido dividido en 2 columnas: Opciones a la izquierda, Vista Previa a la derecha
-    auto* cols_sizer = new wxBoxSizer(wxHORIZONTAL);
+    cols_sizer_ = new wxBoxSizer(wxHORIZONTAL);
+    auto* cols_sizer = cols_sizer_;
 
     // Columna izquierda: Opciones de configuración
-    auto* opt_sizer = new wxBoxSizer(wxVERTICAL);
+    opt_sizer_ = new wxBoxSizer(wxVERTICAL);
+    auto* opt_sizer = opt_sizer_;
 
     // --- Selector de impresora instalada ---
     auto* lbl_printer_sel = new wxStaticText(card, wxID_ANY, wxT("Impresora instalada:"));
@@ -103,20 +105,20 @@ void BackofficePrintConfigPanel::setup_ui() {
     if (installed_printers_.empty()) {
         printer_choices.Add(wxT("(No se detectaron impresoras instaladas)"));
     }
-    const int combo_w = FromDIP(380);
+    const int combo_w = FromDIP(260);
     const int combo_h = FromDIP(Theme::is_touch() ? 48 : 36);
     choice_printer_ = new ui::TouchComboBox(card, wxID_ANY, wxSize(combo_w, combo_h), printer_choices);
     choice_printer_->SetFont(Theme::get_font_body());
     choice_printer_->SetMinSize(wxSize(combo_w, combo_h));
     choice_printer_->SetSelection(0);
-    opt_sizer->Add(choice_printer_, 0, wxBOTTOM, FromDIP(8));
+    opt_sizer->Add(choice_printer_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
-    auto* lbl_printer_hint = new wxStaticText(card, wxID_ANY,
+    lbl_printer_hint_ = new wxStaticText(card, wxID_ANY,
         wxT("Seleccione la impresora térmica de este puesto. Si no aparece en la lista,\n")
         wxT("instale su controlador desde la configuración de Windows."));
-    lbl_printer_hint->SetFont(Theme::get_font_small());
-    lbl_printer_hint->SetForegroundColour(Theme::ColorTextSecondary);
-    opt_sizer->Add(lbl_printer_hint, 0, wxBOTTOM, FromDIP(16));
+    lbl_printer_hint_->SetFont(Theme::get_font_small());
+    lbl_printer_hint_->SetForegroundColour(Theme::ColorTextSecondary);
+    opt_sizer->Add(lbl_printer_hint_, 0, wxBOTTOM, FromDIP(10));
 
     // --- Perfil de papel ---
     auto* lbl_profile = new wxStaticText(card, wxID_ANY, wxT("Perfil de Papel Térmico:"));
@@ -131,16 +133,16 @@ void BackofficePrintConfigPanel::setup_ui() {
     choice_profile_->SetFont(Theme::get_font_body());
     choice_profile_->SetMinSize(wxSize(combo_w, combo_h));
     choice_profile_->SetSelection(0);
-    opt_sizer->Add(choice_profile_, 0, wxBOTTOM, FromDIP(6));
+    opt_sizer->Add(choice_profile_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     // Nota: sin etiqueta "Columnas efectivas" ya que es estimación nominal,
     // no una medición real del DC del controlador.
-    auto* lbl_paper_hint = new wxStaticText(card, wxID_ANY,
+    lbl_paper_hint_ = new wxStaticText(card, wxID_ANY,
         wxT("Las columnas nominales son una estimación. La geometría real depende\n")
         wxT("del controlador y el DPI de la impresora seleccionada."));
-    lbl_paper_hint->SetFont(Theme::get_font_small());
-    lbl_paper_hint->SetForegroundColour(Theme::ColorTextSecondary);
-    opt_sizer->Add(lbl_paper_hint, 0, wxBOTTOM, FromDIP(20));
+    lbl_paper_hint_->SetFont(Theme::get_font_small());
+    lbl_paper_hint_->SetForegroundColour(Theme::ColorTextSecondary);
+    opt_sizer->Add(lbl_paper_hint_, 0, wxBOTTOM, FromDIP(12));
 
     // Botón Guardar
     const int btn_h_logical = Theme::is_touch() ? 48 : 38;
@@ -148,17 +150,18 @@ void BackofficePrintConfigPanel::setup_ui() {
     Theme::style_button_primary(btn_save_, btn_h_logical);
     Theme::setup_button_icon(btn_save_, "check_circle", wxSize(18, 18), Theme::ColorSurface);
     Theme::ensure_button_min_size(btn_save_, 220, btn_h_logical);
-    opt_sizer->Add(btn_save_, 0, wxBOTTOM, FromDIP(12));
+    opt_sizer->Add(btn_save_, 0, wxBOTTOM, FromDIP(8));
 
     lbl_status_ = new wxStaticText(card, wxID_ANY, wxEmptyString);
     lbl_status_->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
     lbl_status_->SetForegroundColour(Theme::ColorTextMuted);
     opt_sizer->Add(lbl_status_, 0, wxEXPAND);
 
-    cols_sizer->Add(opt_sizer, 0, wxRIGHT, FromDIP(24));
+    cols_sizer->Add(opt_sizer, 0, wxRIGHT, FromDIP(20));
 
     // Columna derecha: Vista previa interactiva en vivo
-    auto* prev_box = new wxBoxSizer(wxVERTICAL);
+    prev_box_ = new wxBoxSizer(wxVERTICAL);
+    auto* prev_box = prev_box_;
     auto* lbl_prev_title = new wxStaticText(card, wxID_ANY,
         wxT("Vista Previa Estimada del Formato de Impresión:"));
     lbl_prev_title->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
@@ -171,7 +174,7 @@ void BackofficePrintConfigPanel::setup_ui() {
     lbl_prev_note->SetForegroundColour(Theme::ColorTextSecondary);
     prev_box->Add(lbl_prev_note, 0, wxBOTTOM, FromDIP(6));
 
-    txt_preview_ = new wxTextCtrl(card, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(360, 340)), wxTE_MULTILINE | wxTE_READONLY);
+    txt_preview_ = new wxTextCtrl(card, wxID_ANY, wxEmptyString, wxDefaultPosition, FromDIP(wxSize(280, 240)), wxTE_MULTILINE | wxTE_READONLY);
     wxFont f_mono(9, wxFONTFAMILY_TELETYPE, wxFONTSTYLE_NORMAL, wxFONTWEIGHT_NORMAL);
     txt_preview_->SetFont(f_mono);
     txt_preview_->SetBackgroundColour(Theme::ColorSurface);
@@ -179,14 +182,114 @@ void BackofficePrintConfigPanel::setup_ui() {
 
     cols_sizer->Add(prev_box, 1, wxEXPAND);
 
-    card_sizer->Add(cols_sizer, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
+    card_sizer->Add(cols_sizer, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
     card->SetSizer(card_sizer);
 
-    main_sizer->Add(card, 1, wxEXPAND | wxALL, FromDIP(16));
+    main_sizer->Add(card, 1, wxEXPAND | wxALL, FromDIP(10));
     SetSizer(main_sizer);
 
     choice_profile_->Bind(wxEVT_COMBOBOX, &BackofficePrintConfigPanel::on_profile_selected, this);
     btn_save_->Bind(wxEVT_BUTTON, &BackofficePrintConfigPanel::on_save_clicked, this);
+}
+
+void BackofficePrintConfigPanel::set_stacked_layout(bool stacked, int wrap_width_px) {
+    if (!cols_sizer_ || !opt_sizer_ || !prev_box_) {
+        return;
+    }
+    const int eff_wrap = (wrap_width_px > FromDIP(180)) ? wrap_width_px : FromDIP(560);
+    if (stacked == stacked_ && std::abs(eff_wrap - last_wrap_px_) <= FromDIP(8)) {
+        return;
+    }
+    const bool orient_changed = (stacked != stacked_);
+    stacked_ = stacked;
+    last_wrap_px_ = eff_wrap;
+
+    auto wrap_and_size = [this](wxStaticText* lbl, const wxString& text, int max_w, bool do_wrap) {
+        if (!lbl) return;
+        lbl->SetMinSize(wxDefaultSize);
+        lbl->SetLabel(text);
+        if (do_wrap) {
+            lbl->Wrap(max_w);
+        }
+        lbl->InvalidateBestSize();
+        wxClientDC dc(lbl);
+        dc.SetFont(lbl->GetFont());
+        const wxSize ext = dc.GetMultiLineTextExtent(lbl->GetLabel());
+        lbl->SetMinSize(wxSize(-1, ext.GetHeight() + FromDIP(2)));
+    };
+
+    if (stacked_) {
+        wrap_and_size(
+            lbl_subtitle_,
+            wxT("Seleccione la impresora instalada y el ancho nominal del papel para esta estación. ")
+            wxT("El sistema adaptará el formateo y la paginación al perfil elegido. ")
+            wxT("Verifique que el tamaño de papel (55 mm o 80 mm) esté configurado en el controlador de la impresora."),
+            eff_wrap,
+            true
+        );
+        wrap_and_size(
+            lbl_printer_hint_,
+            wxT("Seleccione la impresora térmica de este puesto. Si no aparece en la lista, ")
+            wxT("instale su controlador desde la configuración de Windows."),
+            eff_wrap,
+            true
+        );
+        wrap_and_size(
+            lbl_paper_hint_,
+            wxT("Las columnas nominales son una estimación. La geometría real depende ")
+            wxT("del controlador y el DPI de la impresora seleccionada."),
+            eff_wrap,
+            true
+        );
+    } else {
+        wrap_and_size(
+            lbl_subtitle_,
+            wxT("Seleccione la impresora instalada y el ancho nominal del papel para esta estación.\n")
+            wxT("El sistema adaptará el formateo y la paginación al perfil elegido.\n")
+            wxT("Verifique que el tamaño de papel (55 mm o 80 mm) esté configurado en el controlador de la impresora."),
+            eff_wrap,
+            true
+        );
+        wrap_and_size(
+            lbl_printer_hint_,
+            wxT("Seleccione la impresora térmica de este puesto. Si no aparece en la lista,\n")
+            wxT("instale su controlador desde la configuración de Windows."),
+            eff_wrap,
+            false
+        );
+        wrap_and_size(
+            lbl_paper_hint_,
+            wxT("Las columnas nominales son una estimación. La geometría real depende\n")
+            wxT("del controlador y el DPI de la impresora seleccionada."),
+            eff_wrap,
+            false
+        );
+    }
+
+    if (txt_preview_) {
+        txt_preview_->SetMinSize(stacked_ ? FromDIP(wxSize(240, 140)) : FromDIP(wxSize(280, 240)));
+    }
+
+    if (orient_changed) {
+        cols_sizer_->Detach(opt_sizer_);
+        cols_sizer_->Detach(prev_box_);
+        cols_sizer_->SetOrientation(stacked_ ? wxVERTICAL : wxHORIZONTAL);
+        if (stacked_) {
+            cols_sizer_->Add(opt_sizer_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
+            cols_sizer_->Add(prev_box_, 1, wxEXPAND);
+        } else {
+            cols_sizer_->Add(opt_sizer_, 0, wxRIGHT, FromDIP(20));
+            cols_sizer_->Add(prev_box_, 1, wxEXPAND);
+        }
+    }
+    if (lbl_subtitle_) {
+        if (auto* card = lbl_subtitle_->GetParent()) {
+            card->InvalidateBestSize();
+            card->Layout();
+        }
+    }
+    InvalidateBestSize();
+    Layout();
 }
 
 void BackofficePrintConfigPanel::load_current_config() {

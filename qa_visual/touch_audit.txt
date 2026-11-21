@@ -346,11 +346,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Configuración | button | Configuración | 113.6x48.0 | OK
   Configuración | button | Respaldos | 88.8x48.0 | OK
   Configuración | button | Actualizaciones | 127.2x48.0 | OK
-  Configuración | button | Estándar | 384.8x56.0 | OK
-  Configuración | button | Táctil (Activa) | 396.8x56.0 | OK
+  Configuración | button | Estándar | 390.4x56.0 | OK
+  Configuración | button | Táctil (Activa) | 402.4x56.0 | OK
   Configuración | button | Usar pantalla completa | 240.0x56.0 | OK
-  Configuración | switch/combo | comboBox | 380.0x48.0 | OK
-  Configuración | switch/combo | comboBox | 380.0x48.0 | OK
+  Configuración | switch/combo | comboBox | 439.2x48.0 | OK
+  Configuración | switch/combo | comboBox | 439.2x48.0 | OK
   Configuración | button | Guardar Configuración | 237.6x48.0 | OK
   Configuración | popup_option | Configuracion:Impresora (rows=4) | h_opt=44.0 (popup=176.0) | OK
   Configuración | popup_option | Configuracion:PerfilPapel (rows=2) | h_opt=44.0 (popup=88.0) | OK
@@ -370,9 +370,9 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Respaldos | button | Elegir carpeta | 180.0x48.0 | OK
   Respaldos | button | Hacer un respaldo ahora | 252.8x52.0 | OK
   Respaldos | button | Restaurar desde un respaldo | 280.0x52.0 | OK
-  Respaldos | edit | <edit> | 110.4x48.0 | OK
-  Respaldos | edit | <edit> | 110.4x48.0 | OK
-  Respaldos | button | Guardar | 134.4x48.0 | OK
+  Respaldos | edit | <edit> | 90.4x48.0 | OK
+  Respaldos | edit | <edit> | 90.4x48.0 | OK
+  Respaldos | button | Guardar | 460.0x48.0 | OK
   Respaldos | button | Revisar qué se borraría | 238.4x48.0 | OK
 
 === Respaldos (teclado) (total=31, marcados=0) ===
@@ -403,9 +403,9 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Respaldos (teclado) | button | Elegir carpeta | 180.0x48.0 | OK
   Respaldos (teclado) | button | Hacer un respaldo ahora | 252.8x52.0 | OK
   Respaldos (teclado) | button | Restaurar desde un respaldo | 280.0x52.0 | OK
-  Respaldos (teclado) | edit | <edit> | 110.4x48.0 | OK
-  Respaldos (teclado) | edit | <edit> | 110.4x48.0 | OK
-  Respaldos (teclado) | button | Guardar | 134.4x48.0 | OK
+  Respaldos (teclado) | edit | <edit> | 90.4x48.0 | OK
+  Respaldos (teclado) | edit | <edit> | 90.4x48.0 | OK
+  Respaldos (teclado) | button | Guardar | 460.0x48.0 | OK
   Respaldos (teclado) | button | Revisar qué se borraría | 238.4x48.0 | OK
 
 === Actualizaciones (total=11, marcados=0) ===

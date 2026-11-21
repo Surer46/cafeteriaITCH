@@ -34,6 +34,7 @@ from gui_dpi import (
     measure_text_extent,
     min_px,
     select_list_row,
+    set_window_logical_size,
 )
 
 kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -390,6 +391,112 @@ def read_listview_texts(hwnd_list, max_rows=15):
         kernel32.CloseHandle(h_proc)
 
 
+SB_HORZ = 0
+SB_VERT = 1
+SIF_RANGE = 0x0001
+SIF_PAGE = 0x0002
+
+
+class SCROLLINFO(ctypes.Structure):
+    _fields_ = [
+        ("cbSize", wintypes.UINT),
+        ("fMask", wintypes.UINT),
+        ("nMin", ctypes.c_int),
+        ("nMax", ctypes.c_int),
+        ("nPage", wintypes.UINT),
+        ("nPos", ctypes.c_int),
+        ("nTrackPos", ctypes.c_int),
+    ]
+
+
+user32.GetScrollInfo.argtypes = [wintypes.HWND, ctypes.c_int, ctypes.POINTER(SCROLLINFO)]
+user32.GetScrollInfo.restype = wintypes.BOOL
+
+
+def detect_panel_scrollbars(content_hwnd):
+    """Detecta si algún contenedor desplazable (wxWindowNR) en content_hwnd tiene barra horizontal o vertical."""
+    has_h = False
+    has_v = False
+    for h, cls, _txt in enum_children(content_hwnd):
+        if cls.lower() != "wxwindownr" or not user32.IsWindowVisible(h):
+            continue
+        st = user32.GetWindowLongW(h, GWL_STYLE)
+        if st & WS_HSCROLL:
+            has_h = True
+        else:
+            si_h = SCROLLINFO()
+            si_h.cbSize = ctypes.sizeof(SCROLLINFO)
+            si_h.fMask = SIF_RANGE | SIF_PAGE
+            if user32.GetScrollInfo(h, SB_HORZ, ctypes.byref(si_h)):
+                if si_h.nMax > si_h.nMin and (si_h.nPage == 0 or (si_h.nMax - si_h.nMin + 1) > int(si_h.nPage)):
+                    has_h = True
+        if st & WS_VSCROLL:
+            has_v = True
+        else:
+            si_v = SCROLLINFO()
+            si_v.cbSize = ctypes.sizeof(SCROLLINFO)
+            si_v.fMask = SIF_RANGE | SIF_PAGE
+            if user32.GetScrollInfo(h, SB_VERT, ctypes.byref(si_v)):
+                if si_v.nMax > si_v.nMin and (si_v.nPage == 0 or (si_v.nMax - si_v.nMin + 1) > int(si_v.nPage)):
+                    has_v = True
+    return has_h, has_v
+
+
+def detect_clipped_static_texts(content_hwnd):
+    """Detecta wxStaticText visibles dentro de content_hwnd cuyo alto no alcanza para sus líneas."""
+    clipped = []
+    c_rect = get_rect(content_hwnd)
+    cl, ct, cr, cb = c_rect
+    for h, cls, txt in enum_children(content_hwnd):
+        if cls.lower() != "static" or not user32.IsWindowVisible(h):
+            continue
+        if not txt or not txt.strip():
+            continue
+        r = get_rect(h)
+        win_w = r[2] - r[0]
+        win_h = r[3] - r[1]
+        if win_w <= 2 or win_h <= 2:
+            continue
+        # Ignorar etiquetas completamente fuera del área de contenido
+        if r[2] <= cl or r[0] >= cr or r[3] <= ct or r[1] >= cb:
+            continue
+        _sample_w, line_h = measure_text_extent(h, "Ág")
+        if line_h <= 0:
+            continue
+        norm = txt.replace("\r\n", "\n").replace("\r", "\n")
+        raw_lines = norm.split("\n")
+        if len(raw_lines) > 1 and raw_lines[-1] == "":
+            raw_lines = raw_lines[:-1]
+        total_lines = 0
+        for ln in raw_lines:
+            if not ln:
+                total_lines += 1
+                continue
+            tw, _th = measure_text_extent(h, ln)
+            if tw <= win_w + 2:
+                total_lines += 1
+            else:
+                # Simular envoltura por palabras que realiza el control Static de Windows
+                words = ln.split(" ")
+                cur = ""
+                wrapped_cnt = 1
+                for w in words:
+                    cand = w if not cur else f"{cur} {w}"
+                    if cur and measure_text_extent(h, cand)[0] > win_w + 2:
+                        wrapped_cnt += 1
+                        cur = w
+                    else:
+                        cur = cand
+                total_lines += wrapped_cnt
+        need_h = total_lines * line_h
+        if need_h > win_h + 2:
+            snippet = " ".join(norm.split())
+            if len(snippet) > 30:
+                snippet = snippet[:27] + "..."
+            clipped.append(f'"{snippet}"({need_h}>{win_h}px,{total_lines}L)')
+    return "; ".join(clipped) if clipped else "-"
+
+
 def is_descendant(hwnd, ancestor):
     cur = user32.GetParent(hwnd)
     while cur:
@@ -577,6 +684,14 @@ def measure_view(hwnd_main, img, win_rect, profile, screen_id, scale):
     pil_v_bg = longest_false_run(row_has_fg)
 
     extra_lists = "; ".join(list_summaries + scrolled_summaries) if (list_summaries or scrolled_summaries) else "-"
+    has_hscroll, has_vscroll = detect_panel_scrollbars(content_hwnd)
+    texto_cortado = detect_clipped_static_texts(content_hwnd)
+    cumple = (
+        uw_pct >= 93.0
+        and uh_pct >= 88.0
+        and max_h_gap_pct <= 5.0
+        and max_v_gap_pct <= 8.0
+    )
 
     return {
         "profile": profile,
@@ -595,7 +710,11 @@ def measure_view(hwnd_main, img, win_rect, profile, screen_id, scale):
         "pil_non_bg_pct": pil_non_bg_pct,
         "pil_h_bg": pil_h_bg,
         "pil_v_bg": pil_v_bg,
+        "hscroll": "SI" if has_hscroll else "NO",
+        "vscroll": "SI" if has_vscroll else "NO",
+        "cumple": "SI" if cumple else "NO",
         "lists": extra_lists,
+        "texto_cortado": texto_cortado,
     }
 
 
@@ -895,10 +1014,10 @@ def run_profile_pass(exe_path, work_dir, data_dir, out_dir, profile_cfg, profile
             m = measure_view(hwnd_main, img, w_rc, profile_label, slug, scale)
             rows.append(m)
             print(
-                f"  [{profile_label:8s}] {slug:20s} content={m['content_w']}x{m['content_h']} "
+                f"  [{profile_label:8s}] {slug:20s} cumple={m['cumple']:2s} vscroll={m['vscroll']:2s} content={m['content_w']}x{m['content_h']} "
                 f"union={m['union_w_pct']:5.1f}%x{m['union_h_pct']:5.1f}%({m['union_area_pct']:5.1f}%) "
                 f"gapH={m['max_h_gap']:4d}px({m['max_h_gap_pct']:4.1f}%) gapV={m['max_v_gap']:4d}px({m['max_v_gap_pct']:4.1f}%) "
-                f"PIL_fg={m['pil_non_bg_pct']:5.1f}% | {m['lists']}",
+                f"PIL_fg={m['pil_non_bg_pct']:5.1f}% | {m['lists']} | txt={m['texto_cortado']}",
                 flush=True,
             )
 
@@ -1004,6 +1123,75 @@ def run_profile_pass(exe_path, work_dir, data_dir, out_dir, profile_cfg, profile
                 proc.wait(timeout=2.0)
 
 
+def run_windowed_scroll_pass(exe_path, work_dir, data_dir, profile_cfg, profile_label, username, password):
+    """Pasada informativa en ventana normal (1200x720 y 960x600) solo para Configuracion, Respaldos y Actualizaciones."""
+    with open(os.path.join(data_dir, "station_fullscreen.cfg"), "w", encoding="utf-8") as f:
+        f.write("windowed\n")
+    with open(os.path.join(data_dir, "station_profile.cfg"), "w", encoding="utf-8") as f:
+        f.write(f"{profile_cfg}\n")
+
+    env = os.environ.copy()
+    env["PATH"] = work_dir + ";" + env.get("PATH", "")
+    env["CAFETERIA_DATA_DIR"] = data_dir
+    env["CAFETERIA_UPDATE_CHECK"] = "0"
+
+    proc = subprocess.Popen([exe_path], cwd=work_dir, env=env)
+    rows = []
+    try:
+        hwnd_login, _ = wait_window(proc.pid, "Iniciar Sesión", timeout=12.0)
+        l_ctrls = enum_children(hwnd_login)
+        l_edits = [h for (h, cls, _t) in l_ctrls if cls.lower() == "edit"]
+        l_btns = [h for (h, cls, _t) in l_ctrls if cls.lower() == "button"]
+        set_text(l_edits[0], username)
+        set_text(l_edits[1], password)
+        time.sleep(0.2)
+        post_click(l_btns[0])
+
+        hwnd_main, _ = wait_window(proc.pid, "Cafetería ITCH II", exclude=["Primer Inicio", "Iniciar Sesión"], timeout=12.0)
+        time.sleep(0.5)
+
+        click_button_text(hwnd_main, "BackOffice")
+        screens = [
+            ("configuracion", "Configuración"),
+            ("respaldos", "Respaldos"),
+            ("actualizaciones", "Actualizaciones"),
+        ]
+        for w_log, h_log in [(1200, 720), (960, 600)]:
+            set_window_logical_size(hwnd_main, w_log, h_log)
+            time.sleep(0.3)
+            for slug, sub_label in screens:
+                click_button_text(hwnd_main, sub_label, exact=True)
+                time.sleep(0.25)
+                c_hwnd, _ = find_content_container(hwnd_main)
+                has_h, has_v = detect_panel_scrollbars(c_hwnd)
+                txt_clip = detect_clipped_static_texts(c_hwnd)
+                row = {
+                    "profile": profile_label,
+                    "size": f"{w_log}x{h_log}",
+                    "screen": slug,
+                    "hscroll": "SI" if has_h else "NO",
+                    "vscroll": "SI" if has_v else "NO",
+                    "texto_cortado": txt_clip,
+                }
+                rows.append(row)
+                print(
+                    f"  [VENTANA {w_log}x{h_log}][{profile_label:8s}] {slug:16s} hscroll={row['hscroll']:2s} vscroll={row['vscroll']:2s} texto_cortado={row['texto_cortado']}",
+                    flush=True,
+                )
+
+        user32.PostMessageW(hwnd_main, WM_CLOSE, 0, 0)
+        proc.wait(timeout=6.0)
+        return rows
+    finally:
+        if proc.poll() is None:
+            proc.terminate()
+            try:
+                proc.wait(timeout=3.0)
+            except Exception:
+                proc.kill()
+                proc.wait(timeout=2.0)
+
+
 def main():
     enable_per_monitor_dpi()
     sys_dpi, _ = ensure_supported_system_dpi()
@@ -1054,28 +1242,38 @@ def main():
         rows_std, mon_std = run_profile_pass(exe_path, work_dir, temp_dir, out_dir, "standard", "Estandar", username, password)
         rows_tch, mon_tch = run_profile_pass(exe_path, work_dir, temp_dir, out_dir, "touch", "Tactil", username, password)
 
+        print("\n=== PASADA INFORMATIVA EN VENTANA NORMAL (1200x720 y 960x600) ===", flush=True)
+        win_std = run_windowed_scroll_pass(exe_path, work_dir, temp_dir, "standard", "Estandar", username, password)
+        win_tch = run_windowed_scroll_pass(exe_path, work_dir, temp_dir, "touch", "Tactil", username, password)
+
         mon_w, mon_h, dpi, scale = mon_std
         medidas_path = os.path.join(out_dir, "medidas.txt")
         header = (
             f"# Medidas pantalla completa — Monitor: {mon_w}x{mon_h} px | {format_dpi_info(dpi)}\n"
-            f"# Columnas: perfil | pantalla | content_px | union_px | union_w% | union_h% | union_area% | "
-            f"max_gap_h_px(pct) | max_gap_v_px(pct) | pil_fg% | pil_bg_h_px | pil_bg_v_px | listas_tablas\n"
+            f"# Columnas: perfil | pantalla | cumple | vscroll | content_px | union_px | union_w% | union_h% | union_area% | "
+            f"max_gap_h_px(pct) | max_gap_v_px(pct) | pil_fg% | pil_bg_h_px | pil_bg_v_px | listas_tablas | texto_cortado\n"
         )
         lines = [header]
         for m in rows_std + rows_tch:
             lines.append(
-                f"{m['profile']:8s} | {m['screen']:20s} | "
+                f"{m['profile']:8s} | {m['screen']:20s} | {m['cumple']:2s} | {m['vscroll']:2s} | "
                 f"{m['content_w']:4d}x{m['content_h']:<4d} | "
                 f"{m['union_w']:4d}x{m['union_h']:<4d} | "
                 f"{m['union_w_pct']:5.1f}% | {m['union_h_pct']:5.1f}% | {m['union_area_pct']:5.1f}% | "
                 f"{m['max_h_gap']:4d}px({m['max_h_gap_pct']:4.1f}%) | "
                 f"{m['max_v_gap']:4d}px({m['max_v_gap_pct']:4.1f}%) | "
                 f"{m['pil_non_bg_pct']:5.1f}% | {m['pil_h_bg']:4d}px | {m['pil_v_bg']:4d}px | "
-                f"{m['lists']}\n"
+                f"{m['lists']} | {m['texto_cortado']}\n"
+            )
+        lines.append("\n# Ventana normal (1200x720 y 960x600) — perfil | tamano | pantalla | hscroll | vscroll | texto_cortado\n")
+        for w in win_std + win_tch:
+            lines.append(
+                f"{w['profile']:8s} | {w['size']:8s} | {w['screen']:16s} | "
+                f"hscroll={w['hscroll']:2s} | vscroll={w['vscroll']:2s} | texto_cortado={w['texto_cortado']}\n"
             )
         with open(medidas_path, "w", encoding="utf-8") as f:
             f.writelines(lines)
-        print(f"\n[OK] Medidas escritas en {medidas_path} ({len(rows_std) + len(rows_tch)} filas).", flush=True)
+        print(f"\n[OK] Medidas escritas en {medidas_path} ({len(rows_std) + len(rows_tch)} fullscreen + {len(win_std) + len(win_tch)} ventana).", flush=True)
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 

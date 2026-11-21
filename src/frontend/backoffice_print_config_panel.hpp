@@ -18,6 +18,8 @@ public:
         services::ServiceRegistry services
     );
 
+    void set_stacked_layout(bool stacked, int wrap_width_px = 0);
+
 private:
     void setup_ui();
     void load_current_config();
@@ -28,6 +30,14 @@ private:
     services::ServiceRegistry services_;
     contracts::PrinterStationConfig current_config_;
 
+    wxBoxSizer* cols_sizer_{nullptr};
+    wxBoxSizer* opt_sizer_{nullptr};
+    wxBoxSizer* prev_box_{nullptr};
+    wxStaticText* lbl_subtitle_{nullptr};
+    wxStaticText* lbl_printer_hint_{nullptr};
+    wxStaticText* lbl_paper_hint_{nullptr};
+    bool stacked_{false};
+    int last_wrap_px_{0};
     wxOwnerDrawnComboBox* choice_profile_{nullptr};
     wxOwnerDrawnComboBox* choice_printer_{nullptr};
     std::vector<std::string> installed_printers_;

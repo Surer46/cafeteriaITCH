@@ -63,6 +63,9 @@ private:
 
     wxScrolledWindow* scroll_{nullptr};
     wxBoxSizer* scroll_sizer_{nullptr};
+    wxBoxSizer* cards_row_sizer_{nullptr};
+    bool wide_layout_{false};
+    bool layout_initialized_{false};
 
     wxPanel* pnl_feedback_{nullptr};
     wxStaticText* lbl_feedback_{nullptr};

@@ -49,3 +49,30 @@ T16a2 (`Prompts/prompts-2026-11-21-T16a2.md`), para Neon:
 Siguiente: T16a3 (`Prompts/prompts-2026-11-21-T16a3.md`).
 - Configuración sin desplazamiento y sin texto cortado en los dos perfiles.
 - Columna informativa `texto_cortado` en el script.
+
+## T16a3 (Neon; 13:28 a 14:15; auditado el 2026-11-21)
+
+**T16a (con T16a2 y T16a3): aceptado.**
+
+- **Configuración en Táctil a pantalla completa: corregida.**
+  - Medidas: cumple el criterio (94,2 % x 91,2 %), sin barra vertical y sin texto cortado.
+  - En `touch_15_configuracion.png` y `20_settings_fullscreen_option.png`, el subtítulo y la mención de F11 se ven completos en dos líneas.
+  - Causa encontrada por Neon: `wxStaticText::Wrap()` no reenvolvía una etiqueta ya envuelta al cambiar de ventana normal a pantalla completa. La reemplazó por un ajuste palabra por palabra con `GetTextExtent`, y la altura mínima sale de `GetMultiLineTextExtent` (`backoffice_settings_panel.cpp:305-334`).
+- **Columna `texto_cortado`** en el script, en las dos pasadas: no marca nada en las tres pantallas.
+  - Fuera del alcance, detectó un texto cortado que ya existía en Productos y recetas: «Falta registrar una compra...», 48 px de alto necesario frente a 25 px. Se pasa a T16c.
+- **Lo aceptado en T16a2 no cambió:**
+  - Respaldos y Actualizaciones: mismas medidas.
+  - Ventana normal: sin barra horizontal en las 12 combinaciones.
+- **Observación aceptada:** en Táctil, la lista de limpieza sigue mostrando una sola fila.
+- **Verificación del orquestador en `main` con los cambios (125 %, 1920x1200):**
+  - Release, Debug y hooks compilados con `--parallel 1`, sin advertencias.
+  - CTest 21/21 en Release y Debug.
+  - `measure_fullscreen_space.py` en 0, y 19 de 20 pruebas GUI en verde a la primera.
+  - `test_t5_fullscreen` falló una vez porque la ventana de la app de Claude quedó encima del diálogo de cobro (`claude.exe` en el punto central), no por el programa. Repetida dos veces, pasó las dos.
+
+## Resultado final de T16a
+
+- **Actualizaciones:** dos columnas a toda la altura (excepción documentada del criterio).
+- **Configuración:** dos columnas en pantalla completa.
+- **Respaldos:** tres filas de dos tarjetas sin desplazamiento.
+- **Ventana normal (1200x720 y 960x600):** sin cambios visibles respecto a `4ff6905`.

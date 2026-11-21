@@ -38,6 +38,11 @@ private:
 
     wxScrolledWindow* scroll_{nullptr};
     wxBoxSizer* scroll_sizer_{nullptr};
+    wxBoxSizer* content_row_{nullptr};
+    wxBoxSizer* options_sizer_{nullptr};
+    CardPanel* screen_card_{nullptr};
+    bool wide_layout_{false};
+    bool layout_initialized_{false};
     wxStaticText* lbl_subtitle_{nullptr};
     wxStaticText* lbl_note_{nullptr};
 

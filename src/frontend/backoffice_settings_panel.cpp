@@ -23,12 +23,13 @@ void BackofficeSettingsPanel::setup_ui() {
 
     scroll_ = new wxScrolledWindow(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL | wxHSCROLL);
     scroll_->SetBackgroundColour(Theme::ColorBackground);
-    scroll_->SetScrollRate(FromDIP(16), FromDIP(16));
+    scroll_->SetScrollRate(1, FromDIP(16));
 
     scroll_sizer_ = new wxBoxSizer(wxVERTICAL);
 
     // 1. Tarjeta "Pantalla de este equipo"
-    auto* screen_card = new CardPanel(scroll_);
+    screen_card_ = new CardPanel(scroll_);
+    auto* screen_card = screen_card_;
     screen_card->set_card_background(Theme::ColorSurface);
     auto* card_sizer = new wxBoxSizer(wxVERTICAL);
 
@@ -46,7 +47,8 @@ void BackofficeSettingsPanel::setup_ui() {
     lbl_subtitle_->SetForegroundColour(Theme::ColorTextSecondary);
     card_sizer->Add(lbl_subtitle_, 0, wxLEFT | wxRIGHT | wxTOP | wxEXPAND, FromDIP(16));
 
-    auto* options_sizer = new wxBoxSizer(wxHORIZONTAL);
+    options_sizer_ = new wxBoxSizer(wxHORIZONTAL);
+    auto* options_sizer = options_sizer_;
     const int btn_h = FromDIP(Theme::is_touch() ? 56 : 48);
 
     auto build_option_tile = [this, screen_card, btn_h](
@@ -133,6 +135,8 @@ void BackofficeSettingsPanel::setup_ui() {
     card_fullscreen_->SetSizer(fs_tile_sizer);
     card_sizer->Add(card_fullscreen_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
 
+    card_sizer->AddStretchSpacer(1);
+
     lbl_note_ = new wxStaticText(
         screen_card,
         wxID_ANY,
@@ -144,12 +148,14 @@ void BackofficeSettingsPanel::setup_ui() {
 
     screen_card->SetSizer(card_sizer);
 
-    // Mismo margen lateral que BackofficePrintConfigPanel (16) para alinear las dos tarjetas.
-    scroll_sizer_->Add(screen_card, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
-
     // 2. Pantalla de configuración de impresora existente, incrustada tal cual
     print_panel_ = new BackofficePrintConfigPanel(scroll_, services_);
-    scroll_sizer_->Add(print_panel_, 0, wxEXPAND);
+
+    content_row_ = new wxBoxSizer(wxVERTICAL);
+    // Mismo margen lateral que BackofficePrintConfigPanel (16) para alinear las dos tarjetas.
+    content_row_->Add(screen_card_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    content_row_->Add(print_panel_, 0, wxEXPAND);
+    scroll_sizer_->Add(content_row_, 1, wxEXPAND);
 
     scroll_->SetSizer(scroll_sizer_);
     scroll_->Bind(wxEVT_SIZE, [this](wxSizeEvent& ev) {
@@ -234,42 +240,151 @@ void BackofficeSettingsPanel::update_scroll_layout() {
     if (!scroll_ || !scroll_sizer_) {
         return;
     }
-    const int client_w = scroll_->GetClientSize().GetWidth();
+    const wxSize client_sz = scroll_->GetClientSize();
+    const int client_w = client_sz.GetWidth();
+    const bool want_wide = (client_w >= FromDIP(1100));
+    const bool want_print_stacked = want_wide || (client_w > 0 && client_w < FromDIP(860));
+    const bool want_opts_vertical = want_wide || (client_w > 0 && client_w < FromDIP(740));
+
+    if (options_sizer_ && card_standard_ && card_touch_) {
+        const int cur_orient = options_sizer_->GetOrientation();
+        const int target_orient = want_opts_vertical ? wxVERTICAL : wxHORIZONTAL;
+        if (!layout_initialized_ || cur_orient != target_orient) {
+            options_sizer_->Detach(card_standard_);
+            options_sizer_->Detach(card_touch_);
+            options_sizer_->SetOrientation(target_orient);
+            if (want_opts_vertical) {
+                options_sizer_->Add(card_standard_, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
+                options_sizer_->Add(card_touch_, 0, wxEXPAND);
+            } else {
+                options_sizer_->Add(card_standard_, 1, wxEXPAND | wxRIGHT, FromDIP(12));
+                options_sizer_->Add(card_touch_, 1, wxEXPAND);
+            }
+        }
+    }
+
+    if (content_row_ && screen_card_ && print_panel_ && (!layout_initialized_ || want_wide != wide_layout_)) {
+        layout_initialized_ = true;
+        wide_layout_ = want_wide;
+        content_row_->Detach(screen_card_);
+        content_row_->Detach(print_panel_);
+        content_row_->SetOrientation(wide_layout_ ? wxHORIZONTAL : wxVERTICAL);
+        if (wide_layout_) {
+            screen_card_->SetMinSize(wxSize(FromDIP(260), -1));
+            print_panel_->SetMinSize(wxSize(FromDIP(260), -1));
+            content_row_->Add(screen_card_, 4, wxEXPAND | wxLEFT | wxTOP | wxBOTTOM, FromDIP(10));
+            content_row_->Add(print_panel_, 6, wxEXPAND);
+        } else {
+            screen_card_->SetMinSize(wxDefaultSize);
+            print_panel_->SetMinSize(wxDefaultSize);
+            content_row_->Add(screen_card_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+            content_row_->Add(print_panel_, 0, wxEXPAND);
+        }
+    }
+
     if (client_w > FromDIP(240)) {
-        const int card_wrap = std::max(FromDIP(180), client_w - FromDIP(64));
-        if (lbl_subtitle_) {
-            lbl_subtitle_->SetLabel(
-                wxT("Elija el tamaño de botones y letras más cómodo para trabajar en esta computadora.")
-            );
-            lbl_subtitle_->Wrap(card_wrap);
+        // Calcular el ancho real objetivo directamente desde client_w (4:6 en modo ancho)
+        // para no depender de GetClientSize() obsoleto al alternar entre ventana y pantalla completa.
+        const int print_avail_w = want_wide
+            ? ((client_w - FromDIP(10)) * 6) / 10
+            : client_w;
+        const int print_wrap_w = std::max(FromDIP(200), print_avail_w - FromDIP(60));
+        if (print_panel_) {
+            print_panel_->set_stacked_layout(want_print_stacked, print_wrap_w);
         }
-        if (lbl_note_) {
-            lbl_note_->SetLabel(wxT("Este cambio solo afecta a este equipo y se recuerda al reiniciar."));
-            lbl_note_->Wrap(card_wrap);
+
+        const int screen_w = wide_layout_
+            ? ((client_w - FromDIP(10)) * 4) / 10
+            : (client_w - FromDIP(20));
+        const int card_wrap = std::max(FromDIP(160), screen_w - FromDIP(44));
+        const int fs_wrap = std::max(FromDIP(140), screen_w - FromDIP(76));
+        const int tile_wrap = want_opts_vertical
+            ? std::max(FromDIP(140), screen_w - FromDIP(76))
+            : std::max(FromDIP(120), (screen_w - FromDIP(100)) / 2);
+
+        auto wrap_label = [this](wxStaticText* lbl, const wxString& text, int max_w) {
+            if (!lbl) return;
+            wxClientDC dc(lbl);
+            dc.SetFont(lbl->GetFont());
+            wxString wrapped;
+            wxString cur_line;
+            size_t pos = 0;
+            while (pos < text.length()) {
+                size_t next = text.find(wxT(' '), pos);
+                wxString word = (next == wxString::npos) ? text.Mid(pos) : text.Mid(pos, next - pos);
+                wxString cand = cur_line.IsEmpty() ? word : (cur_line + wxT(" ") + word);
+                if (!cur_line.IsEmpty() && dc.GetTextExtent(cand).GetWidth() > max_w) {
+                    if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+                    wrapped += cur_line;
+                    cur_line = word;
+                } else {
+                    cur_line = cand;
+                }
+                if (next == wxString::npos) break;
+                pos = next + 1;
+            }
+            if (!cur_line.IsEmpty()) {
+                if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+                wrapped += cur_line;
+            }
+            lbl->SetMinSize(wxDefaultSize);
+            lbl->SetLabel(wrapped);
+            lbl->InvalidateBestSize();
+            const wxSize ext = dc.GetMultiLineTextExtent(wrapped);
+            lbl->SetMinSize(wxSize(-1, ext.GetHeight() + FromDIP(2)));
+        };
+        wrap_label(
+            lbl_subtitle_,
+            wxT("Elija el tamaño de botones y letras más cómodo para trabajar en esta computadora."),
+            card_wrap
+        );
+        wrap_label(
+            lbl_note_,
+            wxT("Este cambio solo afecta a este equipo y se recuerda al reiniciar."),
+            card_wrap
+        );
+        wrap_label(lbl_standard_desc_, wxT("Para usar con ratón y teclado."), tile_wrap);
+        wrap_label(lbl_touch_desc_, wxT("Para pantallas que se tocan con el dedo."), tile_wrap);
+        wrap_label(
+            lbl_fullscreen_desc_,
+            wxT("Ocupa toda la pantalla y oculta la barra de Windows. También con la tecla F11."),
+            fs_wrap
+        );
+        if (card_standard_) {
+            card_standard_->InvalidateBestSize();
+            card_standard_->Layout();
         }
-        const int tile_wrap = std::max(FromDIP(140), (card_wrap - FromDIP(68)) / 2);
-        if (lbl_standard_desc_) {
-            lbl_standard_desc_->SetLabel(wxT("Para usar con ratón y teclado."));
-            lbl_standard_desc_->Wrap(tile_wrap);
+        if (card_touch_) {
+            card_touch_->InvalidateBestSize();
+            card_touch_->Layout();
         }
-        if (lbl_touch_desc_) {
-            lbl_touch_desc_->SetLabel(wxT("Para pantallas que se tocan con el dedo."));
-            lbl_touch_desc_->Wrap(tile_wrap);
+        if (card_fullscreen_) {
+            card_fullscreen_->InvalidateBestSize();
+            card_fullscreen_->Layout();
         }
-        if (lbl_fullscreen_desc_) {
-            lbl_fullscreen_desc_->SetLabel(
-                wxT("Ocupa toda la pantalla y oculta la barra de Windows. También con la tecla F11.")
-            );
-            lbl_fullscreen_desc_->Wrap(std::max(FromDIP(160), card_wrap - FromDIP(28)));
+        if (screen_card_) {
+            screen_card_->InvalidateBestSize();
+            screen_card_->Layout();
         }
     }
 
     const wxSize min_sz = scroll_sizer_->GetMinSize();
-    const wxSize client_sz = scroll_->GetClientSize();
-    const int virt_w = std::max(client_sz.GetWidth(), min_sz.GetWidth());
+    const int virt_w = wide_layout_ ? std::max(client_sz.GetWidth(), 0) : std::max(client_sz.GetWidth(), min_sz.GetWidth());
     const int virt_h = std::max(client_sz.GetHeight(), min_sz.GetHeight());
-    scroll_->SetVirtualSize(min_sz.GetWidth(), min_sz.GetHeight());
-    scroll_sizer_->SetDimension(scroll_->CalcScrolledPosition(wxPoint(0, 0)), wxSize(virt_w, virt_h));
+    const int target_h = wide_layout_ ? virt_h : min_sz.GetHeight();
+    scroll_->SetVirtualSize(virt_w, target_h);
+    // Si activar la barra vertical redujo el ancho cliente, ajustar virt_w para evitar
+    // una barra horizontal espuria cuando el contenido cabe en el nuevo ancho cliente.
+    const wxSize post_sz = scroll_->GetClientSize();
+    const int final_w = wide_layout_
+        ? std::max(post_sz.GetWidth(), 0)
+        : std::max(post_sz.GetWidth(), min_sz.GetWidth());
+    if (final_w != virt_w) {
+        scroll_->SetVirtualSize(final_w, target_h);
+    }
+    const int final_h = std::max(post_sz.GetHeight(), min_sz.GetHeight());
+    scroll_sizer_->SetDimension(scroll_->CalcScrolledPosition(wxPoint(0, 0)), wxSize(final_w, final_h));
+    scroll_sizer_->Layout();
 }
 
 void BackofficeSettingsPanel::on_select_profile(UiProfile profile) {

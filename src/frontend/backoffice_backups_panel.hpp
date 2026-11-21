@@ -102,6 +102,10 @@ private:
 
     wxScrolledWindow* scroll_{nullptr};
     wxBoxSizer* scroll_sizer_{nullptr};
+    wxBoxSizer* top_row_{nullptr};
+    wxBoxSizer* bottom_row_{nullptr};
+    bool wide_layout_{false};
+    bool layout_initialized_{false};
 
     // Banner de retroalimentación claro
     wxPanel* pnl_feedback_{nullptr};
