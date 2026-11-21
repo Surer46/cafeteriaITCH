@@ -179,7 +179,16 @@ otas-pc.md`. `ctest` vuelve a estar disponible, pero **no correr `UpdateTest` ha
 - **T15 redactado (2026-11-20)** para Hydrogen (High, `/caveman`), en `Prompts/prompts-2026-11-20-T15.md`: botones «Continuar» y «Cancelar» en el aviso de impresora no encontrada y su primera prueba. Es la mitad de Hydrogen en la comparativa con Neon (T14c). Se pega cuando termine la batería del orquestador sobre T14c, para que no recompile mientras corren las pruebas. I7 pasa a ser T16.
 - **Plan de B17 aprobado con ajustes (2026-11-20)**, respuesta en `Prompts/prompts-2026-11-18-B17.md`: observador de la copia por tandas solo para pruebas (sin `#ifdef`), tandas de 100 páginas con el mismo manejo de errores de hoy, migración 021 que rellena `actor_username` desde `users`, y el plan de consulta como diagnóstico, no como aserción.
 - **Comparativa de ejecutores del frontend (decisión del usuario, 2026-11-20):** T14c lo hace Gemini 4 Neon (Medium) como ejecutor, en la misma conversación de AntiGravity (`564aa917…`, cambiando con `/model`), para compararlo con Gemini 4 Hydrogen (High). Las dos con `/caveman` activado, como trabajó siempre Hydrogen. Cuota de 5 horas de AntiGravity al empezar T14c con Neon: 100 % (dato del usuario, 2026-11-20). Al terminar: 96.82 % (T14c gastó cerca del 3.2 % de la cuota de 5 horas); semanal en 70.86 %. Se mide: compilaciones y corridas hasta el verde, fallos intermedios, defectos que encuentra la auditoría, si respeta la lista cerrada de archivos y aserciones, tiempo y cuota. Referencia de Hydrogen: T13 (8 corridas de su prueba, 5 fallidas por errores de la prueba), T14 (detenido por OOM, 2 defectos de diseño) y T14b (11 compilaciones por configuración, 14 corridas de su prueba, 10 fallidas).
-- **Pausa del 2026-11-19 (retomar aquí):**
+- **Pausa del 2026-11-21 (retomar aquí):**
+  - **T16a2 redactado y sin pegar** (sección 1 de `prompts-para-pegar.md`): pegarlo a Neon en la misma conversación de T16a y auditarlo. Los cambios de T16a siguen sin commitear en `main`. Después, T16b y T16c (secciones 2 y 3) y T16d.
+  - **GitHub:** `main` subido hasta `8070e0f`; las ramas `backend/*` siguen locales.
+  - **Compilar con `--parallel 1`.**
+  - **Reanudar:**
+    - AntiGravity (Neon y Hydrogen, frontend; se cambia de modelo con `/model` y se usa `/caveman`): `agy --conversation=564aa917-e6e5-473d-81d8-ddfb503cba5c`, en `C:\Cafeteria_ITCH\cafeteriaITCH`.
+    - Claude Code Terminal (backend): `claude --resume 26192e61-ffdd-4be3-abd0-3a95f0fe470f`, en `C:\Cafeteria_ITCH\Cafeteria_ITCH_backend`.
+    - Orquestador: conversación `6fbbf53f-3bf2-4bac-8571-90797a3e1b3e` (Claude, app de escritorio).
+  - **Copia de las conversaciones** en `C:\Cafeteria_ITCH\respaldo-conversaciones\2026-11-21\`.
+- **Pausa del 2026-11-19:**
   - **`main` en `7bcb348`** (más este registro), con T14 + T14b aceptados: **I3 e I4 completos en software**. 13 commits sin subir a GitHub desde `f3c6481`.
   - **Claude es otra vez el único orquestador**; Neon solo hace diagnósticos a pedido del usuario (`docs/manual-orquestador.md`, sección 1).
   - **B17** (prompt de Neon aprobado, `Prompts/prompts-2026-11-18-B17.md`): el worktree del backend ya está en la rama `backend/b17` (creada desde `a17f451`), sin cambios. Al volver: ver si Claude Code Terminal entregó su plan y responderlo; vigilar que la copia por tandas de `restore_from` no cambie cómo restaura hoy y que la inyección de fallo exista solo en CTest.
