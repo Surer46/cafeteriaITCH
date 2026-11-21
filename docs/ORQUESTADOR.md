@@ -169,6 +169,7 @@ otas-pc.md`. `ctest` vuelve a estar disponible, pero **no correr `UpdateTest` ha
 
 ## Reanudar agentes
 
+- **Comparativa de ejecutores del frontend (decisión del usuario, 2026-11-20):** T14c lo hace Gemini 4 Neon (Medium) como ejecutor, en la misma conversación de AntiGravity (`564aa917…`, cambiando con `/model`), para compararlo con Gemini 4 Hydrogen (High). Se mide: compilaciones y corridas hasta el verde, fallos intermedios, defectos que encuentra la auditoría, si respeta la lista cerrada de archivos y aserciones, tiempo y cuota. Referencia de Hydrogen: T13 (8 corridas de su prueba, 5 fallidas por errores de la prueba), T14 (detenido por OOM, 2 defectos de diseño) y T14b (11 compilaciones por configuración, 14 corridas de su prueba, 10 fallidas).
 - **Pausa del 2026-11-19 (retomar aquí):**
   - **`main` en `7bcb348`** (más este registro), con T14 + T14b aceptados: **I3 e I4 completos en software**. 13 commits sin subir a GitHub desde `f3c6481`.
   - **Claude es otra vez el único orquestador**; Neon solo hace diagnósticos a pedido del usuario (`docs/manual-orquestador.md`, sección 1).
