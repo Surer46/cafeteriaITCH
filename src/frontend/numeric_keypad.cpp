@@ -50,29 +50,9 @@ NumericKeypad::NumericKeypad(wxWindow* host)
 
     Bind(wxEVT_PAINT, &NumericKeypad::on_paint, this);
     if (host_) {
-        host_->Bind(wxEVT_SHOW, [this](wxShowEvent& evt) {
-            evt.Skip();
-            if (!evt.IsShown()) {
-                hide_keypad(false);
-            }
-        });
-        host_->Bind(wxEVT_SIZE, [this](wxSizeEvent& evt) {
-            evt.Skip();
-            if (IsShown() && active_field_) {
-                CallAfter([this]() {
-                    if (IsShown() && active_field_) {
-                        reposition();
-                    }
-                });
-            }
-        });
-        host_->Bind(wxEVT_DESTROY, [this](wxWindowDestroyEvent& evt) {
-            evt.Skip();
-            uninstall_filter();
-            host_ = nullptr;
-            active_field_ = nullptr;
-            active_hit_box_ = nullptr;
-        });
+        host_->Bind(wxEVT_SHOW, &NumericKeypad::on_host_show, this);
+        host_->Bind(wxEVT_SIZE, &NumericKeypad::on_host_size, this);
+        host_->Bind(wxEVT_DESTROY, &NumericKeypad::on_host_destroy, this);
     }
 }
 
@@ -111,7 +91,39 @@ NumericKeypad::NumericKeypad(wxWindow* parent, bool allow_decimal, bool compact)
 }
 
 NumericKeypad::~NumericKeypad() {
+    if (host_) {
+        host_->Unbind(wxEVT_SHOW, &NumericKeypad::on_host_show, this);
+        host_->Unbind(wxEVT_SIZE, &NumericKeypad::on_host_size, this);
+        host_->Unbind(wxEVT_DESTROY, &NumericKeypad::on_host_destroy, this);
+        host_ = nullptr;
+    }
     uninstall_filter();
+}
+
+void NumericKeypad::on_host_show(wxShowEvent& evt) {
+    evt.Skip();
+    if (!evt.IsShown()) {
+        hide_keypad(false);
+    }
+}
+
+void NumericKeypad::on_host_size(wxSizeEvent& evt) {
+    evt.Skip();
+    if (IsShown() && active_field_) {
+        CallAfter([this]() {
+            if (IsShown() && active_field_) {
+                reposition();
+            }
+        });
+    }
+}
+
+void NumericKeypad::on_host_destroy(wxWindowDestroyEvent& evt) {
+    evt.Skip();
+    uninstall_filter();
+    host_ = nullptr;
+    active_field_ = nullptr;
+    active_hit_box_ = nullptr;
 }
 
 void NumericKeypad::create_controls() {

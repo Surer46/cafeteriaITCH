@@ -823,6 +823,57 @@ def run_t4_suite(exe_path, build_label):
             assert closed_row == (27000, 0), f"Turno no cerró con 27000 en SQLite: {closed_row}"
             print(f"[OK] {build_label} Caja cierre con teclado -> SQLite {closed_row}.")
 
+            # 7b. Regresión T14c: en Táctil, abrir teclado en Caja y turnos, cambiar a otra subsección y volver 5 veces seguidas
+            for cycle in range(5):
+                deadline = time.time() + 5.0
+                cash_edit_reg = None
+                while time.time() < deadline:
+                    edits_now = [h for (h, c, _t) in enum_children(hwnd_main) if c.lower() == "edit" and user32.IsWindowVisible(h)]
+                    if edits_now:
+                        cash_edit_reg = edits_now[0]
+                        break
+                    time.sleep(0.1)
+                assert cash_edit_reg is not None, f"Ciclo {cycle + 1}: campo de Caja y turnos no encontrado"
+                real_mouse_click_ctrl(cash_edit_reg, hwnd_main)
+                assert is_keypad_visible(hwnd_main), f"Ciclo {cycle + 1}: teclado no abrió en Caja y turnos"
+
+                click_subnav(hwnd_main, "Bitácora")
+                deadline = time.time() + 5.0
+                bit_ready = False
+                while time.time() < deadline:
+                    if any(c.lower() == "button" and user32.IsWindowVisible(h) and t == "Siguiente" for (h, c, t) in enum_children(hwnd_main)):
+                        bit_ready = True
+                        break
+                    time.sleep(0.1)
+                assert proc.poll() is None, f"Ciclo {cycle + 1}: proceso murió al cambiar a Bitácora"
+                assert user32.IsWindow(hwnd_main), f"Ciclo {cycle + 1}: ventana principal dejó de existir en Bitácora"
+                assert bit_ready, f"Ciclo {cycle + 1}: subsección Bitácora no respondió tras cerrar Caja y turnos con teclado"
+
+                click_subnav(hwnd_main, "Caja y turnos")
+                deadline = time.time() + 5.0
+                caja_ready = False
+                while time.time() < deadline:
+                    if any(c.lower() == "button" and user32.IsWindowVisible(h) and "Abrir Turno" in t for (h, c, t) in enum_children(hwnd_main)):
+                        caja_ready = True
+                        break
+                    time.sleep(0.1)
+                assert proc.poll() is None, f"Ciclo {cycle + 1}: proceso murió al volver a Caja y turnos"
+                assert user32.IsWindow(hwnd_main), f"Ciclo {cycle + 1}: ventana principal dejó de existir al volver a Caja y turnos"
+                assert caja_ready, f"Ciclo {cycle + 1}: subsección Caja y turnos no respondió al volver"
+
+            click_subnav(hwnd_main, "Reportes")
+            deadline = time.time() + 5.0
+            rep_ready = False
+            while time.time() < deadline:
+                if any(c.lower() == "button" and user32.IsWindowVisible(h) and "Exportar a CSV" in t for (h, c, t) in enum_children(hwnd_main)):
+                    rep_ready = True
+                    break
+                time.sleep(0.1)
+            assert proc.poll() is None, "Proceso murió tras 5 ciclos de teclado en Caja y turnos"
+            assert user32.IsWindow(hwnd_main), "Ventana principal no válida tras 5 ciclos de teclado"
+            assert rep_ready, "La ventana no cambió de vista a Reportes tras 5 ciclos de teclado"
+            print(f"[OK] {build_label} Regresión T14c: 5 ciclos teclado Caja y turnos <-> Bitácora + cambio a Reportes sin UAF.")
+
             # 8. Inventario > Ingredientes (Ajuste d: evitar nombre, existencia actual, botón Guardar y tarjeta derecha)
             click_sidebar_section(hwnd_main, "Inventario")
             click_subnav(hwnd_main, "Ingredientes")

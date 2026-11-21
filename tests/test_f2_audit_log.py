@@ -113,6 +113,15 @@ def wait_for_window_by_pid(target_pid, title_substring, exclude_substrings=None,
         time.sleep(0.2)
     raise TimeoutError(f"Timeout ({timeout_sec}s) esperando ventana '{title_substring}' en paso: {step_name}")
 
+def wait_until(predicate, timeout_sec=8.0, interval=0.1):
+    deadline = time.time() + timeout_sec
+    while time.time() < deadline:
+        val = predicate()
+        if val:
+            return val
+        time.sleep(interval)
+    return predicate()
+
 def get_rect(hwnd):
     rect = wintypes.RECT()
     user32.GetWindowRect(hwnd, ctypes.byref(rect))
@@ -563,15 +572,29 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
 
         hwnd_main3, _ = wait_for_window_by_pid(pid3, "Cafetería ITCH II", exclude_substrings=["Primer Inicio", "Iniciar Sesión"])
         # Navegar a Bitácora
-        b_caja = next((h for (h, cls, txt) in get_child_controls(hwnd_main3) if cls.lower() == "button" and "Caja y Reportes" in txt), None)
+        b_caja = wait_until(
+            lambda: next((h for (h, cls, txt) in get_child_controls(hwnd_main3) if cls.lower() == "button" and "Caja y Reportes" in txt), None),
+            timeout_sec=8.0,
+        )
+        assert b_caja is not None, "Botón 'Caja y Reportes' no encontrado"
         send_click_button(b_caja)
-        time.sleep(0.8)
-        b_bit = next((h for (h, cls, txt) in get_child_controls(hwnd_main3) if cls.lower() == "button" and "Bitácora" in txt), None)
+        b_bit = wait_until(
+            lambda: next((h for (h, cls, txt) in get_child_controls(hwnd_main3) if cls.lower() == "button" and "Bitácora" in txt), None),
+            timeout_sec=8.0,
+        )
+        assert b_bit is not None, "Botón 'Bitácora' no encontrado"
         send_click_button(b_bit)
-        time.sleep(0.8)
 
         # Comprobar Página 1
-        p_list = [h for (h, cls, txt) in get_child_controls(hwnd_main3) if "list" in cls.lower()][0]
+        def _find_page1_list():
+            ctrls = get_child_controls(hwnd_main3)
+            has_next = any(cls.lower() == "button" and txt == "Siguiente" for (_, cls, txt) in ctrls)
+            if not has_next:
+                return None
+            return next((h for (h, cls, txt) in ctrls if "list" in cls.lower()), None)
+
+        p_list = wait_until(_find_page1_list, timeout_sec=8.0)
+        assert p_list is not None, "Lista de Bitácora no encontrada en Página 1"
         p_count = user32.SendMessageW(p_list, LVM_GETITEMCOUNT, 0, 0)
         assert p_count == 100, f"Página 1 debe mostrar exactamente 100 eventos (encontrados: {p_count})"
 
@@ -624,16 +647,29 @@ def run_f2_test_for_binary(exe_path, repo_root, config_name):
 
         hwnd_main4, _ = wait_for_window_by_pid(pid4, "Cafetería ITCH II", exclude_substrings=["Primer Inicio", "Iniciar Sesión"])
         # Navegar a Bitácora como Cajero
-        b_caja4 = next((h for (h, cls, txt) in get_child_controls(hwnd_main4) if cls.lower() == "button" and "Caja y Reportes" in txt), None)
+        b_caja4 = wait_until(
+            lambda: next((h for (h, cls, txt) in get_child_controls(hwnd_main4) if cls.lower() == "button" and "Caja y Reportes" in txt), None),
+            timeout_sec=8.0,
+        )
+        assert b_caja4 is not None, "Botón 'Caja y Reportes' no encontrado (Cajero)"
         send_click_button(b_caja4)
-        time.sleep(0.8)
-        b_bit4 = next((h for (h, cls, txt) in get_child_controls(hwnd_main4) if cls.lower() == "button" and "Bitácora" in txt), None)
+        b_bit4 = wait_until(
+            lambda: next((h for (h, cls, txt) in get_child_controls(hwnd_main4) if cls.lower() == "button" and "Bitácora" in txt), None),
+            timeout_sec=8.0,
+        )
+        assert b_bit4 is not None, "Botón 'Bitácora' no encontrado (Cajero)"
         send_click_button(b_bit4)
-        time.sleep(0.8)
 
         # Comprobar que el servicio rechazó la consulta y se muestra el mensaje de error tal cual
-        c4_ctrls = get_child_controls(hwnd_main4)
-        warn_lbl = next((txt for (h, cls, txt) in c4_ctrls if "audit.view" in txt or "permiso" in txt.lower()), None)
+        def _find_cajero_warn_and_list():
+            ctrls = get_child_controls(hwnd_main4)
+            lbl = next((txt for (h, cls, txt) in ctrls if "audit.view" in txt or "permiso" in txt.lower()), None)
+            lst = next((h for (h, cls, txt) in ctrls if "list" in cls.lower()), None)
+            return (ctrls, lbl) if (lbl is not None and lst is not None) else None
+
+        res4 = wait_until(_find_cajero_warn_and_list, timeout_sec=8.0)
+        c4_ctrls = res4[0] if res4 else get_child_controls(hwnd_main4)
+        warn_lbl = res4[1] if res4 else next((txt for (h, cls, txt) in c4_ctrls if "audit.view" in txt or "permiso" in txt.lower()), None)
         assert warn_lbl is not None, "El mensaje de error del servicio ('audit.view') no se mostró en la interfaz"
         print(f"[OK] Mensaje de restricción de servicio recibido y mostrado tal cual: '{warn_lbl}'")
 

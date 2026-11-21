@@ -80,6 +80,9 @@ private:
     void create_controls();
     void apply_layout();
     void on_paint(wxPaintEvent& evt);
+    void on_host_show(wxShowEvent& evt);
+    void on_host_size(wxSizeEvent& evt);
+    void on_host_destroy(wxWindowDestroyEvent& evt);
     void on_key_digit(const wxString& ch);
     void on_key_decimal();
     void on_key_backspace();
