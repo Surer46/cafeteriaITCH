@@ -33,3 +33,19 @@ T16a2 (`Prompts/prompts-2026-11-21-T16a2.md`), para Neon:
 - Respaldos sin desplazamiento en pantalla completa, con lista y limpieza lado a lado.
 - Corregir la regresión de 1200x720 y 960x600.
 - Agregar al script una pasada informativa en ventana normal que detecte barras horizontales y verticales.
+
+## T16a2 (Neon; 01:46 a 02:47; auditado el 2026-11-21)
+
+**T16a2: aceptado en parte; requiere T16a3.** Entrega en `entregas/entrega-2026-11-21-T16a2.md`. Revisé capturas y `medidas.txt`; no recompilé.
+
+- **Respaldos en pantalla completa: corregido.** «Lista de respaldos» y «Limpieza de respaldos antiguos» quedan lado a lado (11:10), sin barra vertical, con todos los botones visibles, en Estándar (97,5 % x 93,9 %) y Táctil (97,5 % x 94,2 %).
+  - **Observación:** en Táctil, la lista de limpieza muestra una sola fila (52 px).
+- **Regresión de 1200x720: corregida.** La pasada nueva en ventana normal da `hscroll=NO` en las 12 combinaciones (tres pantallas, dos tamaños, dos perfiles). Las capturas 14 y 15 vuelven a verse como en `4ff6905`; `opt_sizer_` vuelve a proporción 0 fuera del modo apilado.
+- **Regresión nueva: Configuración en pantalla completa, Táctil** (`touch_15_configuracion.png`, `20_settings_fullscreen_option.png`). En T16a cumplía y ahora no (92,3 % de ancho, franja de 76 px, `vscroll=SI`):
+  - el subtítulo y la descripción de pantalla completa pierden su segunda línea, y desaparece la mención de F11;
+  - la vista previa queda cortada abajo.
+  - Neon lo anotó como límite en lugar de corregirlo. El script no detecta texto cortado.
+
+Siguiente: T16a3 (`Prompts/prompts-2026-11-21-T16a3.md`).
+- Configuración sin desplazamiento y sin texto cortado en los dos perfiles.
+- Columna informativa `texto_cortado` en el script.
