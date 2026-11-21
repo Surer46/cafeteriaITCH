@@ -448,6 +448,12 @@ contracts::Result<contracts::ProductDto> MockCatalogService::create_product(cons
     p.is_active = true;
     p.has_image = false;
     p.stock_units = 0;
+    // B17: igual que el servicio real: un directo controla existencia por omisión (o si se enlaza un ingrediente);
+    // recién creado no tiene existencias ni movimientos. Preparado sin receta o sin control: vacíos.
+    if (!input.is_prepared && (input.track_stock || !input.link_ingredient_id.empty())) {
+        p.stock_tracked = true;
+        p.stock_status = "OUT";
+    }
     products_.push_back(p);
     return contracts::Result<contracts::ProductDto>::ok(p);
 }

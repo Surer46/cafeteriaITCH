@@ -62,6 +62,11 @@ public:
     // true mientras hay un respaldo, una restauración o una limpieza en curso.
     bool operation_in_progress() const { return operation_in_progress_->load(); }
 
+    // SOLO PARA PRUEBAS (no forma parte de IBackupService ni lo llama código de producción): observador que se
+    // pasa a la PRIMERA copia de una restauración (ver storage::RestoreStepObserver). Devolver false aborta la copia
+    // a mitad. La recuperación posterior al fallo nunca lo usa. Por omisión está vacío y no tiene ningún efecto.
+    void set_restore_step_observer(storage::RestoreStepObserver observer) { restore_step_observer_ = std::move(observer); }
+
 private:
     struct AutoWorker;  // estado compartido con el hilo del respaldo automático
     // Cuerpo del hilo del respaldo automático: usa SOLO su propia conexión, nunca la de la interfaz.
@@ -78,6 +83,7 @@ private:
     contracts::Result<contracts::RestoreResultDto> restore_impl(
         const std::filesystem::path& src, const std::string& file_name);
     bool recover_from(const std::filesystem::path& pre_backup);
+    storage::RestoreStepObserver restore_step_observer_;
 
     storage::SqliteDatabase& db_;
     std::shared_ptr<contracts::IAccountService> account_service_;

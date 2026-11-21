@@ -442,7 +442,7 @@ contracts::Result<BackupFileInfo> SqliteDatabase::inspect_file(const std::filesy
     return contracts::Result<BackupFileInfo>::ok(info);
 }
 
-contracts::OperationResult SqliteDatabase::restore_from(const std::filesystem::path& src_path) {
+contracts::OperationResult SqliteDatabase::restore_from(const std::filesystem::path& src_path, const RestoreStepObserver& observer) {
     if (!db_) {
         return contracts::OperationResult::fail(contracts::ErrorCode::InvalidState, "Base de datos no inicializada");
     }
@@ -463,11 +463,27 @@ contracts::OperationResult SqliteDatabase::restore_from(const std::filesystem::p
         return contracts::OperationResult::fail(contracts::ErrorCode::StorageFailure,
                                                 "Error al iniciar la restauración: " + e);
     }
-    int rc = sqlite3_backup_step(b, -1);
+    // Por tandas de 100 páginas. Ante cualquier código distinto de SQLITE_OK o SQLITE_DONE la copia termina con el mismo
+    // error que antes (sin reintentos por BUSY o LOCKED) y SIEMPRE se llama sqlite3_backup_finish. Mientras la copia no
+    // termina, SQLite mantiene la escritura en una transacción de la conexión viva y la revierte al terminar sin
+    // completar, así que un aborto a mitad de copia no deja páginas mezcladas.
+    constexpr int kPagesPerStep = 100;
+    int rc = SQLITE_OK;
+    bool aborted = false;
+    while (true) {
+        rc = sqlite3_backup_step(b, kPagesPerStep);
+        if (rc == SQLITE_DONE) break;
+        if (rc != SQLITE_OK) break;
+        if (observer) {
+            bool keep_going = false;
+            try { keep_going = observer(sqlite3_backup_remaining(b), sqlite3_backup_pagecount(b)); } catch (...) { keep_going = false; }
+            if (!keep_going) { aborted = true; break; }
+        }
+    }
     int fin = sqlite3_backup_finish(b);
-    std::string e = sqlite3_errmsg(db_);
+    std::string e = aborted ? std::string("copia interrumpida") : std::string(sqlite3_errmsg(db_));
     sqlite3_close_v2(src);
-    if (rc != SQLITE_DONE || fin != SQLITE_OK) {
+    if (aborted || rc != SQLITE_DONE || fin != SQLITE_OK) {
         return contracts::OperationResult::fail(contracts::ErrorCode::StorageFailure,
                                                 "Error al copiar el respaldo sobre la base viva: " + e);
     }

@@ -61,6 +61,11 @@ struct BackupFileInfo {
 // Avisos de avance de una copia: páginas que faltan y páginas totales.
 using BackupProgress = std::function<void(int remaining_pages, int total_pages)>;
 
+// SOLO PARA PRUEBAS. Se llama tras cada tanda de páginas copiada por restore_from (páginas que faltan, páginas
+// totales); si devuelve false (o lanza), la copia se aborta con el error de siempre. Por omisión está vacío y no
+// tiene ningún efecto: el programa nunca lo establece (no hay variable de entorno ni global que lo active).
+using RestoreStepObserver = std::function<bool(int remaining_pages, int total_pages)>;
+
 class SqliteDatabase {
 public:
     SqliteDatabase();
@@ -107,7 +112,8 @@ public:
 
     // Copia el archivo sobre esta conexión viva con sqlite3_backup.
     // Falla sin tocar nada si hay una transacción abierta.
-    contracts::OperationResult restore_from(const std::filesystem::path& src_path);
+    // `observer` es solo para pruebas (ver RestoreStepObserver); el uso normal no lo pasa.
+    contracts::OperationResult restore_from(const std::filesystem::path& src_path, const RestoreStepObserver& observer = {});
 
     contracts::Result<std::int64_t> page_size();
 
