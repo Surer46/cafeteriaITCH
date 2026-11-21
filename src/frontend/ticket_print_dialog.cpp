@@ -185,7 +185,8 @@ void TicketPrintDialog::on_print(wxCommandEvent&) {
         if (is_printer_installed(config_.printer_name)) {
             use_custom_printer = true;
         } else {
-            int ans = wxMessageBox(
+            wxMessageDialog dlg(
+                this,
                 wxString::Format(
                     wxT("La impresora configurada «%s» no se encontró entre las impresoras instaladas.\n\n")
                     wxT("Opciones:\n")
@@ -195,10 +196,11 @@ void TicketPrintDialog::on_print(wxCommandEvent&) {
                     wxString::FromUTF8(config_.printer_name.c_str())
                 ),
                 wxT("Impresora No Encontrada"),
-                wxOK | wxCANCEL | wxICON_WARNING,
-                this
+                wxOK | wxCANCEL | wxICON_WARNING
             );
-            if (ans == wxCANCEL) {
+            dlg.SetOKCancelLabels(wxT("Continuar"), wxT("Cancelar"));
+            const int ans = dlg.ShowModal();
+            if (ans == wxID_CANCEL || ans != wxID_OK) {
                 printed_ = false;
                 return;
             }
