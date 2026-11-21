@@ -524,6 +524,9 @@ contracts::Result<contracts::ProductDto> SqliteCatalogService::create_product(co
     dto.has_image = false;
     dto.stock_units = 0;
     dto.stock_tracked = tracked;
+    // B17: estado y último movimiento reales (un directo enlazado a un ingrediente que ya tiene existencias y
+    // movimientos los trae). Sin control (track_stock falso o preparado sin receta) quedan vacíos como siempre.
+    if (tracked) fill_stock_info(db_, dto);
 
     return contracts::Result<contracts::ProductDto>::ok(dto);
 }

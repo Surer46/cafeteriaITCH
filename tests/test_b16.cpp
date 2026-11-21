@@ -298,6 +298,66 @@ void test_last_movement_changes(Env& e) {
     TEST_CHECK(p.last_movement_at.size() == 19 && p.last_movement_at[10] == ' ', "Formato AAAA-MM-DD HH:MM:SS");
 }
 
+void test_create_product_status(Env& e) {
+    std::cout << "[TEST] B17: create_product devuelve estado y último movimiento reales..." << std::endl;
+    // Directo nuevo: controla existencia, sin existencias ni movimientos
+    CreateProductDto np;
+    np.sku = e.next("CP"); np.name = "Creado directo B17"; np.category = "Pruebas"; np.price = Money::from_cents(1000);
+    auto created = e.catalog->create_product(np);
+    TEST_CHECK(created.is_success(), "Crear directo: " + created.error_message());
+    TEST_CHECK(created.value().stock_tracked && created.value().stock_units == 0 && created.value().stock_status == "OUT" &&
+               created.value().last_movement_at.empty(), "Directo nuevo: tracked, 0 unidades, OUT y sin movimiento");
+    ProductDto got = e.get(created.value().id);
+    TEST_CHECK(got.stock_tracked == created.value().stock_tracked && got.stock_units == created.value().stock_units &&
+               got.stock_status == created.value().stock_status && got.last_movement_at == created.value().last_movement_at,
+               "create_product coincide con get_product_by_id (directo nuevo)");
+
+    // Directo enlazado a un ingrediente que ya tiene existencias y movimientos
+    const std::string ing = e.ingredient("Pieza previa B17", "COUNT", "pz", 5);
+    e.buy(ing, 6, "pz");
+    e.waste(ing, 3, "pz");   // quedan 3, umbral 5: LOW
+    CreateProductDto lp;
+    lp.sku = e.next("CL"); lp.name = "Creado enlazado B17"; lp.category = "Pruebas"; lp.price = Money::from_cents(1000);
+    lp.link_ingredient_id = ing;
+    auto linked = e.catalog->create_product(lp);
+    TEST_CHECK(linked.is_success(), "Crear enlazado: " + linked.error_message());
+    TEST_CHECK(linked.value().stock_tracked && linked.value().stock_units == 3 && linked.value().stock_status == "LOW" &&
+               !linked.value().last_movement_at.empty(), "Enlazado: 3 unidades, LOW y último movimiento real");
+    got = e.get(linked.value().id);
+    TEST_CHECK(got.stock_units == linked.value().stock_units && got.stock_status == linked.value().stock_status &&
+               got.last_movement_at == linked.value().last_movement_at && got.last_movement_at == e.last_of(ing),
+               "create_product coincide con get_product_by_id (enlazado)");
+
+    // Sin control: directo con track_stock falso
+    const std::string u = e.untracked("Creado sin control B17");
+    ProductDto ug = e.get(u);
+    TEST_CHECK(!ug.stock_tracked && ug.stock_status.empty() && ug.last_movement_at.empty(), "Sin control: vacíos al leer");
+    CreateProductDto up;
+    up.sku = e.next("CU"); up.name = "Devuelto sin control B17"; up.category = "Pruebas"; up.price = Money::from_cents(500); up.track_stock = false;
+    auto ur = e.catalog->create_product(up);
+    TEST_CHECK(ur.is_success() && !ur.value().stock_tracked && ur.value().stock_units == 0 && ur.value().stock_status.empty() &&
+               ur.value().last_movement_at.empty(), "create_product sin control: vacíos");
+
+    // Preparado sin receta
+    CreateProductDto pp;
+    pp.sku = e.next("CR"); pp.name = "Preparado sin receta B17"; pp.category = "Pruebas"; pp.price = Money::from_cents(500); pp.is_prepared = true;
+    auto pr = e.catalog->create_product(pp);
+    TEST_CHECK(pr.is_success() && !pr.value().stock_tracked && pr.value().stock_units == 0 && pr.value().stock_status.empty() &&
+               pr.value().last_movement_at.empty(), "create_product preparado sin receta: vacíos");
+
+    // Mock
+    MockCatalogService mock;
+    auto md = mock.create_product(np);
+    TEST_CHECK(md.is_success() && md.value().stock_tracked && md.value().stock_units == 0 && md.value().stock_status == "OUT" &&
+               md.value().last_movement_at.empty(), "Mock: directo nuevo");
+    auto ml = mock.create_product(lp);
+    TEST_CHECK(ml.is_success() && ml.value().stock_tracked && ml.value().stock_status == "OUT", "Mock: directo enlazado");
+    auto mu = mock.create_product(up);
+    TEST_CHECK(mu.is_success() && !mu.value().stock_tracked && mu.value().stock_status.empty() && mu.value().last_movement_at.empty(), "Mock: sin control");
+    auto mp = mock.create_product(pp);
+    TEST_CHECK(mp.is_success() && !mp.value().stock_tracked && mp.value().stock_status.empty() && mp.value().last_movement_at.empty(), "Mock: preparado sin receta");
+}
+
 void test_mock() {
     std::cout << "[TEST] B16: el mock trae estado y último movimiento..." << std::endl;
     MockCatalogService mock;
@@ -334,6 +394,15 @@ void test_no_n_plus_one(Env& e) {
            "(SELECT 0 AS k UNION ALL SELECT 1 UNION ALL SELECT 2);");
     e.exec("COMMIT;");
 
+    // B17: 30 000 movimientos de existencias repartidos entre los 40 ingredientes (como un mes de 30 000 ventas),
+    // con fechas distintas por ingrediente (cada ingrediente tiene su propio mes y día más reciente).
+    e.exec("WITH RECURSIVE n(i) AS (SELECT 0 UNION ALL SELECT i + 1 FROM n WHERE i < 29999) "
+           "INSERT INTO stock_movements (id, ingredient_id, movement_type, quantity_base_units, reason, created_at) "
+           "SELECT 'psm-' || i, 'pi-' || (1 + (i % 40)), 'PURCHASE', 1, 'Rendimiento', "
+           "printf('2026-%02d-%02d %02d:%02d:00', 1 + ((i % 40) % 10), 1 + ((i / 40) % 28), (i / 1120) % 24, (i / 40) % 60) FROM n;");
+    TEST_CHECK(e.text("SELECT COUNT(*) FROM stock_movements WHERE id LIKE 'psm-%';") == "30000", "30 000 movimientos sembrados");
+    TEST_CHECK(e.text("SELECT COUNT(DISTINCT ingredient_id) FROM stock_movements WHERE id LIKE 'psm-%';") == "40", "Repartidos entre 40 ingredientes");
+
     auto ms_since = [](std::chrono::steady_clock::time_point t0) {
         return std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - t0).count();
     };
@@ -359,6 +428,43 @@ void test_no_n_plus_one(Env& e) {
         (p.stock_status == "LOW" ? low : p.stock_status == "OK" ? ok : out)++;
     }
     TEST_CHECK(tracked == 500 && low > 0 && ok > 0, "Hay productos en LOW y en OK (OK=" + std::to_string(ok) + " LOW=" + std::to_string(low) + " OUT=" + std::to_string(out) + ")");
+    // (a) last_movement_at coincide con el MAX(created_at) real de los ingredientes de cada producto o de las partes de cada combo
+    int with_movement = 0;
+    for (const auto& p : big.value()) {
+        const std::string sql = p.is_combo
+            ? "SELECT MAX(m.created_at) FROM stock_movements m JOIN recipe_items ri ON ri.ingredient_id = m.ingredient_id "
+              "JOIN recipes r ON r.id = ri.recipe_id JOIN combo_items ci ON ci.component_product_id = r.product_id "
+              "WHERE ci.combo_product_id = '" + p.id + "';"
+            : "SELECT MAX(m.created_at) FROM stock_movements m JOIN recipe_items ri ON ri.ingredient_id = m.ingredient_id "
+              "JOIN recipes r ON r.id = ri.recipe_id WHERE r.product_id = '" + p.id + "';";
+        const std::string expected = e.text(sql);
+        TEST_CHECK(p.last_movement_at == expected, "last_movement_at de " + p.name + ": '" + p.last_movement_at + "' y debía ser '" + expected + "'");
+        if (!expected.empty()) ++with_movement;
+    }
+    TEST_CHECK(with_movement == 500, "Los 500 productos tienen movimiento");
+
+    // (c) Plan de consulta (solo se imprime como diagnóstico: cambia entre versiones de SQLite, no se afirma)
+    {
+        const char* plans[] = {
+            "EXPLAIN QUERY PLAN SELECT MAX(m.created_at) FROM stock_movements m WHERE m.ingredient_id = 'pi-1';",
+            "EXPLAIN QUERY PLAN SELECT r.product_id, ri.quantity_base_units, ing.current_stock, ing.low_stock_threshold, "
+            "COALESCE((SELECT MAX(m.created_at) FROM stock_movements m WHERE m.ingredient_id = ing.id), '') "
+            "FROM recipes r JOIN recipe_items ri ON ri.recipe_id = r.id JOIN ingredients ing ON ing.id = ri.ingredient_id "
+            "WHERE r.product_id IN ('pp-1','pp-2') AND r.id = (SELECT id FROM recipes WHERE product_id = r.product_id ORDER BY version DESC LIMIT 1);"};
+        for (const char* q : plans) {
+            auto prep = e.db.prepare(q);
+            TEST_CHECK(prep.is_success(), "Preparar EXPLAIN");
+            auto st = std::move(prep.value());
+            std::cout << "[PLAN] " << (std::string(q).find("IN ('pp-1'") != std::string::npos ? "consulta de recetas" : "último movimiento por ingrediente") << std::endl;
+            while (true) {
+                auto step = st.step();
+                TEST_CHECK(step.is_success(), "Paso de EXPLAIN");
+                if (!step.value()) break;
+                std::cout << "[PLAN]   " << st.get_text(3) << std::endl;
+            }
+        }
+    }
+
     // El mismo producto da lo mismo leído de una en una (get_product_by_id) que en el listado grande
     for (std::size_t i = 0; i < big.value().size(); i += 47) {
         const auto& p = big.value()[i];
@@ -380,6 +486,7 @@ int main() {
     test_prepared(e);
     test_combo_and_untracked(e);
     test_last_movement_changes(e);
+    test_create_product_status(e);
     test_mock();
     test_no_n_plus_one(e);
     e.cleanup();

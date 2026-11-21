@@ -790,6 +790,221 @@ void test_failure_with_open_transaction(const fs::path& base, const fs::path& mi
     env.cleanup();
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// B17: recuperación REAL tras un fallo de restauración y actor de BACKUP_RESTORED
+// ---------------------------------------------------------------------------------------------------------------
+
+// Aplica las migraciones 1..last de `mig` a `db` una por una (como un programa de esa versión).
+void apply_migrations_up_to(SqliteDatabase& db, const fs::path& mig, int last) {
+    MigrationRunner runner(db);
+    for (int v = 1; v <= last; ++v) {
+        char prefix[16];
+        std::snprintf(prefix, sizeof(prefix), "%03d_", v);
+        fs::path found;
+        for (auto& e : fs::directory_iterator(mig)) {
+            if (e.path().filename().string().rfind(prefix, 0) == 0) found = e.path();
+        }
+        TEST_CHECK(!found.empty(), "Debe existir la migración " + std::to_string(v));
+        std::ifstream in(found, std::ios::binary);
+        std::stringstream ss;
+        ss << in.rdbuf();
+        auto r = runner.apply_migration(v, found.filename().string(), ss.str());
+        TEST_CHECK(r.is_success(), "Aplicar migración " + std::to_string(v) + ": " + r.error_message());
+    }
+}
+
+std::string integrity_of(SqliteDatabase& db) { return text_scalar(db, "PRAGMA integrity_check;"); }
+
+// (a) La copia SÍ sobrescribe la base viva y falla la migración posterior: recover_from(pre_path) debe devolver el
+// estado previo. Esta es la prueba real de recover_from (la de (b) solo comprueba el estado final tras el aborto).
+void test_failure_in_post_restore_migration_recovers(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B17: la migración posterior a la copia falla: se recupera el estado anterior..." << std::endl;
+    Env env(base / "t9", mig);
+    env.login_owner();
+    fs::path bk = env.snapshot("antes de migrar.db");
+    const auto version_now = scalar(env.db, "SELECT MAX(version) FROM schema_migrations;");
+    TEST_CHECK(version_now >= 21, "La base viva está en la versión actual");
+    // El respaldo dice ser de la versión anterior: al restaurarlo hay que migrar la última versión.
+    tamper(bk, "DELETE FROM schema_migrations WHERE version = " + std::to_string(version_now) + ";");
+    auto info = SqliteDatabase::inspect_file(bk);
+    TEST_CHECK(info.is_success() && info.value().schema_version == version_now - 1, "El respaldo es de la versión anterior");
+
+    // Después del respaldo la base viva cambia: así se nota si la copia la sobrescribió y si se recuperó.
+    env.add_cashier("cajero_a");
+    const auto users_before = count_users(env.db);
+    const auto audit_before = count_audit(env.db, "BACKUP_RESTORE_FAILED");
+
+    // Carpeta temporal de migraciones: las reales, con la última reemplazada por SQL inválido.
+    fs::path bad_mig = env.root / "migraciones con falla";
+    fs::create_directories(bad_mig);
+    for (auto& e : fs::directory_iterator(mig)) {
+        if (e.path().extension() == ".sql") fs::copy_file(e.path(), bad_mig / e.path().filename(), fs::copy_options::overwrite_existing);
+    }
+    char prefix[16];
+    std::snprintf(prefix, sizeof(prefix), "%03d_", static_cast<int>(version_now));
+    bool replaced = false;
+    for (auto& e : fs::directory_iterator(bad_mig)) {
+        if (e.path().filename().string().rfind(prefix, 0) == 0) {
+            std::ofstream out(e.path(), std::ios::binary | std::ios::trunc);
+            out << "ESTO NO ES SQL VALIDO;\n";
+            replaced = true;
+        }
+    }
+    TEST_CHECK(replaced, "Se reemplazó la última migración por SQL inválido");
+    env.backup = std::make_unique<SqliteBackupService>(env.db, env.account, env.data_dir.u8string(), bad_mig.u8string(),
+                                                       [&env]() { ++env.restored_callbacks; });
+
+    auto res = env.backup->restore_from_backup(bk.u8string());
+    TEST_CHECK(!res.is_success(), "La restauración debe fallar");
+    const std::string msg = res.error_message();
+    TEST_CHECK(msg.rfind("Falló la migración posterior a la restauración (", 0) == 0, "Texto real de restore_impl: " + msg);
+    const std::string tail = "; se recuperó el estado anterior";
+    TEST_CHECK(msg.size() > tail.size() && msg.compare(msg.size() - tail.size(), tail.size(), tail) == 0, "Termina con la recuperación: " + msg);
+    // La base viva volvió al estado de antes de restaurar (la copia la había sobrescrito con el respaldo)
+    TEST_CHECK(count_users(env.db) == users_before, "Los datos previos quedaron intactos (cajero_a sigue)");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM users WHERE username = 'cajero_a';") == 1, "cajero_a existe");
+    TEST_CHECK(scalar(env.db, "SELECT MAX(version) FROM schema_migrations;") == version_now, "La versión del esquema no cambió");
+    TEST_CHECK(integrity_of(env.db) == "ok", "integrity_check de la base viva: ok");
+    TEST_CHECK(env.account->is_authenticated(), "La sesión sigue activa");
+    TEST_CHECK(env.restored_callbacks == 0, "on_restored no se dispara");
+    TEST_CHECK(count_audit(env.db, "BACKUP_RESTORE_FAILED") == audit_before + 1, "Se audita BACKUP_RESTORE_FAILED");
+    TEST_CHECK(count_audit(env.db, "BACKUP_RESTORED") == 0, "No se audita BACKUP_RESTORED");
+    env.cleanup();
+}
+
+// (b) Aborto a mitad de la copia (inyectado solo desde esta prueba con el observador de pruebas). NOTA: mientras la
+// copia no termina, SQLite mantiene la escritura en una transacción y la revierte al cerrar sin completar, así que
+// aquí se comprueba el ESTADO FINAL tras el aborto (base íntegra y datos previos). La prueba real de que
+// recover_from devuelve el estado anterior es (a), donde la copia sí terminó y se sobrescribió la base viva.
+void test_abort_mid_copy_leaves_live_database_intact(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B17: aborto a mitad de la copia: la base viva queda íntegra y con sus datos..." << std::endl;
+    Env env(base / "t10", mig);
+    env.login_owner();
+    // Relleno para que la base pase de 100 páginas (así hay al menos una tanda copiada antes del aborto)
+    TEST_CHECK(env.db.execute("CREATE TABLE relleno_b17 (id INTEGER PRIMARY KEY, b BLOB);").is_success(), "Tabla de relleno");
+    TEST_CHECK(env.db.execute("WITH RECURSIVE n(i) AS (SELECT 1 UNION ALL SELECT i + 1 FROM n WHERE i < 400) "
+                              "INSERT INTO relleno_b17 (id, b) SELECT i, zeroblob(4096) FROM n;").is_success(), "Relleno");
+    fs::path bk = env.snapshot("con relleno.db");
+    auto info = SqliteDatabase::inspect_file(bk);
+    TEST_CHECK(info.is_success(), "Respaldo inspeccionable");
+    env.add_cashier("cajero_a");
+    const auto users_before = count_users(env.db);
+
+    int calls = 0;
+    int last_remaining = -1, last_total = -1;
+    env.backup->set_restore_step_observer([&](int remaining, int total) {
+        ++calls;
+        last_remaining = remaining;
+        last_total = total;
+        return false;   // aborta tras la primera tanda de páginas
+    });
+    auto res = env.backup->restore_from_backup(bk.u8string());
+    TEST_CHECK(!res.is_success(), "La restauración abortada debe fallar");
+    TEST_CHECK(calls == 1 && last_total > 100 && last_remaining > 0, "Se copió al menos una tanda y faltaban páginas (total " + std::to_string(last_total) + ")");
+    TEST_CHECK(res.error_message().find("copia interrumpida") != std::string::npos &&
+               res.error_message().find("se recuperó el estado anterior") != std::string::npos, "Texto del fallo: " + res.error_message());
+    TEST_CHECK(integrity_of(env.db) == "ok", "integrity_check de la base viva: ok");
+    TEST_CHECK(count_users(env.db) == users_before && scalar(env.db, "SELECT COUNT(*) FROM users WHERE username = 'cajero_a';") == 1, "Datos previos intactos");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM relleno_b17;") == 400, "El relleno sigue completo");
+    TEST_CHECK(env.account->is_authenticated(), "La sesión sigue activa");
+    TEST_CHECK(env.restored_callbacks == 0, "on_restored no se dispara");
+    TEST_CHECK(count_audit(env.db, "BACKUP_RESTORE_FAILED") == 1, "Se audita BACKUP_RESTORE_FAILED");
+
+    // Sin observador (valor por omisión) la misma restauración funciona: la recuperación nunca lo reutiliza.
+    env.backup->set_restore_step_observer({});
+    auto ok = env.backup->restore_from_backup(bk.u8string());
+    TEST_CHECK(ok.is_success(), "Sin observador la restauración funciona: " + ok.error_message());
+    TEST_CHECK(count_users(env.db) == users_before - 1, "Tras restaurar vuelven los datos del respaldo (sin cajero_a)");
+    TEST_CHECK(integrity_of(env.db) == "ok", "integrity_check tras restaurar: ok");
+    TEST_CHECK(env.restored_callbacks == 1, "on_restored se dispara al restaurar bien");
+    env.cleanup();
+}
+
+// Actor de BACKUP_RESTORED cuando la cuenta que restauró no existe en la base restaurada.
+void test_restored_event_shows_actor_that_no_longer_exists(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B17: BACKUP_RESTORED muestra al Dueño que restauró aunque ya no exista en la base..." << std::endl;
+    Env env(base / "t11", mig);
+    env.login_owner();
+    fs::path bk = env.snapshot("sin segundo dueno.db");
+    // Segundo Dueño, creado DESPUÉS del respaldo
+    CreateUserDto second{"dueno2_b17", "Dueño Dos", kOwnerPwd, "role-owner", "dueno2@cafeteria-itch.edu.mx"};
+    auto created = env.account->create_user(second);
+    TEST_CHECK(created.is_success(), "Alta del segundo Dueño: " + created.error_message());
+    const std::string second_id = created.value().id;
+    env.account->logout();
+    env.login_owner("dueno2_b17");
+
+    auto res = env.backup->restore_from_backup(bk.u8string());
+    TEST_CHECK(res.is_success(), "Restauración del segundo Dueño: " + res.error_message());
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM users WHERE id = '" + second_id + "';") == 0, "El segundo Dueño ya no existe en la base restaurada");
+
+    env.login_owner("dueno_b1");
+    AuditFilterDto f;
+    f.event_type = "BACKUP_RESTORED";
+    auto events = env.account->list_audit_events(f);
+    TEST_CHECK(events.is_success() && events.value().size() == 1, "Un evento BACKUP_RESTORED: " + events.error_message());
+    const auto& ev = events.value()[0];
+    TEST_CHECK(ev.user_id == second_id, "El evento conserva el id interno del actor");
+    TEST_CHECK(ev.username == "dueno2_b17", "AuditEventDto::username muestra el nombre de usuario (no vacío ni un id): '" + ev.username + "'");
+    TEST_CHECK(ev.details.find("sin segundo dueno.db") != std::string::npos, "Conserva el nombre del archivo origen");
+    TEST_CHECK(ev.details.find(" por dueno2_b17") != std::string::npos, "Nombra a quien restauró: " + ev.details);
+    TEST_CHECK(ev.details.find("pre_restore_") != std::string::npos, "Conserva el nombre del respaldo previo");
+    TEST_CHECK(ev.details.find(base.u8string()) == std::string::npos && ev.details.find(":\\") == std::string::npos &&
+               ev.details.find('/') == std::string::npos, "Sin rutas absolutas: " + ev.details);
+    // Los eventos de cuentas que sí existen siguen mostrando su nombre
+    AuditFilterDto all;
+    all.limit = 500;
+    auto list = env.account->list_audit_events(all);
+    TEST_CHECK(list.is_success() && !list.value().empty(), "La bitácora completa se lee");
+    bool found_login = false;
+    for (const auto& e : list.value()) if (e.event_type == "LOGIN_SUCCESS" && e.username == "dueno_b1") found_login = true;
+    TEST_CHECK(found_login, "Los eventos de cuentas existentes muestran su nombre");
+    env.cleanup();
+}
+
+// Migración 021: repetible y con relleno desde users que no falla con user_id nulo o inexistente.
+void test_migration_021_backfill_and_repeatable(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B17: migración 021: relleno de actor_username, repetible, filas viejas legibles..." << std::endl;
+    fs::path dir = base / "t12";
+    fs::create_directories(dir);
+    SqliteDatabase db;
+    TEST_CHECK(db.open(dir / "v20.db").is_success(), "Abrir base");
+    apply_migrations_up_to(db, mig, 20);
+    TEST_CHECK(scalar(db, "SELECT COUNT(*) FROM pragma_table_info('audit_events') WHERE name = 'actor_username';") == 0, "Antes de la 021 no existe la columna");
+    TEST_CHECK(db.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at) "
+                          "VALUES ('u-viejo', 'viejo', 'Viejo', 'v@x.mx', 'x', 'role-owner', 1, '2026-01-01 00:00:00');").is_success(), "Usuario viejo");
+    TEST_CHECK(db.execute("INSERT INTO audit_events (id, event_type, user_id, details, created_at) VALUES "
+                          "('a1', 'X', 'u-viejo', 'con usuario', '2026-01-02 10:00:00'), "
+                          "('a2', 'X', 'u-borrado', 'usuario inexistente', '2026-01-02 10:01:00'), "
+                          "('a3', 'X', NULL, 'sin usuario', '2026-01-02 10:02:00');").is_success(), "Filas de bitácora anteriores");
+    MigrationRunner runner(db);
+    auto m = runner.run_pending_migrations_from_dir(mig);
+    TEST_CHECK(m.is_success(), "Aplicar 021 y las demás: " + m.error_message());
+    TEST_CHECK(text_scalar(db, "SELECT actor_username FROM audit_events WHERE id = 'a1';") == "viejo", "Relleno desde users");
+    TEST_CHECK(text_scalar(db, "SELECT actor_username FROM audit_events WHERE id = 'a2';").empty(), "user_id inexistente: queda vacío sin fallar");
+    TEST_CHECK(text_scalar(db, "SELECT actor_username FROM audit_events WHERE id = 'a3';").empty(), "user_id nulo: queda vacío sin fallar");
+    const auto versions = scalar(db, "SELECT COUNT(*) FROM schema_migrations;");
+    auto again = runner.run_pending_migrations_from_dir(mig);
+    TEST_CHECK(again.is_success() && scalar(db, "SELECT COUNT(*) FROM schema_migrations;") == versions, "Segunda pasada: nada que aplicar");
+    TEST_CHECK(scalar(db, "SELECT COUNT(*) FROM pragma_table_info('audit_events') WHERE name = 'actor_username';") == 1, "Columna única");
+    TEST_CHECK(scalar(db, "SELECT COUNT(*) FROM audit_events;") == 3, "Las filas anteriores siguen ahí");
+    // list_audit_events con una cuenta Dueño lee las filas viejas (a2 y a3 sin nombre, a1 con nombre)
+    TEST_CHECK(db.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at) "
+                          "VALUES ('u-021', 'dueno_021', 'Dueño 021', 'd021@cafeteria-itch.edu.mx', '" +
+                          app::crypto::PasswordHasher::hash_password(kOwnerPwd) + "', 'role-owner', 1, '2026-01-03 00:00:00');").is_success(),
+               "Alta de un Dueño para consultar");
+    SqliteAccountService account(db);
+    TEST_CHECK(account.login("dueno_021", kOwnerPwd).is_success(), "Entrar");
+    AuditFilterDto f;
+    f.event_type = "X";
+    auto list = account.list_audit_events(f);
+    TEST_CHECK(list.is_success() && list.value().size() == 3, "Se leen las tres filas viejas");
+    int named = 0;
+    for (const auto& e : list.value()) if (e.username == "viejo") ++named;
+    TEST_CHECK(named == 1, "La fila vieja con usuario muestra su nombre");
+    db.close();
+}
+
 } // namespace
 
 int main() {
@@ -812,6 +1027,10 @@ int main() {
     test_restore_registers_pre_restore_backup(base, mig);
     test_server_config_persistence(base, mig);
     test_failure_with_open_transaction(base, mig);
+    test_failure_in_post_restore_migration_recovers(base, mig);
+    test_abort_mid_copy_leaves_live_database_intact(base, mig);
+    test_restored_event_shows_actor_that_no_longer_exists(base, mig);
+    test_migration_021_backfill_and_repeatable(base, mig);
 
     std::error_code ec;
     fs::remove_all(base, ec);

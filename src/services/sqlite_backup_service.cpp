@@ -401,7 +401,7 @@ contracts::Result<contracts::RestoreResultDto> SqliteBackupService::restore_impl
     }
 
     // --- Copia sobre la conexión viva ---
-    auto copy = db_.restore_from(src);
+    auto copy = db_.restore_from(src, restore_step_observer_);
     if (!copy.is_success()) {
         bool rec = recover_from(pre_path);
         return R::fail(EC::BackupFailure, "La restauración falló (" + copy.error_message() + "); " +
@@ -438,9 +438,16 @@ contracts::Result<contracts::RestoreResultDto> SqliteBackupService::restore_impl
     register_backup_file("PRE_RESTORE", pre_path);
 
     // Auditoría en la base restaurada, antes de cerrar la sesión.
+    // B17: la bitácora nombra a quien restauró (la cuenta puede no existir en la base restaurada); solo nombres de
+    // archivo, nunca rutas absolutas.
+    std::string actor;
+    {
+        auto me = account_service_->current_user();
+        if (me.is_success() && !me.value().username.empty()) actor = " por " + me.value().username;
+    }
     auto audit = account_service_->record_audit_event(
         "BACKUP_RESTORED",
-        "Restauración desde " + name_of(src) + "; respaldo previo: " + name_of(pre_path));
+        "Restauración desde " + name_of(src) + actor + "; respaldo previo: " + name_of(pre_path));
     if (!audit.is_success()) {
         return fail_and_recover("No se pudo registrar la auditoría de la restauración");
     }

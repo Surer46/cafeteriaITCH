@@ -1446,7 +1446,7 @@ contracts::Result<std::vector<contracts::AuditEventDto>> SqliteAccountService::l
     }
 
     std::string sql = 
-        "SELECT a.id, a.event_type, COALESCE(a.user_id, ''), COALESCE(u.username, ''), a.details, a.created_at "
+        "SELECT a.id, a.event_type, COALESCE(a.user_id, ''), COALESCE(NULLIF(u.username, ''), NULLIF(a.actor_username, ''), ''), a.details, a.created_at "
         "FROM audit_events a "
         "LEFT JOIN users u ON a.user_id = u.id "
         "WHERE 1=1 ";
@@ -1526,11 +1526,24 @@ contracts::OperationResult SqliteAccountService::write_audit_event(
     std::string audit_id = generate_id("audit");
 
     std::string actor_id = current_user_.has_value() ? current_user_->id : "";
+    // B17: el nombre de usuario se guarda aparte para que la bitácora lo siga mostrando si la cuenta deja de existir
+    // en la base (por ejemplo tras restaurar un respaldo anterior a su alta).
+    const std::string actor_username = current_user_.has_value() ? current_user_->username : "";
 
     auto prep = db_.prepare(
-        "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
-        "VALUES (?, ?, ?, ?, ?, ?);"
+        "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc, actor_username) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?);"
     );
+    bool with_actor_username = true;
+    if (!prep.is_success()) {
+        // Base de un esquema anterior a la migración 021 (por ejemplo una restauración o una prueba de migración en una
+        // versión vieja): se escribe como antes, sin el nombre del actor. El programa migra siempre al arrancar.
+        with_actor_username = false;
+        prep = db_.prepare(
+            "INSERT INTO audit_events (id, event_type, user_id, details, created_at, created_at_utc) "
+            "VALUES (?, ?, ?, ?, ?, ?);"
+        );
+    }
     if (!prep.is_success()) {
         return contracts::OperationResult::fail(prep.error_code(), prep.error_message());
     }
@@ -1546,6 +1559,7 @@ contracts::OperationResult SqliteAccountService::write_audit_event(
     stmt.bind_text(4, details);
     stmt.bind_text(5, ts.local);
     stmt.bind_text(6, ts.utc);
+    if (with_actor_username) stmt.bind_text(7, actor_username);
 
     auto step_res = stmt.step();
     if (!step_res.is_success()) {
