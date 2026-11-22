@@ -47,6 +47,20 @@ La interfaz consume contratos; nunca los cambia. Si AntiGravity necesita un mét
    - Claude compila y corre CTest, pero no ejecuta pruebas GUI. El orquestador las corre al integrar y le devuelve los fallos.
    - El script de capturas lo sigue manteniendo Gemini; el orquestador regenera la captura afectada al integrar.
 
+## Claude Code Terminal como auxiliar de frontend (decisión del usuario, 2026-11-22)
+
+Con el backend completo tras B18, Claude Code Terminal también hace bloques de interfaz, en paralelo a AntiGravity:
+
+- Trabaja en su worktree, en ramas `frontend/<bloque>` creadas desde `main`. El orquestador las integra al aceptarlas, igual que las de backend.
+- Cada prompt le asigna una lista cerrada de archivos de `src/frontend/` que ningún bloque de AntiGravity en curso toca. Si un archivo hace falta en los dos frentes, el bloque espera; nunca se reparte un mismo archivo.
+- Sigue siendo dueño de los contratos. Si su pantalla necesita un método nuevo, lo agrega en el mismo bloque.
+- Puede crear pruebas GUI nuevas, propias de su bloque, en `tests/`. No edita las de AntiGravity ni `capture_visual_qa.py`.
+- **Turno de pruebas GUI y CTest:** solo uno a la vez en la PC.
+  - Antes de abrir el programa, el agente crea `C:\Cafeteria_ITCH\gui-test.lock` con su nombre y la hora, y lo borra al terminar.
+  - Si el archivo existe o hay `app_desktop.exe` o `ctest.exe` en `tasklist`, espera.
+  - Compila siempre con `--parallel 1`.
+- Usa los mismos criterios visuales que AntiGravity: `FromDIP` una sola vez, `tests/gui_dpi.py`, mínimos táctiles de T1/T2 y la prueba de pantalla completa de T16d.
+
 ## Skill caveman
 
 Instalada en `~/.agents/skills/caveman` (enlazada en `~/.claude/skills/caveman`). Solo cambia el estilo de las respuestas en el chat; no ejecuta código. La propia skill excluye código, comentarios, documentos y memoria, así que las entregas y auditorías siguen en prosa normal.
