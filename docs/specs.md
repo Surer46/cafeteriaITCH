@@ -228,6 +228,10 @@ La división detallada y ejecutable del trabajo está en [`frontend/plan.md`](..
 1. La interfaz será una **aplicación de escritorio nativa**. Verificar sistema operativo, arquitectura y resolución mínima de la PC para compilar y probar el paquete correspondiente; no se presupone ninguno.
 2. ¿Qué hardware de lector de código, impresora de tickets y cajón de dinero se usará? ¿Se requiere facturación? La terminal bancaria no se integrará en esta etapa; únicamente se registra el método declarado.
 3. ¿Qué métodos de pago se deben poder registrar? ¿Se permiten pagos mixtos, impuestos, descuentos manuales y devoluciones? ¿Cómo se redondea? Ninguno de estos métodos implica procesamiento electrónico en esta etapa.
+   - **Decidido 2026-11-22 (usuario):**
+     - Los precios ya incluyen los impuestos; el programa no calcula ni desglosa impuestos aparte. El cobro con tarjeta o transferencia se hace por Mercado Pago, fuera del programa, que solo registra el método declarado.
+     - No se admiten pagos mixtos: cada venta se paga con un solo método.
+     - Sí se admiten reembolsos: la cafetería vende también productos sellados, y si el vendedor se equivoca se debe poder corregir el pedido. Detalle del diseño pendiente de confirmar (quién, alcance, inventario y plazo).
 4. ¿Se permite vender sin existencia o autorizar sobreventa? ¿Cómo se calculan mermas, recetas, combos y productos por peso?
    - **Decidido 2026-11-13:** no se permite sobreventa: sin existencias suficientes la venta se bloquea, como ya hace el servicio de ventas. Siguen abiertas las reglas de mermas, combos y productos por peso.
    - **Decidido 2026-11-16 (I3):**
