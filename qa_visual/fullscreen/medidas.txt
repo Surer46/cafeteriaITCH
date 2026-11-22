@@ -36,15 +36,71 @@ Tactil   | respaldos            | SI | NO | 1615x1044 | 1574x983  |  97.5% |  94
 Tactil   | actualizaciones      | NO | NO | 1615x1044 | 1554x974  |  96.2% |  93.3% |  89.8% |   46px( 2.8%) |  724px(69.3%) |  94.3% |   16px |   16px | - | -
 
 # Ventana normal (1200x720 y 960x600) — perfil | tamano | pantalla | hscroll | vscroll | texto_cortado
-Estandar | 1200x720 | configuracion    | hscroll=NO | vscroll=SI | texto_cortado=-
-Estandar | 1200x720 | respaldos        | hscroll=NO | vscroll=SI | texto_cortado=-
-Estandar | 1200x720 | actualizaciones  | hscroll=NO | vscroll=NO | texto_cortado=-
-Estandar | 960x600  | configuracion    | hscroll=NO | vscroll=SI | texto_cortado=-
-Estandar | 960x600  | respaldos        | hscroll=NO | vscroll=SI | texto_cortado=-
-Estandar | 960x600  | actualizaciones  | hscroll=NO | vscroll=NO | texto_cortado=-
-Tactil   | 1200x720 | configuracion    | hscroll=NO | vscroll=SI | texto_cortado=-
-Tactil   | 1200x720 | respaldos        | hscroll=NO | vscroll=SI | texto_cortado=-
-Tactil   | 1200x720 | actualizaciones  | hscroll=NO | vscroll=NO | texto_cortado=-
-Tactil   | 960x600  | configuracion    | hscroll=NO | vscroll=SI | texto_cortado=-
-Tactil   | 960x600  | respaldos        | hscroll=NO | vscroll=SI | texto_cortado=-
-Tactil   | 960x600  | actualizaciones  | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | venta                | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | existencias          | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | reabastecimiento     | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 1200x720 | ingredientes         | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | promociones          | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 1200x720 | combos               | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 1200x720 | barra                | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | caja_corte           | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | caja_historial       | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 1200x720 | bitacora             | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | reportes             | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | usuarios             | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 1200x720 | roles                | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 1200x720 | configuracion        | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 1200x720 | respaldos            | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 1200x720 | actualizaciones      | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | venta                | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | existencias          | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | reabastecimiento     | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 960x600  | ingredientes         | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | promociones          | hscroll=NO | vscroll=SI | texto_cortado="Toca o haz clic en los prod..."(40>21px,2L)
+Estandar | 960x600  | combos               | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 960x600  | barra                | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | caja_corte           | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 960x600  | caja_historial       | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 960x600  | bitacora             | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | reportes             | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | usuarios             | hscroll=NO | vscroll=NO | texto_cortado=-
+Estandar | 960x600  | roles                | hscroll=NO | vscroll=SI | texto_cortado="Rol de sistema: solo se pue..."(40>21px,2L)
+Estandar | 960x600  | configuracion        | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 960x600  | respaldos            | hscroll=NO | vscroll=SI | texto_cortado=-
+Estandar | 960x600  | actualizaciones      | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 1200x720 | venta                | hscroll=NO | vscroll=NO | texto_cortado="Agua Embotellada Natural 60..."(46>24px,2L)
+Tactil   | 1200x720 | existencias          | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 1200x720 | reabastecimiento     | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 1200x720 | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 1200x720 | ingredientes         | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 1200x720 | promociones          | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 1200x720 | combos               | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 1200x720 | barra                | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 1200x720 | caja_corte           | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 1200x720 | caja_historial       | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 1200x720 | bitacora             | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 1200x720 | reportes             | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 1200x720 | usuarios             | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 1200x720 | roles                | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 1200x720 | configuracion        | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 1200x720 | respaldos            | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 1200x720 | actualizaciones      | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | venta                | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | existencias          | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | reabastecimiento     | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado="Categoría (elige una o escr..."(52>27px,2L)
+Tactil   | 960x600  | ingredientes         | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | promociones          | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 960x600  | combos               | hscroll=NO | vscroll=SI | texto_cortado="Categoría (elige una o escr..."(52>27px,2L)
+Tactil   | 960x600  | barra                | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | caja_corte           | hscroll=NO | vscroll=SI | texto_cortado="Motivo de diferencia (oblig..."(46>24px,2L)
+Tactil   | 960x600  | caja_historial       | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 960x600  | bitacora             | hscroll=NO | vscroll=NO | texto_cortado="Registro cronológico inmuta..."(46>24px,2L)
+Tactil   | 960x600  | reportes             | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | usuarios             | hscroll=NO | vscroll=NO | texto_cortado="Total: 3 cuentas"(69>24px,3L)
+Tactil   | 960x600  | roles                | hscroll=NO | vscroll=SI | texto_cortado="Rol de sistema: solo se pue..."(69>24px,3L)
+Tactil   | 960x600  | configuracion        | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 960x600  | respaldos            | hscroll=NO | vscroll=SI | texto_cortado=-
+Tactil   | 960x600  | actualizaciones      | hscroll=NO | vscroll=NO | texto_cortado=-
