@@ -22,8 +22,8 @@ struct CashMovementDto {
 
 // B15: conciliación de un turno. La misma estructura sirve para la vista previa (turno abierto: is_closed = false,
 // counted_cash/difference sin significado) y para la instantánea guardada al cerrar (is_closed = true).
-// expected_cash = initial_cash + cash_sales + cash_inflows - cash_outflows.
-// gross_sales - discount_total = net_sales = cash_sales + card_sales + transfer_sales (si no, payments_mismatch_cents != 0).
+// expected_cash = initial_cash + cash_sales + cash_inflows - cash_outflows - cash_refunds (B18).
+// gross_sales - discount_total = net_sales; net_sales + card_surcharges = cash_sales + card_sales + transfer_sales (si no, payments_mismatch_cents != 0).
 struct ShiftCloseoutDto {
     std::string shift_id;
     std::string register_name;
@@ -46,6 +46,12 @@ struct ShiftCloseoutDto {
     Money transfer_sales{Money::zero()};
     Money cash_inflows{Money::zero()};
     Money cash_outflows{Money::zero()};
+    // B18: reembolsos hechos durante el turno, por método, y cargos por tarjeta cobrados. card_sales incluye los cargos
+    // (es lo que se pagó con tarjeta). Las instantáneas anteriores a la migración 022 los traen en 0.
+    Money cash_refunds{Money::zero()};
+    Money card_refunds{Money::zero()};
+    Money transfer_refunds{Money::zero()};
+    Money card_surcharges{Money::zero()};
     Money expected_cash{Money::zero()};
     Money counted_cash{Money::zero()};
     std::int64_t difference_cents{0};   // contado - esperado, con signo (> 0 sobrante, < 0 faltante)

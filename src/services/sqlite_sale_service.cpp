@@ -1,4 +1,6 @@
 #include "app/services/sqlite_sale_service.hpp"
+#include "app/services/sqlite_payment_settings_service.hpp"
+#include "app/domain/card_surcharge.hpp"
 #include "app/services/identifiers.hpp"
 #include "app/services/stock_ledger.hpp"
 #include "app/services/operating_context.hpp"
@@ -150,7 +152,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::find_sale_b
 
     const char* sql =
         "SELECT s.id, s.folio, s.total_cents, s.created_at, "
-        "p.payment_method, p.cash_received_cents, p.change_cents "
+        "p.payment_method, p.cash_received_cents, p.change_cents, s.card_surcharge_cents "
         "FROM sales s "
         "LEFT JOIN payment_records p ON s.id = p.sale_id "
         "WHERE s.idempotency_key = ? LIMIT 1;";
@@ -173,7 +175,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::find_sale_b
     contracts::SaleConfirmationDto dto;
     dto.sale_id = stmt.get_text(0);
     dto.folio = stmt.get_text(1);
-    dto.total = contracts::Money(stmt.get_int64(2));
+    dto.products_total = contracts::Money(stmt.get_int64(2));
+    dto.card_surcharge = contracts::Money(stmt.get_int64(7));
+    dto.total = dto.products_total + dto.card_surcharge;   // B18: lo cobrado
     dto.created_at = stmt.get_text(3);
     dto.payment_method = parse_payment_method(stmt.is_null(4) ? "EFECTIVO" : stmt.get_text(4));
     dto.cash_received = stmt.is_null(5) ? dto.total : contracts::Money(stmt.get_int64(5));
@@ -213,7 +217,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         const char* sql_chk =
             "SELECT s.id, s.folio, s.total_cents, s.created_at, "
             "p.payment_method, p.cash_received_cents, p.change_cents, "
-            "s.user_id, sh.register_id "
+            "s.user_id, sh.register_id, s.card_surcharge_cents "
             "FROM sales s "
             "JOIN shifts sh ON s.shift_id = sh.id "
             "LEFT JOIN payment_records p ON s.id = p.sale_id "
@@ -244,7 +248,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
                 contracts::SaleConfirmationDto dto;
                 dto.sale_id = stmt_chk.get_text(0);
                 dto.folio = stmt_chk.get_text(1);
-                dto.total = contracts::Money(stmt_chk.get_int64(2));
+                dto.products_total = contracts::Money(stmt_chk.get_int64(2));
+                dto.card_surcharge = contracts::Money(stmt_chk.get_int64(9));
+                dto.total = dto.products_total + dto.card_surcharge;   // B18: lo cobrado
                 dto.created_at = stmt_chk.get_text(3);
                 dto.payment_method = parse_payment_method(stmt_chk.is_null(4) ? "EFECTIVO" : stmt_chk.get_text(4));
                 dto.cash_received = stmt_chk.is_null(5) ? dto.total : contracts::Money(stmt_chk.get_int64(5));
@@ -627,6 +633,23 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         }
     }
 
+    // 9a. B18: cargo extra por pago con tarjeta, con la configuración vigente en este momento (la instantánea queda en la venta).
+    contracts::Money charged = total;
+    std::int64_t surcharge_cents = 0, surcharge_bp = 0, surcharge_fixed = 0;
+    if (payment_method == contracts::PaymentMethod::Tarjeta) {
+        const auto cfg = read_card_surcharge_config(db_);
+        surcharge_bp = cfg.percent_hundredths;
+        surcharge_fixed = cfg.fixed.cents();
+        std::int64_t charged_cents = 0;
+        if (!domain::card_surcharge_cents(total.cents(), surcharge_bp, surcharge_fixed, surcharge_cents) ||
+            !safe_add(total.cents(), surcharge_cents, charged_cents)) {
+            db_.execute("ROLLBACK;");
+            return contracts::Result<contracts::SaleConfirmationDto>::fail(
+                contracts::ErrorCode::InvalidInput, "Desbordamiento numérico al calcular el cargo por pago con tarjeta");
+        }
+        charged = contracts::Money::from_cents(charged_cents);
+    }
+
     // 9. Validar método de pago y monto recibido
     if (payment_method == contracts::PaymentMethod::Efectivo) {
         if (cash_received < total) {
@@ -638,7 +661,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         }
         change = cash_received - total;
     } else {
-        cash_received = total;
+        cash_received = charged;   // B18: tarjeta y transferencia se cobran por fuera; lo cobrado incluye el cargo
         change = contracts::Money::zero();
     }
 
@@ -656,8 +679,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     // 10.1 Inserción de venta
     {
         auto prep_sale = db_.prepare(
-            "INSERT INTO sales (id, folio, shift_id, user_id, total_cents, idempotency_key, created_at, cashier_name, created_at_utc, discount_cents) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
+            "INSERT INTO sales (id, folio, shift_id, user_id, total_cents, idempotency_key, created_at, cashier_name, created_at_utc, discount_cents, "
+            "card_surcharge_cents, card_surcharge_bp, card_surcharge_fixed_cents) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);"
         );
         if (!prep_sale.is_success()) {
             db_.execute("ROLLBACK;");
@@ -678,6 +702,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_s.bind_text(8, cashier_name);
         stmt_s.bind_text(9, ts.utc);
         stmt_s.bind_int64(10, discount_total_cents);
+        stmt_s.bind_int64(11, surcharge_cents);
+        stmt_s.bind_int64(12, payment_method == contracts::PaymentMethod::Tarjeta ? surcharge_bp : 0);
+        stmt_s.bind_int64(13, payment_method == contracts::PaymentMethod::Tarjeta ? surcharge_fixed : 0);
 
         auto step = stmt_s.step();
         if (!step.is_success()) {
@@ -769,7 +796,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
         stmt_p.bind_text(1, pay_id);
         stmt_p.bind_text(2, sale_id);
         stmt_p.bind_text(3, contracts::to_string(payment_method));
-        stmt_p.bind_int64(4, total.cents());
+        stmt_p.bind_int64(4, charged.cents());   // B18: lo pagado (con tarjeta incluye el cargo)
         stmt_p.bind_int64(5, cash_received.cents());
         stmt_p.bind_int64(6, change.cents());
         stmt_p.bind_text(7, now);
@@ -830,7 +857,8 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     // 10.7 Registrar auditoría (sin secretos) dentro de la misma transacción
     {
         std::string audit_id = generate_id("audit");
-        std::string details = "Venta confirmada folio " + folio + " por " + total.to_string() + " [" + contracts::to_string(payment_method) + "]";
+        std::string details = "Venta confirmada folio " + folio + " por " + charged.to_string() + " [" + contracts::to_string(payment_method) + "]";
+        if (surcharge_cents > 0) details += " con cargo por tarjeta de " + contracts::Money::from_cents(surcharge_cents).to_string();
         if (discount_total_cents > 0) {
             // El descuento total y las promociones aplicadas, por nombre (sin repetir).
             std::vector<std::string> promo_names;
@@ -881,7 +909,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::confirm_sal
     contracts::SaleConfirmationDto result;
     result.sale_id = sale_id;
     result.folio = folio;
-    result.total = total;
+    result.total = charged;
+    result.products_total = total;
+    result.card_surcharge = contracts::Money::from_cents(surcharge_cents);
     result.cash_received = cash_received;
     result.change = change;
     result.payment_method = payment_method;
@@ -898,7 +928,7 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::get_sale_by
 
     const char* sql =
         "SELECT s.id, s.folio, s.total_cents, s.created_at, "
-        "p.payment_method, p.cash_received_cents, p.change_cents "
+        "p.payment_method, p.cash_received_cents, p.change_cents, s.card_surcharge_cents "
         "FROM sales s "
         "LEFT JOIN payment_records p ON s.id = p.sale_id "
         "WHERE s.folio = ? LIMIT 1;";
@@ -921,7 +951,9 @@ contracts::Result<contracts::SaleConfirmationDto> SqliteSaleService::get_sale_by
     contracts::SaleConfirmationDto dto;
     dto.sale_id = stmt.get_text(0);
     dto.folio = stmt.get_text(1);
-    dto.total = contracts::Money(stmt.get_int64(2));
+    dto.products_total = contracts::Money(stmt.get_int64(2));
+    dto.card_surcharge = contracts::Money(stmt.get_int64(7));
+    dto.total = dto.products_total + dto.card_surcharge;   // B18: lo cobrado
     dto.created_at = stmt.get_text(3);
     dto.payment_method = parse_payment_method(stmt.is_null(4) ? "EFECTIVO" : stmt.get_text(4));
     dto.cash_received = stmt.is_null(5) ? dto.total : contracts::Money(stmt.get_int64(5));
@@ -974,7 +1006,7 @@ contracts::Result<contracts::TicketDto> SqliteSaleService::get_ticket(const std:
         "    WHEN s.cashier_name IS NOT NULL AND LENGTH(s.cashier_name) > 0 THEN s.cashier_name "
         "    WHEN s.user_id IS NOT NULL AND LENGTH(s.user_id) > 0 THEN ('Nombre histórico no disponible (' || s.user_id || ')') "
         "    ELSE 'Nombre histórico no disponible' "
-        "END, s.discount_cents "
+        "END, s.discount_cents, s.card_surcharge_cents "
         "FROM sales s "
         "LEFT JOIN payment_records p ON s.id = p.sale_id "
         "WHERE s.folio = ? LIMIT 1;";
@@ -1010,9 +1042,11 @@ contracts::Result<contracts::TicketDto> SqliteSaleService::get_ticket(const std:
         ticket.payment_method = contracts::PaymentMethod::Efectivo;
     }
 
-    ticket.total = contracts::Money(stmt_s.get_int64(2));
+    ticket.products_total = contracts::Money(stmt_s.get_int64(2));
+    ticket.card_surcharge = contracts::Money(stmt_s.get_int64(9));
+    ticket.total = ticket.products_total + ticket.card_surcharge;   // B18: lo cobrado
     ticket.discount = contracts::Money(stmt_s.get_int64(8));
-    ticket.subtotal = ticket.total + ticket.discount;
+    ticket.subtotal = ticket.products_total + ticket.discount;
     ticket.cash_received = stmt_s.is_null(5) ? ticket.total : contracts::Money(stmt_s.get_int64(5));
     ticket.change = stmt_s.is_null(6) ? contracts::Money::zero() : contracts::Money(stmt_s.get_int64(6));
 
@@ -1046,6 +1080,40 @@ contracts::Result<contracts::TicketDto> SqliteSaleService::get_ticket(const std:
         ticket.items.push_back(std::move(it));
     }
 
+    // B18: reembolsos de la venta (los importes devueltos y el motivo)
+    {
+        auto prep_r = db_.prepare("SELECT id, folio, created_at, amount_cents, reason FROM refunds WHERE sale_id = ? ORDER BY created_at, rowid;");
+        if (prep_r.is_success()) {
+            auto stmt_r = std::move(prep_r.value());
+            stmt_r.bind_text(1, sale_id);
+            std::vector<std::string> refund_ids;
+            while (true) {
+                auto step = stmt_r.step();
+                if (!step.is_success() || !step.value()) break;
+                contracts::TicketRefundDto rf;
+                refund_ids.push_back(stmt_r.get_text(0));
+                rf.refund_folio = stmt_r.get_text(1);
+                rf.created_at = stmt_r.get_text(2);
+                rf.amount = contracts::Money(stmt_r.get_int64(3));
+                rf.reason = stmt_r.get_text(4);
+                ticket.refunded_total = ticket.refunded_total + rf.amount;
+                ticket.refunds.push_back(std::move(rf));
+            }
+            for (std::size_t i = 0; i < refund_ids.size(); ++i) {
+                auto prep_l = db_.prepare("SELECT product_name, quantity, amount_cents FROM refund_items WHERE refund_id = ? ORDER BY rowid;");
+                if (!prep_l.is_success()) break;
+                auto stmt_l = std::move(prep_l.value());
+                stmt_l.bind_text(1, refund_ids[i]);
+                while (true) {
+                    auto step = stmt_l.step();
+                    if (!step.is_success() || !step.value()) break;
+                    ticket.refunds[i].lines.push_back(contracts::TicketRefundLineDto{
+                        stmt_l.get_text(0), stmt_l.get_int64(1), contracts::Money(stmt_l.get_int64(2))});
+                }
+            }
+        }
+    }
+
     return contracts::Result<contracts::TicketDto>::ok(ticket);
 }
 
@@ -1058,14 +1126,16 @@ contracts::Result<std::vector<contracts::TicketSummaryDto>> SqliteSaleService::g
     if (limit <= 0) limit = 50;
 
     const char* sql =
-        "SELECT s.folio, s.created_at, s.total_cents, "
+        "SELECT s.folio, s.created_at, s.total_cents + s.card_surcharge_cents, "
         "CASE "
         "    WHEN s.cashier_name IS NOT NULL AND LENGTH(s.cashier_name) > 0 THEN s.cashier_name "
         "    WHEN s.user_id IS NOT NULL AND LENGTH(s.user_id) > 0 THEN ('Nombre histórico no disponible (' || s.user_id || ')') "
         "    ELSE 'Nombre histórico no disponible' "
         "END, "
         "p.payment_method, "
-        "(SELECT COALESCE(SUM(si.quantity), 0) FROM sale_items si WHERE si.sale_id = s.id) "
+        "(SELECT COALESCE(SUM(si.quantity), 0) FROM sale_items si WHERE si.sale_id = s.id), "
+        "s.card_surcharge_cents, "
+        "COALESCE((SELECT SUM(r.amount_cents) FROM refunds r WHERE r.sale_id = s.id), 0) "
         "FROM sales s "
         "LEFT JOIN payment_records p ON s.id = p.sale_id "
         "ORDER BY s.created_at DESC LIMIT ?;";
@@ -1093,11 +1163,40 @@ contracts::Result<std::vector<contracts::TicketSummaryDto>> SqliteSaleService::g
         item.cashier_name = stmt.is_null(3) ? "" : stmt.get_text(3);
         item.payment_method = parse_payment_method(stmt.is_null(4) ? "EFECTIVO" : stmt.get_text(4));
         item.items_count = stmt.get_int64(5);
+        item.card_surcharge = contracts::Money(stmt.get_int64(6));
+        item.refunded_total = contracts::Money(stmt.get_int64(7));
 
         result.push_back(std::move(item));
     }
 
     return contracts::Result<std::vector<contracts::TicketSummaryDto>>::ok(result);
+}
+
+contracts::Result<contracts::CheckoutPreviewDto> SqliteSaleService::preview_checkout(contracts::PaymentMethod payment_method) {
+    using R = contracts::Result<contracts::CheckoutPreviewDto>;
+    auto perm_check = check_permission_or_fail("pos.sell");
+    if (!perm_check.is_success()) return R::fail(perm_check.error_code(), perm_check.error_message());
+    auto cart = cart_service_->get_cart();
+    if (!cart.is_success()) return R::fail(cart.error_code(), cart.error_message());
+
+    contracts::CheckoutPreviewDto dto;
+    dto.payment_method = payment_method;
+    dto.products_total = cart.value().total;
+    dto.discount = cart.value().discount;
+    dto.charged_total = dto.products_total;
+    if (payment_method == contracts::PaymentMethod::Tarjeta) {
+        const auto cfg = read_card_surcharge_config(db_);
+        dto.percent_hundredths = cfg.percent_hundredths;
+        dto.fixed = cfg.fixed;
+        std::int64_t surcharge = 0, charged = 0;
+        if (!domain::card_surcharge_cents(dto.products_total.cents(), cfg.percent_hundredths, cfg.fixed.cents(), surcharge) ||
+            !safe_add(dto.products_total.cents(), surcharge, charged)) {
+            return R::fail(contracts::ErrorCode::InvalidInput, "Desbordamiento numérico al calcular el cargo por pago con tarjeta");
+        }
+        dto.card_surcharge = contracts::Money::from_cents(surcharge);
+        dto.charged_total = contracts::Money::from_cents(charged);
+    }
+    return R::ok(dto);
 }
 
 } // namespace app::services

@@ -1005,6 +1005,42 @@ void test_migration_021_backfill_and_repeatable(const fs::path& base, const fs::
     db.close();
 }
 
+// B18: un respaldo del esquema 21 (sin reembolsos ni cargo por tarjeta) se restaura y queda migrado a la versión actual.
+void test_v21_backup_restores_and_migrates(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] B18: un respaldo del esquema 21 se restaura y queda migrado (reembolsos y cargo por tarjeta)..." << std::endl;
+    Env env(base / "t13", mig);
+    env.login_owner();
+    const auto latest = scalar(env.db, "SELECT MAX(version) FROM schema_migrations;");
+    TEST_CHECK(latest >= 22, "El esquema actual es al menos la versión 22");
+    fs::path old_file = env.root / fs::u8path(u8"antiguo v21 ñ.db");
+    {
+        SqliteDatabase odb;
+        TEST_CHECK(odb.open(env.root / "origen_v21.db").is_success(), "Debe abrir base v21");
+        apply_migrations_up_to(odb, mig, 21);
+        const std::string hash = app::crypto::PasswordHasher::hash_password(kOwnerPwd);
+        TEST_CHECK(odb.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at) "
+                               "VALUES ('user-dueno_v21', 'dueno_v21', 'Dueño V21', 'v21@cafeteria-itch.edu.mx', '" + hash +
+                               "', 'role-owner', 1, '2026-11-01 08:00:00');").is_success(), "Alta de Dueño v21 por SQL");
+        TEST_CHECK(scalar(odb, "SELECT COUNT(*) FROM pragma_table_info('sales') WHERE name = 'card_surcharge_cents';") == 0, "La base v21 no tiene el cargo por tarjeta");
+        TEST_CHECK(odb.backup_to(old_file).is_success(), "Debe exportar respaldo v21");
+    }
+    auto info = SqliteDatabase::inspect_file(old_file);
+    TEST_CHECK(info.is_success() && info.value().schema_version == 21, "El archivo antiguo es de versión 21");
+
+    auto res = env.backup->restore_from_backup(old_file.u8string());
+    TEST_CHECK(res.is_success(), "Restaurar v21: " + res.error_message());
+    TEST_CHECK(scalar(env.db, "SELECT MAX(version) FROM schema_migrations;") == latest, "La base restaurada queda en la versión actual");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM users WHERE username='dueno_v21';") == 1, "Los datos del respaldo v21 están presentes");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM pragma_table_info('sales') WHERE name IN ('card_surcharge_cents','card_surcharge_bp','card_surcharge_fixed_cents');") == 3, "sales tiene las columnas del cargo");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM payment_settings WHERE id = 1 AND card_surcharge_bp = 0 AND card_surcharge_fixed_cents = 0;") == 1, "El cargo queda desactivado (0 % y $0)");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('refunds', 'refund_items');") == 2, "Existen las tablas de reembolsos");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-owner' AND permission_id = 'pos.refund';") == 1, "El Dueño restaurado recibe pos.refund");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-cashier' AND permission_id = 'pos.refund';") == 0, "El Cajero no");
+    env.login_owner("dueno_v21");
+    TEST_CHECK(env.account->has_permission("pos.refund") && env.account->has_permission("backup.restore"), "El Dueño restaurado tiene sus permisos");
+    env.cleanup();
+}
+
 } // namespace
 
 int main() {
@@ -1031,6 +1067,7 @@ int main() {
     test_abort_mid_copy_leaves_live_database_intact(base, mig);
     test_restored_event_shows_actor_that_no_longer_exists(base, mig);
     test_migration_021_backfill_and_repeatable(base, mig);
+    test_v21_backup_restores_and_migrates(base, mig);
 
     std::error_code ec;
     fs::remove_all(base, ec);

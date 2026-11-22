@@ -2,6 +2,7 @@
 #include "app/services/identifiers.hpp"
 #include "app/domain/clock.hpp"
 #include "app/services/local_date.hpp"
+#include "app/services/shift_totals.hpp"
 #include <climits>
 #include <cstdint>
 #include <vector>
@@ -285,70 +286,25 @@ const char* kNoReasonText = "Sin motivo registrado";
 
 } // namespace
 
-// Importes en vivo de un turno (ventas, pagos, entradas y salidas), todo en centavos enteros.
-// Devuelve "" si salió bien o el mensaje de error.
+// Importes en vivo de un turno (ventas, pagos, entradas, salidas y reembolsos), todo en centavos enteros.
+// Devuelve "" si salió bien o el mensaje de error. El cálculo vive en shift_totals (lo comparte el servicio de reembolsos).
 std::string SqliteShiftService::live_totals(const std::string& shift_id, ShiftCloseoutDto& out) {
-    std::int64_t total = 0, discount = 0, count = 0;
-    {
-        auto prep = db_.prepare("SELECT COUNT(*), COALESCE(SUM(total_cents), 0), COALESCE(SUM(discount_cents), 0) FROM sales WHERE shift_id = ?;");
-        if (!prep.is_success()) return prep.error_message();
-        auto st = std::move(prep.value());
-        st.bind_text(1, shift_id);
-        auto step = st.step();
-        if (!step.is_success()) return step.error_message();
-        if (step.value()) {
-            count = st.get_int64(0);
-            total = st.get_int64(1);
-            discount = st.get_int64(2);
-        }
-    }
-    std::int64_t gross = 0;
-    if (!add_checked(total, discount, gross)) return "Desbordamiento numérico al sumar las ventas del turno";
-    out.sales_count = count;
-    out.net_sales = Money::from_cents(total);
-    out.discount_total = Money::from_cents(discount);
-    out.gross_sales = Money::from_cents(gross);
-
-    std::int64_t cash = 0, card = 0, transfer = 0;
-    {
-        auto prep = db_.prepare(
-            "SELECT p.payment_method, COALESCE(SUM(p.amount_cents), 0) FROM payment_records p "
-            "JOIN sales s ON s.id = p.sale_id WHERE s.shift_id = ? GROUP BY p.payment_method;");
-        if (!prep.is_success()) return prep.error_message();
-        auto st = std::move(prep.value());
-        st.bind_text(1, shift_id);
-        while (true) {
-            auto step = st.step();
-            if (!step.is_success()) return step.error_message();
-            if (!step.value()) break;
-            const std::string method = st.get_text(0);
-            if (method == "EFECTIVO") cash = st.get_int64(1);
-            else if (method == "TARJETA") card = st.get_int64(1);
-            else if (method == "TRANSFERENCIA") transfer = st.get_int64(1);
-        }
-    }
-    out.cash_sales = Money::from_cents(cash);
-    out.card_sales = Money::from_cents(card);
-    out.transfer_sales = Money::from_cents(transfer);
-
-    std::int64_t inflow = 0, outflow = 0;
-    {
-        auto prep = db_.prepare(
-            "SELECT movement_type, COALESCE(SUM(amount_cents), 0) FROM cash_movements "
-            "WHERE shift_id = ? AND movement_type IN ('INFLOW', 'OUTFLOW') GROUP BY movement_type;");
-        if (!prep.is_success()) return prep.error_message();
-        auto st = std::move(prep.value());
-        st.bind_text(1, shift_id);
-        while (true) {
-            auto step = st.step();
-            if (!step.is_success()) return step.error_message();
-            if (!step.value()) break;
-            if (st.get_text(0) == "INFLOW") inflow = st.get_int64(1);
-            else outflow = st.get_int64(1);
-        }
-    }
-    out.cash_inflows = Money::from_cents(inflow);
-    out.cash_outflows = Money::from_cents(outflow);
+    ShiftCashTotals t;
+    const std::string err = compute_shift_totals(db_, shift_id, t);
+    if (!err.empty()) return err;
+    out.sales_count = t.sales_count;
+    out.net_sales = Money::from_cents(t.net);
+    out.discount_total = Money::from_cents(t.discount);
+    out.gross_sales = Money::from_cents(t.gross);
+    out.cash_sales = Money::from_cents(t.cash_sales);
+    out.card_sales = Money::from_cents(t.card_sales);
+    out.transfer_sales = Money::from_cents(t.transfer_sales);
+    out.card_surcharges = Money::from_cents(t.card_surcharges);
+    out.cash_inflows = Money::from_cents(t.inflows);
+    out.cash_outflows = Money::from_cents(t.outflows);
+    out.cash_refunds = Money::from_cents(t.cash_refunds);
+    out.card_refunds = Money::from_cents(t.card_refunds);
+    out.transfer_refunds = Money::from_cents(t.transfer_refunds);
     return "";
 }
 
@@ -358,13 +314,15 @@ CloseR SqliteShiftService::load_closeout(const std::string& shift_id, bool with_
     bool saved = false;
     std::int64_t snap_count = 0, snap_gross = 0, snap_disc = 0, snap_cash = 0, snap_card = 0, snap_tr = 0, snap_in = 0, snap_out = 0;
     std::int64_t final_cash = 0, expected_saved = 0, diff_saved = 0;
+    std::int64_t snap_cash_ref = 0, snap_card_ref = 0, snap_tr_ref = 0, snap_surcharge = 0;
     bool has_final = false;
     {
         auto prep = db_.prepare(
             "SELECT s.id, r.name, s.cashier_user_id, u.display_name, s.opened_at, s.closed_at, s.initial_cash_cents, s.is_open, "
             "s.closed_by_user_id, cu.display_name, s.closeout_saved, s.snap_sales_count, s.snap_gross_cents, s.snap_discount_cents, "
             "s.snap_cash_sales_cents, s.snap_card_sales_cents, s.snap_transfer_sales_cents, s.snap_inflow_cents, s.snap_outflow_cents, "
-            "s.final_cash_cents, s.expected_cash_cents, s.difference_cents, s.difference_reason "
+            "s.final_cash_cents, s.expected_cash_cents, s.difference_cents, s.difference_reason, "
+            "s.snap_cash_refunds_cents, s.snap_card_refunds_cents, s.snap_transfer_refunds_cents, s.snap_card_surcharge_cents "
             "FROM shifts s JOIN cash_registers r ON r.id = s.register_id JOIN users u ON u.id = s.cashier_user_id "
             "LEFT JOIN users cu ON cu.id = s.closed_by_user_id WHERE s.id = ?;");
         if (!prep.is_success()) return CloseR::fail(prep.error_code(), prep.error_message());
@@ -392,6 +350,7 @@ CloseR SqliteShiftService::load_closeout(const std::string& shift_id, bool with_
         expected_saved = st.is_null(20) ? 0 : st.get_int64(20);
         diff_saved = st.is_null(21) ? 0 : st.get_int64(21);
         d.difference_reason = st.is_null(22) ? "" : st.get_text(22);
+        snap_cash_ref = st.get_int64(23); snap_card_ref = st.get_int64(24); snap_tr_ref = st.get_int64(25); snap_surcharge = st.get_int64(26);
     }
 
     if (d.is_closed && saved) {
@@ -405,6 +364,10 @@ CloseR SqliteShiftService::load_closeout(const std::string& shift_id, bool with_
         d.transfer_sales = Money::from_cents(snap_tr);
         d.cash_inflows = Money::from_cents(snap_in);
         d.cash_outflows = Money::from_cents(snap_out);
+        d.cash_refunds = Money::from_cents(snap_cash_ref);
+        d.card_refunds = Money::from_cents(snap_card_ref);
+        d.transfer_refunds = Money::from_cents(snap_tr_ref);
+        d.card_surcharges = Money::from_cents(snap_surcharge);
         d.expected_cash = Money::from_cents(expected_saved);
         d.counted_cash = Money::from_cents(final_cash);
         d.difference_cents = diff_saved;
@@ -413,7 +376,7 @@ CloseR SqliteShiftService::load_closeout(const std::string& shift_id, bool with_
         if (!err.empty()) return CloseR::fail(ErrorCode::StorageFailure, err);
         std::int64_t exp = d.initial_cash.cents();
         if (!add_checked(exp, d.cash_sales.cents(), exp) || !add_checked(exp, d.cash_inflows.cents(), exp) ||
-            !add_checked(exp, -d.cash_outflows.cents(), exp))
+            !add_checked(exp, -d.cash_outflows.cents(), exp) || !add_checked(exp, -d.cash_refunds.cents(), exp))
             return CloseR::fail(ErrorCode::InvalidInput, "Desbordamiento numérico al calcular el efectivo esperado");
         d.expected_cash = Money::from_cents(exp);
         if (d.is_closed) {   // turno cerrado antes de la migración 020: sin instantánea
@@ -421,7 +384,8 @@ CloseR SqliteShiftService::load_closeout(const std::string& shift_id, bool with_
             d.difference_cents = has_final ? final_cash - exp : 0;
         }
     }
-    d.payments_mismatch_cents = d.net_sales.cents() - (d.cash_sales.cents() + d.card_sales.cents() + d.transfer_sales.cents());
+    d.payments_mismatch_cents = d.net_sales.cents() + d.card_surcharges.cents() -
+                                (d.cash_sales.cents() + d.card_sales.cents() + d.transfer_sales.cents());
 
     if (with_movements) {
         auto prep = db_.prepare(
@@ -586,7 +550,8 @@ CloseR SqliteShiftService::close_impl(const std::string& shift_id, Money counted
             "UPDATE shifts SET is_open = 0, closed_at = ?, closed_at_utc = ?, final_cash_cents = ?, closed_by_user_id = ?, "
             "closeout_saved = 1, snap_sales_count = ?, snap_gross_cents = ?, snap_discount_cents = ?, snap_cash_sales_cents = ?, "
             "snap_card_sales_cents = ?, snap_transfer_sales_cents = ?, snap_inflow_cents = ?, snap_outflow_cents = ?, "
-            "expected_cash_cents = ?, difference_cents = ?, difference_reason = ? WHERE id = ? AND is_open = 1;");
+            "expected_cash_cents = ?, difference_cents = ?, difference_reason = ?, snap_cash_refunds_cents = ?, snap_card_refunds_cents = ?, "
+            "snap_transfer_refunds_cents = ?, snap_card_surcharge_cents = ? WHERE id = ? AND is_open = 1;");
         if (!prep.is_success()) return fail(prep.error_code(), prep.error_message());
         auto st = std::move(prep.value());
         int i = 1;
@@ -605,6 +570,10 @@ CloseR SqliteShiftService::close_impl(const std::string& shift_id, Money counted
         st.bind_int64(i++, d.expected_cash.cents());
         st.bind_int64(i++, diff);
         st.bind_text(i++, reason);
+        st.bind_int64(i++, d.cash_refunds.cents());
+        st.bind_int64(i++, d.card_refunds.cents());
+        st.bind_int64(i++, d.transfer_refunds.cents());
+        st.bind_int64(i++, d.card_surcharges.cents());
         st.bind_text(i++, id);
         auto step = st.step();
         if (!step.is_success()) return fail(step.error_code(), step.error_message());

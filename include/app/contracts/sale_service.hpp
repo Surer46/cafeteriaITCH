@@ -30,11 +30,40 @@ inline const char* to_string(PaymentMethod method) {
 struct SaleConfirmationDto {
     std::string sale_id;
     std::string folio;
+    // B18: lo COBRADO (neto de productos + cargo por tarjeta). Con el cargo desactivado es el neto, como siempre.
     Money total;
     Money cash_received;
     Money change;
     PaymentMethod payment_method;
     std::string created_at;
+    Money products_total{Money::zero()};   // B18: neto de productos (ya con descuentos)
+    Money card_surcharge{Money::zero()};   // B18: cargo extra por pago con tarjeta (0 si no es Tarjeta o está desactivado)
+};
+
+// B18: lo que se cobraría con el método elegido, para mostrarlo ANTES de confirmar.
+struct CheckoutPreviewDto {
+    PaymentMethod payment_method{PaymentMethod::Efectivo};
+    Money products_total{Money::zero()};    // neto de productos del carrito, ya con descuentos
+    Money discount{Money::zero()};          // descuento de promociones incluido en el neto
+    Money card_surcharge{Money::zero()};    // solo con Tarjeta
+    Money charged_total{Money::zero()};     // products_total + card_surcharge
+    std::int64_t percent_hundredths{0};     // configuración usada (150 = 1.50 %)
+    Money fixed{Money::zero()};
+};
+
+// B18: reembolso de una venta, como aparece en el ticket y la consulta de la venta.
+struct TicketRefundLineDto {
+    std::string product_name;
+    std::int64_t quantity{0};
+    Money amount{Money::zero()};
+};
+
+struct TicketRefundDto {
+    std::string refund_folio;
+    std::string created_at;
+    Money amount{Money::zero()};
+    std::string reason;
+    std::vector<TicketRefundLineDto> lines;
 };
 
 struct TicketLineItemDto {
@@ -60,6 +89,11 @@ struct TicketDto {
     PaymentMethod payment_method{PaymentMethod::Efectivo};
     Money cash_received{Money::zero()};
     Money change{Money::zero()};
+    // B18. total = lo cobrado (products_total + card_surcharge). subtotal = products_total + discount.
+    Money products_total{Money::zero()};
+    Money card_surcharge{Money::zero()};
+    Money refunded_total{Money::zero()};
+    std::vector<TicketRefundDto> refunds;
 
     static size_t utf8_column_width(const std::string& str) {
         size_t width = 0;
@@ -362,7 +396,13 @@ struct TicketDto {
         if (discount.cents() > 0) {
             ss << format_kv_line("Descuento:", discount.to_string());
         }
+        if (card_surcharge.cents() > 0) {
+            ss << format_kv_line("Cargo por pago con tarjeta:", card_surcharge.to_string());
+        }
         ss << format_kv_line("TOTAL:", total.to_string());
+        for (const auto& rf : refunds) {
+            ss << format_kv_line("Reembolso " + rf.refund_folio + ":", "-" + rf.amount.to_string());
+        }
         ss << sep_single << "\n";
         ss << format_kv_line("Metodo de Pago:", to_string(payment_method));
         if (payment_method == PaymentMethod::Efectivo) {
@@ -388,10 +428,12 @@ struct TicketDto {
 struct TicketSummaryDto {
     std::string folio;
     std::string created_at;
-    Money total{Money::zero()};
+    Money total{Money::zero()};   // B18: lo cobrado (productos + cargo por tarjeta)
     std::string cashier_name;
     PaymentMethod payment_method{PaymentMethod::Efectivo};
     std::int64_t items_count{0};
+    Money card_surcharge{Money::zero()};   // B18
+    Money refunded_total{Money::zero()};   // B18
 };
 
 class ISaleService {
@@ -407,6 +449,10 @@ public:
     virtual Result<SaleConfirmationDto> get_sale_by_folio(const std::string& folio) = 0;
     virtual Result<TicketDto> get_ticket(const std::string& folio) = 0;
     virtual Result<std::vector<TicketSummaryDto>> get_recent_tickets(int limit = 50) = 0;
+
+    // B18: total con el cargo del método elegido, sobre el carrito actual. Requiere pos.sell. Con el cargo desactivado
+    // (0 % y $0) o con un método distinto de Tarjeta, charged_total = products_total.
+    virtual Result<CheckoutPreviewDto> preview_checkout(PaymentMethod payment_method) = 0;
 };
 
 } // namespace app::contracts

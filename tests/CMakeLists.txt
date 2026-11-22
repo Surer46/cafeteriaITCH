@@ -99,6 +99,14 @@ target_compile_definitions(test_b15 PRIVATE
 add_test(NAME ShiftCloseoutTest COMMAND test_b15 shift)
 add_test(NAME ReportsRangeTest COMMAND test_b15 reports)
 
+# Test B18: reembolsos de ventas y cargo extra por pago con tarjeta
+add_executable(test_b18 test_b18.cpp)
+target_link_libraries(test_b18 PRIVATE app_services app_storage app_contracts app_crypto sqlite3)
+target_compile_definitions(test_b18 PRIVATE SOURCE_MIGRATIONS_DIR="${CMAKE_SOURCE_DIR}/migrations")
+add_test(NAME RefundTest COMMAND test_b18 refund)
+add_test(NAME CardSurchargeTest COMMAND test_b18 surcharge)
+set_tests_properties(RefundTest CardSurchargeTest PROPERTIES TIMEOUT 300)
+
 # Ejecutable aislado de integración para reintento real de idempotencia a nivel de servicio
 add_executable(test_idempotency_runner
     test_idempotency_runner.cpp

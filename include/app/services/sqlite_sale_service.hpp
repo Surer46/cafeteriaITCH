@@ -33,6 +33,7 @@ public:
     contracts::Result<contracts::SaleConfirmationDto> get_sale_by_folio(const std::string& folio) override;
     contracts::Result<contracts::TicketDto> get_ticket(const std::string& folio) override;
     contracts::Result<std::vector<contracts::TicketSummaryDto>> get_recent_tickets(int limit = 50) override;
+    contracts::Result<contracts::CheckoutPreviewDto> preview_checkout(contracts::PaymentMethod payment_method) override;
 
     // Descarta el estado en memoria derivado de ventas (p. ej. tras restaurar la base).
     void invalidate_session_state();
