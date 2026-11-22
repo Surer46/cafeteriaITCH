@@ -12,8 +12,8 @@ Estandar | caja_corte           | SI | NO | 1662x1076 | 1593x1007 |  95.8% |  93
 Estandar | caja_historial       | SI | SI | 1662x1076 | 1600x1010 |  96.3% |  93.9% |  90.4% |   34px( 2.0%) |   38px( 3.5%) |  85.8% |   28px |   30px | LV(223px,7f/1it,cols=100%,OK); LV(350px,12f/2it,cols=100%,OK) | -
 Estandar | bitacora             | SI | NO | 1662x1076 | 1587x1001 |  95.5% |  93.0% |  88.8% |   45px( 2.7%) |   45px( 4.2%) |  81.7% |   30px |   38px | LV(620px,22f/3it,cols=100%,OK) | -
 Estandar | reportes             | SI | NO | 1662x1076 | 1608x1031 |  96.8% |  95.8% |  92.7% |   28px( 1.7%) |   30px( 2.8%) |  93.1% |   16px |   16px | LV(880px,31f/2it,cols=100%,OK) | -
-Estandar | usuarios             | SI | NO | 1662x1076 | 1598x1010 |  96.1% |  93.9% |  90.3% |   33px( 2.0%) |   33px( 3.1%) |  81.2% |   34px |   34px | LV(850px,30f/3it,cols=65%,CLIP[Rol(175>150)]/SOBRA[Nombre Completo(+52),Correo Electrónico(+100)]) | -
-Estandar | roles                | SI | SI | 1662x1076 | 1592x1029 |  95.8% |  95.6% |  91.6% |   40px( 2.4%) |   30px( 2.8%) |  85.5% |   30px |   32px | LV(819px,29f/3it,cols=99%,CLIP[Nombre(175>123),Descripción(376>113)]); SCROLL(676px,6/22toggles) | -
+Estandar | usuarios             | SI | NO | 1662x1076 | 1598x1010 |  96.1% |  93.9% |  90.3% |   33px( 2.0%) |   33px( 3.1%) |  81.2% |   34px |   34px | LV(850px,30f/3it,cols=100%,OK) | -
+Estandar | roles                | SI | SI | 1662x1076 | 1629x1061 |  98.0% |  98.6% |  96.6% |   19px( 1.1%) |   15px( 1.4%) |  91.1% |   16px |   16px | LV(885px,31f/3it,cols=100%,CLIP[Descripción(376>324)]); SCROLL(842px,14/22toggles) | -
 Estandar | configuracion        | SI | NO | 1662x1076 | 1568x984  |  94.3% |  91.4% |  86.3% |   48px( 2.9%) |   46px( 4.3%) |  86.7% |   28px |   28px | - | -
 Estandar | respaldos            | SI | NO | 1662x1076 | 1621x1010 |  97.5% |  93.9% |  91.6% |   23px( 1.4%) |   49px( 4.6%) |  91.6% |   16px |   20px | LV(297px,9f/0it,cols=100%,OK); LV(176px,5f/0it,cols=100%,OK) | -
 Estandar | actualizaciones      | NO | NO | 1662x1076 | 1601x1006 |  96.3% |  93.5% |  90.1% |   46px( 2.8%) |  780px(72.5%) |  94.5% |   16px |   16px | - | -
@@ -29,8 +29,8 @@ Tactil   | caja_corte           | SI | NO | 1615x1044 | 1549x978  |  95.9% |  93
 Tactil   | caja_historial       | SI | SI | 1615x1044 | 1553x978  |  96.2% |  93.7% |  90.1% |   34px( 2.1%) |   43px( 4.1%) |  84.2% |   28px |   30px | LV(193px,3f/1it,cols=100%,OK); LV(290px,5f/2it,cols=100%,OK) | -
 Tactil   | bitacora             | SI | NO | 1615x1044 | 1540x969  |  95.4% |  92.8% |  88.5% |   45px( 2.8%) |   47px( 4.5%) |  79.2% |   30px |   38px | LV(508px,9f/4it,cols=100%,OK) | -
 Tactil   | reportes             | SI | NO | 1615x1044 | 1561x999  |  96.7% |  95.7% |  92.5% |   28px( 1.7%) |   30px( 2.9%) |  90.5% |   16px |   16px | LV(812px,15f/2it,cols=100%,OK) | -
-Tactil   | usuarios             | SI | NO | 1615x1044 | 1551x978  |  96.0% |  93.7% |  90.0% |   33px( 2.0%) |   33px( 3.2%) |  79.1% |   34px |   34px | LV(786px,14f/3it,cols=67%,CLIP[Rol(193>150)]/SOBRA[Correo Electrónico(+82)]) | -
-Tactil   | roles                | SI | SI | 1615x1044 | 1545x971  |  95.7% |  93.0% |  89.0% |   40px( 2.5%) |   43px( 4.1%) |  84.2% |   30px |   32px | LV(766px,14f/3it,cols=99%,CLIP[Nombre(193>132),Descripción(424>124)]); SCROLL(552px,5/22toggles) | -
+Tactil   | usuarios             | SI | NO | 1615x1044 | 1551x978  |  96.0% |  93.7% |  90.0% |   33px( 2.0%) |   33px( 3.2%) |  79.1% |   34px |   34px | LV(786px,14f/3it,cols=100%,OK) | -
+Tactil   | roles                | SI | SI | 1615x1044 | 1575x1029 |  97.5% |  98.6% |  96.1% |   25px( 1.5%) |   15px( 1.4%) |  89.8% |   16px |   16px | LV(832px,15f/3it,cols=100%,CLIP[Descripción(424>258)]); SCROLL(749px,12/22toggles) | -
 Tactil   | configuracion        | SI | NO | 1615x1044 | 1521x952  |  94.2% |  91.2% |  85.9% |   48px( 3.0%) |   46px( 4.4%) |  86.4% |   28px |   28px | - | -
 Tactil   | respaldos            | SI | NO | 1615x1044 | 1574x983  |  97.5% |  94.2% |  91.8% |   23px( 1.4%) |   36px( 3.4%) |  91.9% |   16px |   20px | LV(233px,7f/0it,cols=100%,OK); LV(52px,1f/0it,cols=100%,OK) | -
 Tactil   | actualizaciones      | NO | NO | 1615x1044 | 1554x974  |  96.2% |  93.3% |  89.8% |   46px( 2.8%) |  724px(69.3%) |  94.3% |   16px |   16px | - | -
@@ -66,7 +66,7 @@ Estandar | 960x600  | caja_historial       | hscroll=NO | vscroll=SI | texto_cor
 Estandar | 960x600  | bitacora             | hscroll=NO | vscroll=NO | texto_cortado=-
 Estandar | 960x600  | reportes             | hscroll=NO | vscroll=NO | texto_cortado=-
 Estandar | 960x600  | usuarios             | hscroll=NO | vscroll=NO | texto_cortado=-
-Estandar | 960x600  | roles                | hscroll=NO | vscroll=SI | texto_cortado="Rol de sistema: solo se pue..."(40>21px,2L)
+Estandar | 960x600  | roles                | hscroll=NO | vscroll=SI | texto_cortado=-
 Estandar | 960x600  | configuracion        | hscroll=NO | vscroll=SI | texto_cortado=-
 Estandar | 960x600  | respaldos            | hscroll=NO | vscroll=SI | texto_cortado=-
 Estandar | 960x600  | actualizaciones      | hscroll=NO | vscroll=NO | texto_cortado=-
@@ -99,8 +99,8 @@ Tactil   | 960x600  | caja_corte           | hscroll=NO | vscroll=SI | texto_cor
 Tactil   | 960x600  | caja_historial       | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | bitacora             | hscroll=NO | vscroll=NO | texto_cortado="Registro cronológico inmuta..."(46>24px,2L)
 Tactil   | 960x600  | reportes             | hscroll=NO | vscroll=NO | texto_cortado=-
-Tactil   | 960x600  | usuarios             | hscroll=NO | vscroll=NO | texto_cortado="Total: 3 cuentas"(69>24px,3L)
-Tactil   | 960x600  | roles                | hscroll=NO | vscroll=SI | texto_cortado="Rol de sistema: solo se pue..."(69>24px,3L)
+Tactil   | 960x600  | usuarios             | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | roles                | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | configuracion        | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | respaldos            | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | actualizaciones      | hscroll=NO | vscroll=NO | texto_cortado=-

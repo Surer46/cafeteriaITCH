@@ -21,6 +21,7 @@ public:
         wxWindow* parent,
         std::shared_ptr<contracts::IAccountService> account_service
     );
+    ~BackofficeRolesPanel() override;
 
     void refresh_roles(const std::string& select_role_id = "");
 
@@ -33,11 +34,19 @@ private:
         ToggleSwitch* toggle{nullptr};
     };
 
+    struct PermissionGroup {
+        wxStaticText* header{nullptr};
+        std::vector<size_t> row_indices;
+    };
+
     void setup_ui();
     void load_permissions();
     void build_permission_matrix();
+    void rebuild_permission_sizers(bool two_cols);
+    void update_responsive_layout();
     void update_permission_matrix_layout();
     void update_permission_count();
+    void set_form_feedback(const wxString& message, const wxColour& colour);
     void set_permissions_editable(bool editable);
     void auto_size_columns();
     void on_size(wxSizeEvent& event);
@@ -52,11 +61,13 @@ private:
     std::shared_ptr<contracts::IAccountService> account_service_;
 
     // Componentes principales
+    wxBoxSizer* main_sizer_{nullptr};
     wxButton* btn_new_role_{nullptr};
     wxButton* btn_refresh_{nullptr};
     wxStaticText* lbl_top_status_{nullptr};
     wxPanel* pnl_warning_{nullptr};
     wxStaticText* lbl_warning_{nullptr};
+    wxString warning_raw_;
 
     // Columna izquierda: lista de roles
     CardPanel* left_card_{nullptr};
@@ -65,12 +76,31 @@ private:
 
     // Columna derecha: formulario y permisos
     CardPanel* right_card_{nullptr};
+    wxBoxSizer* rhead_container_{nullptr};
+    wxBoxSizer* rhead_active_{nullptr};
     wxStaticText* lbl_editor_title_{nullptr};
     wxStaticText* lbl_system_notice_{nullptr};
+    wxString editor_title_raw_;
+    wxString system_notice_raw_;
+
+    wxBoxSizer* form_container_{nullptr};
+    wxSizer* form_active_{nullptr};
+    wxStaticText* lbl_name_{nullptr};
+    wxStaticText* lbl_desc_{nullptr};
+    wxWindow* field_name_box_{nullptr};
+    wxWindow* field_desc_box_{nullptr};
     wxTextCtrl* txt_name_{nullptr};
     wxTextCtrl* txt_desc_{nullptr};
+
+    wxBoxSizer* perm_header_container_{nullptr};
+    wxBoxSizer* perm_header_active_{nullptr};
+    wxStaticText* lbl_p_header_{nullptr};
+    wxStaticText* lbl_form_feedback_{nullptr};
+    wxString form_feedback_raw_;
+
     wxScrolledWindow* scroll_perms_{nullptr};
     wxBoxSizer* perms_sizer_{nullptr};
+    std::vector<PermissionGroup> perm_groups_;
     std::vector<PermissionRow> perm_rows_;
     std::map<std::string, ToggleSwitch*> perm_toggles_;
     std::vector<wxPanel*> perm_separators_;
@@ -78,7 +108,6 @@ private:
     wxButton* btn_save_{nullptr};
     wxButton* btn_delete_{nullptr};
     wxStaticText* lbl_perm_count_{nullptr};
-    wxStaticText* lbl_form_feedback_{nullptr};
 
     // Datos en memoria
     std::vector<contracts::RoleDto> roles_;
@@ -88,7 +117,21 @@ private:
     bool can_manage_{false};
     bool in_size_event_{false};
     bool in_matrix_layout_{false};
+    bool wide_split_{false};
+    bool split_initialized_{false};
+    bool rhead_stacked_{false};
+    bool rhead_initialized_{false};
+    bool form_single_row_{false};
+    bool form_initialized_{false};
+    bool phead_stacked_{false};
+    bool phead_initialized_{false};
+    bool matrix_two_cols_{false};
+    bool matrix_sizers_built_{false};
     int last_matrix_avail_w_{-1};
+    int last_rhead_wrap_w_{-1};
+    int last_phead_wrap_w_{-1};
+    int last_warning_wrap_w_{-1};
+    std::shared_ptr<bool> alive_{std::make_shared<bool>(true)};
 };
 
 } // namespace app::frontend

@@ -1,9 +1,12 @@
 #include "src/frontend/backoffice_users_panel.hpp"
 #include "src/frontend/theme.hpp"
 #include "src/frontend/ui_helpers.hpp"
+#include <algorithm>
+#include <array>
 #include <wx/filedlg.h>
 #include <wx/mstream.h>
 #include <wx/image.h>
+#include <wx/settings.h>
 #include <fstream>
 
 namespace app::frontend {
@@ -285,17 +288,20 @@ BackofficeUsersPanel::BackofficeUsersPanel(
     refresh_users();
 }
 
+BackofficeUsersPanel::~BackofficeUsersPanel() {
+    *alive_ = false;
+}
+
 void BackofficeUsersPanel::setup_ui() {
     SetBackgroundColour(Theme::ColorBackground);
     auto* root = new wxBoxSizer(wxVERTICAL);
 
-    // Barra superior de acciones
-    auto* top_bar = new wxBoxSizer(wxHORIZONTAL);
+    // Barra superior de acciones (1 o 2 filas según ancho real medido de los controles)
+    top_bar_sizer_ = new wxBoxSizer(wxVERTICAL);
 
-    auto* title = new wxStaticText(this, wxID_ANY, wxT("Usuarios y Cuentas de Acceso"));
-    title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
-    title->SetForegroundColour(Theme::ColorBrandDeep);
-    top_bar->Add(title, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(16));
+    lbl_title_ = new wxStaticText(this, wxID_ANY, wxT("Usuarios y Cuentas de Acceso"));
+    lbl_title_->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
+    lbl_title_->SetForegroundColour(Theme::ColorBrandDeep);
 
     const int btn_h_logical = Theme::is_touch() ? 48 : 36;
     const int btn_h_px = FromDIP(btn_h_logical);
@@ -305,22 +311,18 @@ void BackofficeUsersPanel::setup_ui() {
     Theme::setup_button_icon(btn_new_user_, "add", wxSize(18, 18), Theme::ColorSurface);
     Theme::ensure_button_min_size(btn_new_user_, 160, btn_h_logical);
     btn_new_user_->Bind(wxEVT_BUTTON, &BackofficeUsersPanel::on_new_user, this);
-    top_bar->Add(btn_new_user_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
 
     btn_refresh_ = new wxButton(this, wxID_ANY, wxT("Actualizar"));
     Theme::style_button_secondary(btn_refresh_, btn_h_logical);
     Theme::ensure_button_min_size(btn_refresh_, 110, btn_h_logical);
     btn_refresh_->Bind(wxEVT_BUTTON, [this](wxCommandEvent&) { refresh_users(); });
-    top_bar->Add(btn_refresh_, 0, wxALIGN_CENTER_VERTICAL);
-
-    top_bar->AddStretchSpacer(1);
 
     lbl_status_ = new wxStaticText(this, wxID_ANY, wxEmptyString);
     lbl_status_->SetFont(Theme::get_font_small());
     lbl_status_->SetForegroundColour(Theme::ColorTextSecondary);
-    top_bar->Add(lbl_status_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
 
-    root->Add(top_bar, 0, wxEXPAND | wxALL, FromDIP(14));
+    update_top_bar_layout();
+    root->Add(top_bar_sizer_, 0, wxEXPAND | wxALL, FromDIP(14));
 
     // Tabla de usuarios
     list_ctrl_ = new wxListCtrl(this, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
@@ -335,6 +337,10 @@ void BackofficeUsersPanel::setup_ui() {
     list_ctrl_->InsertColumn(4, wxT("Avatar"), wxLIST_FORMAT_CENTER, FromDIP(70));
     list_ctrl_->InsertColumn(5, wxT("Estado"), wxLIST_FORMAT_CENTER, FromDIP(90));
 
+    list_ctrl_->Bind(wxEVT_SIZE, [this](wxSizeEvent& e) {
+        e.Skip();
+        auto_size_columns();
+    });
     list_ctrl_->Bind(wxEVT_LIST_ITEM_SELECTED, &BackofficeUsersPanel::on_item_selected, this);
     list_ctrl_->Bind(wxEVT_LIST_ITEM_DESELECTED, &BackofficeUsersPanel::on_item_deselected, this);
 
@@ -399,6 +405,192 @@ void BackofficeUsersPanel::setup_ui() {
     root->Add(bottom_bar, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
 
     SetSizer(root);
+    Bind(wxEVT_SIZE, &BackofficeUsersPanel::on_size, this);
+}
+
+void BackofficeUsersPanel::update_top_bar_layout() {
+    if (!top_bar_sizer_ || !lbl_title_ || !btn_new_user_ || !btn_refresh_ || !lbl_status_) return;
+
+    int title_tw = 0, title_th = 0;
+    lbl_title_->GetTextExtent(lbl_title_->GetLabel(), &title_tw, &title_th);
+    const int title_w = std::max(title_tw, lbl_title_->GetBestSize().GetWidth());
+
+    const int btn_new_w = std::max(btn_new_user_->GetMinSize().GetWidth(), btn_new_user_->GetBestSize().GetWidth());
+    const int btn_ref_w = std::max(btn_refresh_->GetMinSize().GetWidth(), btn_refresh_->GetBestSize().GetWidth());
+
+    int status_tw = 0, status_th = 0;
+    const wxString status_txt = lbl_status_->GetLabel();
+    if (!status_txt.empty()) {
+        lbl_status_->GetTextExtent(status_txt, &status_tw, &status_th);
+    }
+    const int status_w = std::max(status_tw, lbl_status_->GetBestSize().GetWidth());
+
+    // Ancho requerido en 1 fila calculado en tiempo de ejecución desde los controles reales
+    // (referencia del plan: ~780 lógicos en Táctil).
+    const int need_one_row = title_w + FromDIP(16) + btn_new_w + FromDIP(10) + btn_ref_w
+                           + FromDIP(12) + status_w + FromDIP(8) + FromDIP(28) + FromDIP(8);
+    const int panel_w = GetClientSize().GetWidth();
+    const bool two_rows = (panel_w > 0 && panel_w < need_one_row);
+
+    if (top_bar_initialized_ && two_rows == top_bar_two_rows_) {
+        return;
+    }
+
+    if (top_bar_row1_) {
+        top_bar_row1_->Detach(lbl_title_);
+        top_bar_row1_->Detach(btn_new_user_);
+        top_bar_row1_->Detach(btn_refresh_);
+        top_bar_row1_->Detach(lbl_status_);
+    }
+    if (top_bar_row2_) {
+        top_bar_row2_->Detach(btn_new_user_);
+        top_bar_row2_->Detach(btn_refresh_);
+    }
+    top_bar_row1_ = nullptr;
+    top_bar_row2_ = nullptr;
+    top_bar_sizer_->Clear(false);
+
+    if (!two_rows) {
+        top_bar_row1_ = new wxBoxSizer(wxHORIZONTAL);
+        top_bar_row1_->Add(lbl_title_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(16));
+        top_bar_row1_->Add(btn_new_user_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
+        top_bar_row1_->Add(btn_refresh_, 0, wxALIGN_CENTER_VERTICAL);
+        top_bar_row1_->AddStretchSpacer(1);
+        top_bar_row1_->Add(lbl_status_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+        top_bar_sizer_->Add(top_bar_row1_, 0, wxEXPAND);
+    } else {
+        top_bar_row1_ = new wxBoxSizer(wxHORIZONTAL);
+        top_bar_row1_->Add(lbl_title_, 0, wxALIGN_CENTER_VERTICAL);
+        top_bar_row1_->AddStretchSpacer(1);
+        top_bar_row1_->Add(lbl_status_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+        top_bar_sizer_->Add(top_bar_row1_, 0, wxEXPAND);
+
+        top_bar_row2_ = new wxBoxSizer(wxHORIZONTAL);
+        top_bar_row2_->Add(btn_new_user_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(10));
+        top_bar_row2_->Add(btn_refresh_, 0, wxALIGN_CENTER_VERTICAL);
+        top_bar_sizer_->Add(top_bar_row2_, 0, wxEXPAND | wxTOP, FromDIP(8));
+    }
+
+    top_bar_initialized_ = true;
+    top_bar_two_rows_ = two_rows;
+}
+
+void BackofficeUsersPanel::auto_size_columns() {
+    if (!list_ctrl_) return;
+
+    const int sb_w = wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, list_ctrl_);
+    const wxSize client = list_ctrl_->GetClientSize();
+    int full_w = client.GetWidth() + (ui::has_vertical_scrollbar(list_ctrl_) ? sb_w : 0);
+    if (full_w <= 50) {
+        full_w = list_ctrl_->GetSize().GetWidth();
+    }
+    if (full_w <= 50) return;
+
+    int row_h = list_ctrl_->FromDIP(Theme::is_touch() ? 42 : 20);
+    const int rows = list_ctrl_->GetItemCount();
+    if (rows > 0) {
+        wxRect item_rect;
+        if (list_ctrl_->GetItemRect(0, item_rect) && item_rect.GetHeight() > 0) {
+            row_h = item_rect.GetHeight();
+        }
+    }
+    const int rows_h = ui::header_height(list_ctrl_) + rows * row_h;
+    const bool needs_vbar = client.GetHeight() > 0 && rows_h > client.GetHeight();
+    const int budget = full_w - (needs_vbar ? sb_w : 0) - std::max(2, list_ctrl_->FromDIP(2));
+    if (budget <= 50) return;
+
+    const std::array<wxString, 6> headers = {
+        wxT("Nombre Completo"),
+        wxT("Usuario"),
+        wxT("Correo Electrónico"),
+        wxT("Rol"),
+        wxT("Avatar"),
+        wxT("Estado")
+    };
+
+    std::array<int, 6> content_max = {0, 0, 0, 0, 0, 0};
+    auto measure_cell = [this, &content_max](std::size_t col, const wxString& text) {
+        int tw = 0, th = 0;
+        list_ctrl_->GetTextExtent(text, &tw, &th);
+        if (tw > content_max[col]) {
+            content_max[col] = tw;
+        }
+    };
+
+    measure_cell(4, wxT("Sí"));
+    measure_cell(4, wxT("No"));
+    measure_cell(5, wxT("Activo"));
+    measure_cell(5, wxT("Inactivo"));
+    for (const auto& u : users_) {
+        measure_cell(0, wxString::FromUTF8(u.display_name.c_str()));
+        measure_cell(1, wxString::FromUTF8(u.username.c_str()));
+        measure_cell(2, wxString::FromUTF8(u.email.c_str()));
+        measure_cell(3, wxString::FromUTF8(u.role_name.c_str()));
+    }
+
+    const int hpad = list_ctrl_->FromDIP(16);
+    const int cpad = list_ctrl_->FromDIP(18);
+    const int img_extra0 = Theme::is_touch() ? list_ctrl_->FromDIP(7) : 0;
+
+    std::array<int, 6> hdr_w{};
+    std::array<int, 6> want{};
+    int sum_want = 0;
+    for (std::size_t i = 0; i < 6; ++i) {
+        hdr_w[i] = ui::header_text_width(list_ctrl_, headers[i]) + hpad;
+        const int extra = (i == 0) ? img_extra0 : 0;
+        want[i] = std::max(hdr_w[i], content_max[i] + cpad + extra);
+        sum_want += want[i];
+    }
+
+    std::array<int, 6> width = want;
+    if (budget >= sum_want) {
+        // Excedente repartido 45 % Nombre Completo (col 0) y 55 % Correo Electrónico (col 2).
+        const int surplus = budget - sum_want;
+        const int add0 = (surplus * 45) / 100;
+        const int add2 = surplus - add0;
+        width[0] += add0;
+        width[2] += add2;
+    } else {
+        // Presupuesto ajustado: ceden primero Correo Electrónico y Nombre Completo hasta su encabezado,
+        // manteniendo protegidos Rol, Usuario, Avatar y Estado para evitar WS_HSCROLL.
+        int deficit = sum_want - budget;
+        const int slack0 = std::max(0, width[0] - hdr_w[0]);
+        const int slack2 = std::max(0, width[2] - hdr_w[2]);
+        const int total_elastic = slack0 + slack2;
+        if (total_elastic > 0) {
+            const int take = std::min(deficit, total_elastic);
+            const int take2 = (take * slack2 + total_elastic / 2) / total_elastic;
+            const int take0 = std::min(slack0, take - take2);
+            const int actual2 = std::min(slack2, take - take0);
+            width[0] -= take0;
+            width[2] -= actual2;
+            deficit -= (take0 + actual2);
+        }
+        for (std::size_t idx : {std::size_t{1}, std::size_t{3}, std::size_t{5}, std::size_t{4}}) {
+            if (deficit <= 0) break;
+            const int give = std::min(deficit, std::max(0, width[idx] - hdr_w[idx]));
+            width[idx] -= give;
+            deficit -= give;
+        }
+    }
+
+    for (std::size_t i = 0; i < 6; ++i) {
+        if (list_ctrl_->GetColumnWidth(static_cast<int>(i)) != width[i]) {
+            list_ctrl_->SetColumnWidth(static_cast<int>(i), width[i]);
+        }
+    }
+}
+
+void BackofficeUsersPanel::on_size(wxSizeEvent& event) {
+    event.Skip();
+    if (in_size_event_) return;
+    in_size_event_ = true;
+
+    update_top_bar_layout();
+    Layout();
+    auto_size_columns();
+
+    in_size_event_ = false;
 }
 
 void BackofficeUsersPanel::refresh_users() {
@@ -414,6 +606,10 @@ void BackofficeUsersPanel::refresh_users() {
     auto res = account_service_->list_users();
     if (!res.is_success()) {
         lbl_status_->SetLabel(wxString::Format(wxT("Error: %s"), wxString::FromUTF8(res.error_message().c_str())));
+        lbl_status_->SetMinSize(wxDefaultSize);
+        lbl_status_->InvalidateBestSize();
+        update_top_bar_layout();
+        Layout();
         return;
     }
 
@@ -433,6 +629,16 @@ void BackofficeUsersPanel::refresh_users() {
     }
 
     lbl_status_->SetLabel(wxString::Format(wxT("Total: %zu cuentas"), users_.size()));
+    lbl_status_->SetMinSize(wxDefaultSize);
+    lbl_status_->InvalidateBestSize();
+    update_top_bar_layout();
+    Layout();
+    auto_size_columns();
+    auto alive = alive_;
+    CallAfter([this, alive]() {
+        if (!*alive) return;
+        auto_size_columns();
+    });
 }
 
 void BackofficeUsersPanel::on_item_selected(wxListEvent& event) {
