@@ -297,7 +297,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Dialogo Nuevo Usuario | button | Cancelar | 110.4x48.0 | OK
   Dialogo Nuevo Usuario | button | Guardar Usuario | 160.0x48.0 | OK
 
-=== Roles y permisos (total=35, marcados=0) ===
+=== Roles y permisos (total=36, marcados=0) ===
   Roles y permisos | button | Estándar | 137.6x48.0 | OK
   Roles y permisos | button | Punto de Venta | 220.0x56.0 | OK
   Roles y permisos | button | Inventario | 220.0x56.0 | OK
@@ -316,6 +316,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Roles y permisos | switch/combo | Reimprimir tickets | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Cancelar un pedido sin cobrar | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Anular una venta cobrada | 60.0x48.0 | OK
+  Roles y permisos | switch/combo | Hacer reembolsos | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Ver existencias | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Administrar productos y recetas | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Registrar compras | 60.0x48.0 | OK

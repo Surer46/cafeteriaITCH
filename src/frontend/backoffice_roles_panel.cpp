@@ -544,7 +544,7 @@ void BackofficeRolesPanel::rebuild_permission_sizers(bool two_cols) {
     const int hdr_top = FromDIP(6);
     const int hdr_bottom = FromDIP(4);
     const int col_gap = FromDIP(12);
-    const int group_gap = FromDIP(two_cols ? 10 : 12);
+    const int group_gap = FromDIP(two_cols ? 6 : 12);
 
     bool first_group = true;
     for (auto& grp : perm_groups_) {
@@ -600,14 +600,15 @@ void BackofficeRolesPanel::update_responsive_layout() {
 
     const int panel_w = GetClientSize().GetWidth();
 
-    // Regla A: reparto 44:56 en pantalla completa (>= 1100 lógicos), 38:62 en ventana normal (< 1100 lógicos).
+    // Regla A: reparto 40:60 en pantalla completa (>= 1100 lógicos) para dar más ancho a las 2 columnas
+    // de permisos sin reducir los mínimos táctiles; 38:62 en ventana normal (< 1100 lógicos).
     const bool wide = (panel_w >= FromDIP(1100));
     if (!split_initialized_ || wide != wide_split_) {
         if (auto* li = main_sizer_->GetItem(left_card_)) {
-            li->SetProportion(wide ? 44 : 38);
+            li->SetProportion(wide ? 40 : 38);
         }
         if (auto* ri = main_sizer_->GetItem(right_card_)) {
-            ri->SetProportion(wide ? 56 : 62);
+            ri->SetProportion(wide ? 60 : 62);
         }
         wide_split_ = wide;
         split_initialized_ = true;
@@ -627,7 +628,7 @@ void BackofficeRolesPanel::update_responsive_layout() {
     if (right_card_w <= FromDIP(80) && panel_w > FromDIP(160)) {
         const int main_w = std::max(FromDIP(200), panel_w - FromDIP(24));
         const int left_min = left_card_->GetMinSize().GetWidth();
-        const int left_est = std::max(left_min, (main_w * (wide ? 44 : 38)) / 100);
+        const int left_est = std::max(left_min, (main_w * (wide ? 40 : 38)) / 100);
         right_card_w = std::max(FromDIP(200), main_w - left_est);
     }
     const int right_inner_w = std::max(FromDIP(120), right_card_w - FromDIP(16));
@@ -864,9 +865,9 @@ void BackofficeRolesPanel::update_permission_matrix_layout() {
     }
     std::sort(title_ws.begin(), title_ws.end());
     std::sort(desc_ws.begin(), desc_ws.end());
-    const int p75_title_w = title_ws.empty() ? FromDIP(200) : title_ws[(title_ws.size() * 75) / 100];
-    const int p75_desc_w = desc_ws.empty() ? FromDIP(420) : desc_ws[(desc_ws.size() * 75) / 100];
-    const int min_text_w = std::max(p75_title_w, (p75_desc_w + 1) / 2);
+    const int p85_title_w = title_ws.empty() ? FromDIP(210) : title_ws[(title_ws.size() * 85) / 100];
+    const int p50_desc_w = desc_ws.empty() ? FromDIP(380) : desc_ws[desc_ws.size() / 2];
+    const int min_text_w = std::max(p85_title_w, (p50_desc_w + 1) / 2 + FromDIP(22));
     const int min_cell_w = pad_x + min_text_w + text_switch_gap + sw_w + pad_x + FromDIP(4);
     const int need_two_cols = 2 * min_cell_w + col_gap;
     const bool want_two_cols = (avail_w >= need_two_cols);

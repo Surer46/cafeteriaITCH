@@ -32,6 +32,7 @@ import ctypes
 from ctypes import wintypes
 import os
 import shutil
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -92,9 +93,20 @@ user32.ClientToScreen.restype = wintypes.BOOL
 MIN_LIST_COLS_FILL_PCT = 95.0
 SPARE_COL_LOGICAL_PX = 40
 ROLES_MIN_FULLSCREEN_TOGGLES = 10
-ROLES_EXPECTED_TOTAL_TOGGLES = 22
 ROLES_MIN_TOUCH_1200_ROWS = 4
 ROLES_SECTION_HEADERS = {"Punto de Venta", "Inventario", "Caja y Reportes", "BackOffice"}
+
+
+def count_visible_permissions_from_db(db_path):
+    """Lee de SQLite el total de permisos visibles del catálogo (excluyendo el de Desarrollador)."""
+    con = sqlite3.connect(db_path)
+    try:
+        row = con.execute(
+            "SELECT COUNT(*) FROM permissions WHERE id != 'backup.dev_config';"
+        ).fetchone()
+        return int(row[0]) if row else 0
+    finally:
+        con.close()
 
 
 # ---------------------------------------------------------------------------
@@ -570,7 +582,7 @@ def run_test_windowed_pass(exe_path, work_dir, data_dir, profile_cfg, profile_la
                 proc.wait(timeout=2.0)
 
 
-def evaluate_checks(fs_rows, win_rows):
+def evaluate_checks(fs_rows, win_rows, expected_total_toggles):
     """Evalúa todas las aserciones sobre las filas medidas y devuelve (failures, warnings, matched_known)."""
     failures = []
     warnings = []
@@ -648,9 +660,9 @@ def evaluate_checks(fs_rows, win_rows):
             total_t = rinfo.get("toggles_total", 0)
             check_metric(
                 screen, profile, size_label, "roles_toggles_in_view",
-                total_t == ROLES_EXPECTED_TOTAL_TOGGLES and in_view >= ROLES_MIN_FULLSCREEN_TOGGLES,
+                total_t == expected_total_toggles and in_view >= ROLES_MIN_FULLSCREEN_TOGGLES,
                 f"[FALLO] pantalla={screen} perfil={profile} tamano={size_label} metrica=interruptores_visibles "
-                f"medida={in_view}/{total_t} umbral>={ROLES_MIN_FULLSCREEN_TOGGLES}/{ROLES_EXPECTED_TOTAL_TOGGLES}",
+                f"medida={in_view}/{total_t} umbral>={ROLES_MIN_FULLSCREEN_TOGGLES}/{expected_total_toggles}",
             )
         else:
             check_metric(
@@ -805,7 +817,9 @@ def main():
     password = "AdminT16Layout2026!"
 
     try:
-        bootstrap_isolated_db(exe_path, work_dir, temp_dir, username, password)
+        db_path = bootstrap_isolated_db(exe_path, work_dir, temp_dir, username, password)
+        expected_total_toggles = count_visible_permissions_from_db(db_path)
+        assert expected_total_toggles > 0, f"No se encontraron permisos visibles en SQLite: {db_path}"
 
         rows_std, mon_std = run_test_fullscreen_pass(
             exe_path, work_dir, temp_dir, "standard", "Estandar", username, password
@@ -853,7 +867,9 @@ def main():
                     flush=True,
                 )
 
-        failures, warnings, matched_known = evaluate_checks(rows_std + rows_tch, win_std + win_tch)
+        failures, warnings, matched_known = evaluate_checks(
+            rows_std + rows_tch, win_std + win_tch, expected_total_toggles
+        )
 
         for w_msg in warnings:
             print(w_msg, flush=True)
