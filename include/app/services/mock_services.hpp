@@ -14,6 +14,8 @@
 #include "app/contracts/backup_service.hpp"
 #include "app/contracts/update_service.hpp"
 #include "app/contracts/promotion_service.hpp"
+#include "app/contracts/refund_service.hpp"
+#include "app/contracts/payment_settings_service.hpp"
 #include "app/contracts/print_config_service.hpp"
 
 namespace app::storage {
@@ -217,9 +219,40 @@ public:
     contracts::Result<contracts::SaleConfirmationDto> get_sale_by_folio(const std::string& folio) override;
     contracts::Result<contracts::TicketDto> get_ticket(const std::string& folio) override;
     contracts::Result<std::vector<contracts::TicketSummaryDto>> get_recent_tickets(int limit = 50) override;
+    contracts::Result<contracts::CheckoutPreviewDto> preview_checkout(contracts::PaymentMethod payment_method) override;
+
+    // B18: el mock comparte la configuración del cargo por tarjeta con MockPaymentSettingsService.
+    void set_card_surcharge(std::int64_t percent_hundredths, std::int64_t fixed_cents) { surcharge_bp_ = percent_hundredths; surcharge_fixed_ = fixed_cents; }
 
 private:
     std::int64_t next_folio_{1001};
+    std::int64_t surcharge_bp_{0};
+    std::int64_t surcharge_fixed_{0};
+};
+
+// B18: configuración del cargo por tarjeta (simulada en memoria; 0 % y $0 por omisión).
+class MockPaymentSettingsService : public contracts::IPaymentSettingsService {
+public:
+    contracts::Result<contracts::CardSurchargeConfigDto> get_card_surcharge_config() override;
+    contracts::OperationResult set_card_surcharge_config(std::int64_t percent_hundredths, contracts::Money fixed) override;
+
+private:
+    contracts::CardSurchargeConfigDto config_;
+};
+
+// B18: reembolsos simulados sobre una venta de demostración (V-20260924-1001). Mismas reglas de importe y mismos
+// mensajes que el servicio real; no mueve inventario ni caja.
+class MockRefundService : public contracts::IRefundService {
+public:
+    MockRefundService();
+    contracts::Result<contracts::SaleDetailDto> get_sale_for_refund(const std::string& folio) override;
+    contracts::Result<contracts::RefundDto> refund_sale(const contracts::RefundRequestDto& request) override;
+    contracts::Result<std::vector<contracts::RefundDto>> list_refunds(const std::string& sale_folio) override;
+    contracts::Result<contracts::RefundDto> get_refund(const std::string& refund_id) override;
+
+private:
+    contracts::SaleDetailDto sale_;
+    std::vector<contracts::RefundDto> refunds_;
 };
 
 class MockReportService : public contracts::IReportService {
@@ -327,6 +360,8 @@ struct ServiceRegistry {
     std::shared_ptr<contracts::IPrintConfigService> print_config_service;
     std::shared_ptr<contracts::IUpdateService> update_service;  // B11: actualizaciones del programa
     std::shared_ptr<contracts::IPromotionService> promotion_service;  // B14: promociones y combos
+    std::shared_ptr<contracts::IRefundService> refund_service;  // B18: reembolsos de ventas
+    std::shared_ptr<contracts::IPaymentSettingsService> payment_settings_service;  // B18: cargo por pago con tarjeta
 
     static ServiceRegistry create_mock_registry();
     // app_version: versión del programa en ejecución (project(VERSION)); is_portable: copia con portable.flag.

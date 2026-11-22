@@ -551,7 +551,10 @@ void test_csv_export(Env& e) {
     auto csv = read_csv(f);
     TEST_CHECK(csv.bytes.size() > 3 && csv.bytes.substr(0, 3) == "\xEF\xBB\xBF", "UTF-8 con BOM");
     TEST_CHECK(csv.lines.size() >= 3, "Encabezado, filas y total");
-    TEST_CHECK(csv.lines[0] == "\xEF\xBB\xBFProducto,Piezas,Importe bruto,Descuento,Importe neto", "Encabezados en español: " + csv.lines[0]);
+    // B18: las columnas nuevas van SOLO al final; las anteriores conservan su orden
+    const std::string old_header = "\xEF\xBB\xBFProducto,Piezas,Importe bruto,Descuento,Importe neto";
+    TEST_CHECK(csv.lines[0].rfind(old_header + ",", 0) == 0, "Encabezados en español, columnas anteriores en su orden: " + csv.lines[0]);
+    TEST_CHECK(csv.lines[0] == old_header + ",Piezas reembolsadas,Reembolsos,Neto después de reembolsos", "Columnas nuevas al final: " + csv.lines[0]);
     TEST_CHECK(csv.bytes.find("\n") != std::string::npos && csv.bytes.find("\r\n") != std::string::npos, "CRLF");
     bool has_formula = false, has_quotes = false;
     for (const auto& line : csv.lines) {
@@ -561,7 +564,7 @@ void test_csv_export(Env& e) {
     TEST_CHECK(has_formula, "La fórmula se neutraliza con apóstrofo");
     TEST_CHECK(has_quotes, "Comillas y comas según RFC 4180");
     TEST_CHECK(csv.lines.back().rfind("Total,", 0) == 0, "Renglón de total");
-    TEST_CHECK(csv.lines.back() == "Total,5,70.46,1.50,68.96", "Importes con dos decimales y punto: " + csv.lines.back());
+    TEST_CHECK(csv.lines.back() == "Total,5,70.46,1.50,68.96,0,0.00,68.96", "Importes con dos decimales y punto: " + csv.lines.back());
     // Sin 'double': 4198 centavos -> 41.98
     bool has_money = false;
     for (const auto& line : csv.lines) if (line.find(",12.50,") != std::string::npos) has_money = true;

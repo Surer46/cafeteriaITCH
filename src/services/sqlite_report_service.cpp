@@ -68,19 +68,20 @@ contracts::Result<contracts::DailySalesReportDto> SqliteReportService::get_daily
 
     // Ventas del día: [start, end) sobre sales.created_at.
     {
-        auto prep = db_.prepare("SELECT total_cents, discount_cents FROM sales WHERE created_at >= ? AND created_at < ?;");
+        auto prep = db_.prepare("SELECT total_cents, discount_cents, card_surcharge_cents FROM sales WHERE created_at >= ? AND created_at < ?;");
         if (!prep.is_success()) return R::fail(prep.error_code(), prep.error_message());
         auto stmt = std::move(prep.value());
         stmt.bind_text(1, start);
         stmt.bind_text(2, end);
-        std::int64_t total = 0, count = 0, discount = 0;
+        std::int64_t total = 0, count = 0, discount = 0, surcharge = 0;
         while (true) {
             auto step = stmt.step();
             if (!step.is_success()) return R::fail(step.error_code(), step.error_message());
             if (!step.value()) break;
             if (!checked_add(total, stmt.get_int64(0), total) || !checked_add(count, 1, count) ||
-                !checked_add(discount, stmt.get_int64(1), discount)) return overflow_error();
+                !checked_add(discount, stmt.get_int64(1), discount) || !checked_add(surcharge, stmt.get_int64(2), surcharge)) return overflow_error();
         }
+        report.card_surcharge_amount = contracts::Money::from_cents(surcharge);
         report.total_sales_count = count;
         report.total_amount = contracts::Money::from_cents(total);
         std::int64_t gross = 0;
@@ -120,7 +121,19 @@ contracts::Result<contracts::DailySalesReportDto> SqliteReportService::get_daily
     }
 
     // Discrepancia con signo, sin ocultarla. Ambos valores son >= 0 (CHECK en las tablas): no desborda.
-    report.payments_mismatch_cents = report.total_amount.cents() - report.payments_total.cents();
+    // B18: lo pagado incluye el cargo por tarjeta; los reembolsos del día (atribuidos a la fecha de su venta) van aparte.
+    report.payments_mismatch_cents = report.total_amount.cents() + report.card_surcharge_amount.cents() - report.payments_total.cents();
+    {
+        auto prep = db_.prepare("SELECT COALESCE(SUM(r.amount_cents), 0) FROM refunds r JOIN sales s ON s.id = r.sale_id "
+                                "WHERE s.created_at >= ? AND s.created_at < ?;");
+        if (!prep.is_success()) return R::fail(prep.error_code(), prep.error_message());
+        auto stmt = std::move(prep.value());
+        stmt.bind_text(1, start);
+        stmt.bind_text(2, end);
+        auto step = stmt.step();
+        if (!step.is_success()) return R::fail(step.error_code(), step.error_message());
+        if (step.value()) report.refunds_amount = contracts::Money::from_cents(stmt.get_int64(0));
+    }
     return R::ok(report);
 }
 
@@ -211,9 +224,16 @@ const char* kind_name(contracts::ReportKind k) {
 // Totales de las cabeceras de venta del rango (una consulta sobre el índice de fecha).
 std::string SqliteReportService::header_totals(const std::string& start, const std::string& end, contracts::SalesTotalsDto& t) {
     std::int64_t count = 0, total = 0, discount = 0;
-    std::string err = query_rows(db_, "SELECT COUNT(*), COALESCE(SUM(total_cents), 0), COALESCE(SUM(discount_cents), 0) FROM sales "
+    std::int64_t surcharge = 0, refunds = 0;
+    std::string err = query_rows(db_, "SELECT COUNT(*), COALESCE(SUM(total_cents), 0), COALESCE(SUM(discount_cents), 0), "
+                                      "COALESCE(SUM(card_surcharge_cents), 0) FROM sales "
                                       "WHERE created_at >= ? AND created_at < ?;", {start, end}, [&](storage::SqliteStatement& st) {
-        count = st.get_int64(0); total = st.get_int64(1); discount = st.get_int64(2);
+        count = st.get_int64(0); total = st.get_int64(1); discount = st.get_int64(2); surcharge = st.get_int64(3);
+    });
+    if (!err.empty()) return err;
+    err = query_rows(db_, "SELECT COALESCE(SUM(r.amount_cents), 0) FROM refunds r JOIN sales s ON s.id = r.sale_id "
+                          "WHERE s.created_at >= ? AND s.created_at < ?;", {start, end}, [&](storage::SqliteStatement& st) {
+        refunds = st.get_int64(0);
     });
     if (!err.empty()) return err;
     std::int64_t gross = 0;
@@ -222,6 +242,9 @@ std::string SqliteReportService::header_totals(const std::string& start, const s
     t.gross = Money::from_cents(gross);
     t.discount = Money::from_cents(discount);
     t.net = Money::from_cents(total);
+    t.card_surcharges = Money::from_cents(surcharge);
+    t.refunds = Money::from_cents(refunds);
+    t.net_after_refunds = Money::from_cents(total - refunds);
     return "";
 }
 
@@ -247,7 +270,7 @@ std::string SqliteReportService::set_payments(std::int64_t cash, std::int64_t ca
     std::int64_t all = 0;
     if (!checked_add(cash, card, all) || !checked_add(all, transfer, all)) return "Desbordamiento numérico al sumar los pagos del reporte";
     t.payments_total = Money::from_cents(all);
-    t.payments_mismatch_cents = t.net.cents() - all;
+    t.payments_mismatch_cents = t.net.cents() + t.card_surcharges.cents() - all;
     return "";
 }
 
@@ -256,7 +279,8 @@ contracts::Result<contracts::SalesByDayReportDto> SqliteReportService::sales_by_
     REPORT_PRELUDE(RT)
     contracts::SalesByDayReportDto out;
     out.from_date = from_date; out.to_date = to_date;
-    std::string err = query_rows(db_, "SELECT substr(created_at, 1, 10), COUNT(*), COALESCE(SUM(total_cents), 0), COALESCE(SUM(discount_cents), 0) "
+    std::string err = query_rows(db_, "SELECT substr(created_at, 1, 10), COUNT(*), COALESCE(SUM(total_cents), 0), COALESCE(SUM(discount_cents), 0), "
+                                      "COALESCE(SUM(card_surcharge_cents), 0) "
                                       "FROM sales WHERE created_at >= ? AND created_at < ? GROUP BY substr(created_at, 1, 10) ORDER BY 1;",
                                  {start, end}, [&](storage::SqliteStatement& st) {
         contracts::SalesByDayRowDto r;
@@ -264,6 +288,8 @@ contracts::Result<contracts::SalesByDayReportDto> SqliteReportService::sales_by_
         r.sales_count = st.get_int64(1);
         r.net = Money::from_cents(st.get_int64(2));
         r.discount = Money::from_cents(st.get_int64(3));
+        r.card_surcharges = Money::from_cents(st.get_int64(4));
+        r.net_after_refunds = r.net;
         r.gross = Money::from_cents(r.net.cents() + r.discount.cents());
         out.rows.push_back(r);
     });
@@ -277,6 +303,17 @@ contracts::Result<contracts::SalesByDayReportDto> SqliteReportService::sales_by_
             if (m == "EFECTIVO") r.cash = Money::from_cents(st.get_int64(2));
             else if (m == "TARJETA") r.card = Money::from_cents(st.get_int64(2));
             else if (m == "TRANSFERENCIA") r.transfer = Money::from_cents(st.get_int64(2));
+        }
+    });
+    if (!err.empty()) return RT::fail(ErrorCode::StorageFailure, err);
+    // B18: reembolsos por día (atribuidos al día de su venta)
+    err = query_rows(db_, "SELECT substr(s.created_at, 1, 10), COALESCE(SUM(r.amount_cents), 0) FROM refunds r JOIN sales s ON s.id = r.sale_id "
+                          "WHERE s.created_at >= ? AND s.created_at < ? GROUP BY 1;", {start, end}, [&](storage::SqliteStatement& st) {
+        const std::string d = st.get_text(0);
+        for (auto& r : out.rows) {
+            if (r.date != d) continue;
+            r.refunds = Money::from_cents(st.get_int64(1));
+            r.net_after_refunds = Money::from_cents(r.net.cents() - r.refunds.cents());
         }
     });
     if (!err.empty()) return RT::fail(ErrorCode::StorageFailure, err);
@@ -309,7 +346,22 @@ contracts::Result<contracts::SalesByProductReportDto> SqliteReportService::sales
         r.gross = Money::from_cents(st.get_int64(3));
         r.discount = Money::from_cents(st.get_int64(4));
         r.net = Money::from_cents(r.gross.cents() - r.discount.cents());
+        r.net_after_refunds = r.net;
         out.rows.push_back(r);
+    });
+    if (!err.empty()) return RT::fail(ErrorCode::StorageFailure, err);
+    // B18: piezas e importes reembolsados por producto; pieces pasa a ser vendidas MENOS reembolsadas.
+    err = query_rows(db_, "SELECT ri.product_id, COALESCE(SUM(ri.quantity), 0), COALESCE(SUM(ri.amount_cents), 0) FROM refund_items ri "
+                          "JOIN refunds r ON r.id = ri.refund_id JOIN sales s ON s.id = r.sale_id "
+                          "WHERE s.created_at >= ? AND s.created_at < ? GROUP BY ri.product_id;", {start, end}, [&](storage::SqliteStatement& st) {
+        const std::string pid = st.get_text(0);
+        for (auto& r : out.rows) {
+            if (r.product_id != pid) continue;
+            r.pieces_refunded = st.get_int64(1);
+            r.pieces -= r.pieces_refunded;
+            r.refunds = Money::from_cents(st.get_int64(2));
+            r.net_after_refunds = Money::from_cents(r.net.cents() - r.refunds.cents());
+        }
     });
     if (!err.empty()) return RT::fail(ErrorCode::StorageFailure, err);
     err = header_totals(start, end, out.totals);
@@ -337,6 +389,12 @@ contracts::Result<contracts::SalesByPaymentReportDto> SqliteReportService::sales
         out.rows.push_back(r);
     });
     if (!err.empty()) return RT::fail(ErrorCode::StorageFailure, err);
+    err = query_rows(db_, "SELECT r.payment_method, COALESCE(SUM(r.amount_cents), 0) FROM refunds r JOIN sales s ON s.id = r.sale_id "
+                          "WHERE s.created_at >= ? AND s.created_at < ? GROUP BY r.payment_method;", {start, end}, [&](storage::SqliteStatement& st) {
+        const std::string m = st.get_text(0);
+        for (auto& r : out.rows) if (r.method == m) r.refunds = Money::from_cents(st.get_int64(1));
+    });
+    if (!err.empty()) return RT::fail(ErrorCode::StorageFailure, err);
     err = header_totals(start, end, out.totals);
     if (err.empty()) {
         std::int64_t c = 0, k = 0, tr = 0;
@@ -356,7 +414,7 @@ contracts::Result<contracts::SalesByCashierReportDto> SqliteReportService::sales
     contracts::SalesByCashierReportDto out;
     out.from_date = from_date; out.to_date = to_date;
     std::string err = query_rows(db_, "SELECT s.user_id, COALESCE(MAX(NULLIF(s.cashier_name, '')), MAX(u.display_name), ''), COUNT(*), "
-                                      "COALESCE(SUM(s.total_cents), 0), COALESCE(SUM(s.discount_cents), 0) FROM sales s "
+                                      "COALESCE(SUM(s.total_cents), 0), COALESCE(SUM(s.discount_cents), 0), COALESCE(SUM(s.card_surcharge_cents), 0) FROM sales s "
                                       "LEFT JOIN users u ON u.id = s.user_id WHERE s.created_at >= ? AND s.created_at < ? "
                                       "GROUP BY s.user_id ORDER BY SUM(s.total_cents) DESC, 2;",
                                  {start, end}, [&](storage::SqliteStatement& st) {
@@ -366,8 +424,20 @@ contracts::Result<contracts::SalesByCashierReportDto> SqliteReportService::sales
         r.sales_count = st.get_int64(2);
         r.net = Money::from_cents(st.get_int64(3));
         r.discount = Money::from_cents(st.get_int64(4));
+        r.card_surcharges = Money::from_cents(st.get_int64(5));
         r.gross = Money::from_cents(r.net.cents() + r.discount.cents());
+        r.net_after_refunds = r.net;
         out.rows.push_back(r);
+    });
+    if (!err.empty()) return RT::fail(ErrorCode::StorageFailure, err);
+    err = query_rows(db_, "SELECT s.user_id, COALESCE(SUM(r.amount_cents), 0) FROM refunds r JOIN sales s ON s.id = r.sale_id "
+                          "WHERE s.created_at >= ? AND s.created_at < ? GROUP BY s.user_id;", {start, end}, [&](storage::SqliteStatement& st) {
+        const std::string uid = st.get_text(0);
+        for (auto& r : out.rows) {
+            if (r.user_id != uid) continue;
+            r.refunds = Money::from_cents(st.get_int64(1));
+            r.net_after_refunds = Money::from_cents(r.net.cents() - r.refunds.cents());
+        }
     });
     if (!err.empty()) return RT::fail(ErrorCode::StorageFailure, err);
     err = header_totals(start, end, out.totals);
@@ -384,10 +454,10 @@ contracts::Result<contracts::InventoryLossReportDto> SqliteReportService::invent
     std::string err = query_rows(db_,
         "SELECT m.ingredient_id, i.name, i.base_unit, "
         "COALESCE(SUM(CASE WHEN m.movement_type = 'WASTE' THEN -m.quantity_base_units ELSE 0 END), 0), "
-        "COALESCE(SUM(CASE WHEN m.movement_type = 'ADJUSTMENT' AND m.quantity_base_units > 0 THEN m.quantity_base_units ELSE 0 END), 0), "
-        "COALESCE(SUM(CASE WHEN m.movement_type = 'ADJUSTMENT' AND m.quantity_base_units < 0 THEN -m.quantity_base_units ELSE 0 END), 0) "
+        "COALESCE(SUM(CASE WHEN m.movement_type = 'ADJUSTMENT' AND m.refund_id IS NULL AND m.quantity_base_units > 0 THEN m.quantity_base_units ELSE 0 END), 0), "
+        "COALESCE(SUM(CASE WHEN m.movement_type = 'ADJUSTMENT' AND m.refund_id IS NULL AND m.quantity_base_units < 0 THEN -m.quantity_base_units ELSE 0 END), 0) "
         "FROM stock_movements m JOIN ingredients i ON i.id = m.ingredient_id "
-        "WHERE m.created_at >= ? AND m.created_at < ? AND m.movement_type IN ('WASTE', 'ADJUSTMENT') "
+        "WHERE m.created_at >= ? AND m.created_at < ? AND m.movement_type IN ('WASTE', 'ADJUSTMENT') AND (m.movement_type = 'WASTE' OR m.refund_id IS NULL) "
         "GROUP BY m.ingredient_id ORDER BY i.name;",
         {start, end}, [&](storage::SqliteStatement& st) {
         contracts::InventoryLossRowDto r;
@@ -506,42 +576,53 @@ contracts::Result<contracts::ReportExportResultDto> SqliteReportService::export_
         case contracts::ReportKind::SalesByDay: {
             auto r = sales_by_day(from_date, to_date);
             if (!r.is_success()) return fail_inner(r);
-            header = {"Fecha", "Ventas", "Importe bruto", "Descuento", "Importe neto", "Efectivo", "Tarjeta", "Transferencia"};
+            header = {"Fecha", "Ventas", "Importe bruto", "Descuento", "Importe neto", "Efectivo", "Tarjeta", "Transferencia",
+                      "Cargo por tarjeta", "Reembolsos", "Neto después de reembolsos"};
             for (const auto& x : r.value().rows)
                 rows.push_back({csv_text(x.date), csv_int(x.sales_count), csv_money(x.gross.cents()), csv_money(x.discount.cents()),
-                                csv_money(x.net.cents()), csv_money(x.cash.cents()), csv_money(x.card.cents()), csv_money(x.transfer.cents())});
+                                csv_money(x.net.cents()), csv_money(x.cash.cents()), csv_money(x.card.cents()), csv_money(x.transfer.cents()),
+                                csv_money(x.card_surcharges.cents()), csv_money(x.refunds.cents()), csv_money(x.net_after_refunds.cents())});
             const auto& t = r.value().totals;
             rows.push_back({"Total", csv_int(t.sales_count), csv_money(t.gross.cents()), csv_money(t.discount.cents()), csv_money(t.net.cents()),
-                            csv_money(t.cash.cents()), csv_money(t.card.cents()), csv_money(t.transfer.cents())});
+                            csv_money(t.cash.cents()), csv_money(t.card.cents()), csv_money(t.transfer.cents()),
+                            csv_money(t.card_surcharges.cents()), csv_money(t.refunds.cents()), csv_money(t.net_after_refunds.cents())});
             break;
         }
         case contracts::ReportKind::SalesByProduct: {
             auto r = sales_by_product(from_date, to_date);
             if (!r.is_success()) return fail_inner(r);
-            header = {"Producto", "Piezas", "Importe bruto", "Descuento", "Importe neto"};
-            for (const auto& x : r.value().rows)
-                rows.push_back({csv_text(x.product_name), csv_int(x.pieces), csv_money(x.gross.cents()), csv_money(x.discount.cents()), csv_money(x.net.cents())});
+            header = {"Producto", "Piezas", "Importe bruto", "Descuento", "Importe neto", "Piezas reembolsadas", "Reembolsos", "Neto después de reembolsos"};
+            std::int64_t refunded_pieces = 0;
+            for (const auto& x : r.value().rows) {
+                refunded_pieces += x.pieces_refunded;
+                rows.push_back({csv_text(x.product_name), csv_int(x.pieces), csv_money(x.gross.cents()), csv_money(x.discount.cents()), csv_money(x.net.cents()),
+                                csv_int(x.pieces_refunded), csv_money(x.refunds.cents()), csv_money(x.net_after_refunds.cents())});
+            }
             const auto& t = r.value().totals;
-            rows.push_back({"Total", csv_int(t.pieces), csv_money(t.gross.cents()), csv_money(t.discount.cents()), csv_money(t.net.cents())});
+            rows.push_back({"Total", csv_int(t.pieces), csv_money(t.gross.cents()), csv_money(t.discount.cents()), csv_money(t.net.cents()),
+                            csv_int(refunded_pieces), csv_money(t.refunds.cents()), csv_money(t.net_after_refunds.cents())});
             break;
         }
         case contracts::ReportKind::SalesByPaymentMethod: {
             auto r = sales_by_payment_method(from_date, to_date);
             if (!r.is_success()) return fail_inner(r);
-            header = {"Método de pago", "Pagos", "Importe"};
+            header = {"Método de pago", "Pagos", "Importe", "Reembolsos"};
             for (const auto& x : r.value().rows)
-                rows.push_back({csv_text(method_label(x.method)), csv_int(x.payments_count), csv_money(x.amount.cents())});
-            rows.push_back({"Total", csv_int(r.value().totals.sales_count), csv_money(r.value().totals.payments_total.cents())});
+                rows.push_back({csv_text(method_label(x.method)), csv_int(x.payments_count), csv_money(x.amount.cents()), csv_money(x.refunds.cents())});
+            rows.push_back({"Total", csv_int(r.value().totals.sales_count), csv_money(r.value().totals.payments_total.cents()),
+                            csv_money(r.value().totals.refunds.cents())});
             break;
         }
         case contracts::ReportKind::SalesByCashier: {
             auto r = sales_by_cashier(from_date, to_date);
             if (!r.is_success()) return fail_inner(r);
-            header = {"Cajero", "Ventas", "Importe bruto", "Descuento", "Importe neto"};
+            header = {"Cajero", "Ventas", "Importe bruto", "Descuento", "Importe neto", "Cargo por tarjeta", "Reembolsos", "Neto después de reembolsos"};
             for (const auto& x : r.value().rows)
-                rows.push_back({csv_text(x.cashier_name), csv_int(x.sales_count), csv_money(x.gross.cents()), csv_money(x.discount.cents()), csv_money(x.net.cents())});
+                rows.push_back({csv_text(x.cashier_name), csv_int(x.sales_count), csv_money(x.gross.cents()), csv_money(x.discount.cents()), csv_money(x.net.cents()),
+                                csv_money(x.card_surcharges.cents()), csv_money(x.refunds.cents()), csv_money(x.net_after_refunds.cents())});
             const auto& t = r.value().totals;
-            rows.push_back({"Total", csv_int(t.sales_count), csv_money(t.gross.cents()), csv_money(t.discount.cents()), csv_money(t.net.cents())});
+            rows.push_back({"Total", csv_int(t.sales_count), csv_money(t.gross.cents()), csv_money(t.discount.cents()), csv_money(t.net.cents()),
+                            csv_money(t.card_surcharges.cents()), csv_money(t.refunds.cents()), csv_money(t.net_after_refunds.cents())});
             break;
         }
         case contracts::ReportKind::InventoryLosses: {

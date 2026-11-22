@@ -26,6 +26,10 @@ struct DailySalesReportDto {
     // total_amount - payments_total, con signo. 0 = los pagos cuadran con las ventas.
     // > 0: faltan pagos registrados. < 0: hay pagos de más. No se oculta: el reporte se devuelve igual.
     std::int64_t payments_mismatch_cents{0};
+    // B18: cargos por tarjeta cobrados y reembolsos del día (los reembolsos se atribuyen al día de su venta).
+    // payments_mismatch_cents = total_amount + card_surcharge_amount - payments_total.
+    Money card_surcharge_amount{Money::zero()};
+    Money refunds_amount{Money::zero()};
 };
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -42,8 +46,12 @@ struct SalesTotalsDto {
     Money cash{Money::zero()};
     Money card{Money::zero()};
     Money transfer{Money::zero()};
-    Money payments_total{Money::zero()};
-    std::int64_t payments_mismatch_cents{0};   // net - payments_total
+    Money payments_total{Money::zero()};       // lo pagado: neto de productos + cargos por tarjeta
+    std::int64_t payments_mismatch_cents{0};   // net + card_surcharges - payments_total
+    // B18: cargos por tarjeta (aparte: no inflan las ventas de productos) y reembolsos del rango.
+    Money card_surcharges{Money::zero()};
+    Money refunds{Money::zero()};
+    Money net_after_refunds{Money::zero()};    // net - refunds
 };
 
 struct SalesByDayRowDto {
@@ -55,23 +63,30 @@ struct SalesByDayRowDto {
     Money cash{Money::zero()};
     Money card{Money::zero()};
     Money transfer{Money::zero()};
+    Money card_surcharges{Money::zero()};   // B18
+    Money refunds{Money::zero()};           // B18
+    Money net_after_refunds{Money::zero()}; // B18: net - refunds
 };
 struct SalesByDayReportDto { std::string from_date, to_date; std::vector<SalesByDayRowDto> rows; SalesTotalsDto totals; };
 
 struct SalesByProductRowDto {
     std::string product_id;
     std::string product_name;   // nombre al momento de la venta
-    std::int64_t pieces{0};
+    std::int64_t pieces{0};            // B18: vendidas MENOS reembolsadas
     Money gross{Money::zero()};
     Money discount{Money::zero()};
     Money net{Money::zero()};
+    std::int64_t pieces_refunded{0};   // B18
+    Money refunds{Money::zero()};      // B18: importe reembolsado de este producto
+    Money net_after_refunds{Money::zero()};   // B18: net - refunds
 };
 struct SalesByProductReportDto { std::string from_date, to_date; std::vector<SalesByProductRowDto> rows; SalesTotalsDto totals; };
 
 struct SalesByPaymentRowDto {
     std::string method;   // EFECTIVO, TARJETA, TRANSFERENCIA
     std::int64_t payments_count{0};
-    Money amount{Money::zero()};
+    Money amount{Money::zero()};          // lo pagado con este método (con tarjeta incluye el cargo)
+    Money refunds{Money::zero()};         // B18: reembolsos hechos con este método
 };
 struct SalesByPaymentReportDto { std::string from_date, to_date; std::vector<SalesByPaymentRowDto> rows; SalesTotalsDto totals; };
 
@@ -82,6 +97,9 @@ struct SalesByCashierRowDto {
     Money gross{Money::zero()};
     Money discount{Money::zero()};
     Money net{Money::zero()};
+    Money card_surcharges{Money::zero()};   // B18
+    Money refunds{Money::zero()};           // B18
+    Money net_after_refunds{Money::zero()}; // B18
 };
 struct SalesByCashierReportDto { std::string from_date, to_date; std::vector<SalesByCashierRowDto> rows; SalesTotalsDto totals; };
 
