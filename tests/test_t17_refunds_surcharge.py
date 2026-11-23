@@ -75,7 +75,7 @@ CB_GETCOUNT = 0x0146
 VK_DOWN = 0x28
 VK_RETURN = 0x0D
 KEYEVENTF_KEYUP = 0x0002
-QA_DIR = os.path.join(REPO_ROOT, "qa_visual", "t17")
+QA_DIR = os.environ.get("T17_QA_DIR") or os.path.join(REPO_ROOT, "qa_visual", "t17")
 
 
 def money(cents):
@@ -273,6 +273,9 @@ def assert_dialog_ok(hwnd, name, shot):
     if shot:
         os.makedirs(QA_DIR, exist_ok=True)
         capture_window_img(hwnd, os.path.join(QA_DIR, shot))
+    scale = get_window_scale(hwnd) or 1.0
+    wl, hl = round((r - l) / scale), round((b - t) / scale)
+    print(f"  [MEDIDA] {name}: {wl}x{hl} lógicos ({r - l}x{b - t} px)", flush=True)
     return (r - l, b - t)
 
 
@@ -512,7 +515,9 @@ def run_suite(label, exe_path):
                     post_click_button(btn_open)
                     wait_messagebox_and_read(p2.pid, "Turno Abierto", "Aceptar")
 
-                # --- Cobro con tarjeta: desglose y total con cargo
+                # --- Cobro con tarjeta: desglose y total con cargo (ventana de 960x600)
+                set_client_logical_size(hwnd_main, 960, 600, x_log=16, y_log=16)
+                time.sleep(0.4)
                 hwnd_chk = open_checkout(p2.pid, hwnd_main, "Pastel T17", 1)
                 choose_method(p2.pid, hwnd_chk, "Tarjeta")
                 txt = joined(hwnd_chk)
@@ -520,18 +525,23 @@ def run_suite(label, exe_path):
                 assert "$8.06" in txt and "$108.06" in txt, f"Importes del cobro con tarjeta: {txt}"
                 btn_conf = find_button(hwnd_chk, "Confirmar Venta")
                 assert btn_conf and "$108.06" in next(t for (h, c, t) in visible(hwnd_chk) if h == btn_conf), "El botón muestra el total con cargo"
-                assert_dialog_ok(hwnd_chk, f"Cobro con tarjeta ({prof})", f"{tag}_cobro_tarjeta.png")
+                size_card = assert_dialog_ok(hwnd_chk, f"Cobro con tarjeta ({prof})", f"{tag}_cobro_tarjeta.png")
                 ticket_text = finish_sale(p2.pid, hwnd_chk)
                 assert "Cargo por pago con tarjeta" in ticket_text and "$108.06" in ticket_text, f"Ticket con cargo: {ticket_text}"
                 card_folio = last_folio(db_path)
                 assert db_one(db_path, "SELECT amount_cents FROM payment_records WHERE sale_id = (SELECT id FROM sales WHERE folio = ?)", (card_folio,)) == 10806
                 assert db_one(db_path, "SELECT card_surcharge_cents FROM sales WHERE folio = ?", (card_folio,)) == 806
 
-                # --- Cobro en efectivo: sin cargo
+                # --- Cobro en efectivo: sin cargo (ventana de 1200x720)
+                set_client_logical_size(hwnd_main, 1200, 720, x_log=16, y_log=16)
+                time.sleep(0.4)
                 hwnd_chk = open_checkout(p2.pid, hwnd_main, "Pastel T17", 1)
                 txt = joined(hwnd_chk)
                 assert "Cargo por pago con tarjeta" not in txt and "$100.00" in txt, f"El efectivo no lleva cargo: {txt}"
-                assert_dialog_ok(hwnd_chk, f"Cobro en efectivo ({prof})", f"{tag}_cobro_efectivo.png")
+                size_cash = assert_dialog_ok(hwnd_chk, f"Cobro en efectivo ({prof})", f"{tag}_cobro_efectivo.png")
+                # T17b: el diálogo de cobro no cambia de tamaño al cambiar de método (no queda una franja vacía en Táctil)
+                assert size_card == size_cash, f"El cobro cambia de tamaño entre Tarjeta {size_card} y Efectivo {size_cash} ({prof})"
+                assert size_cash[1] <= round(600 * get_window_scale(hwnd_main)), f"El cobro mide más de 600 de alto lógico ({prof}): {size_cash}"
                 finish_sale(p2.pid, hwnd_chk)
                 assert db_one(db_path, "SELECT card_surcharge_cents FROM sales WHERE folio = ?", (last_folio(db_path),)) == 0
 
@@ -542,7 +552,9 @@ def run_suite(label, exe_path):
                 cash_before = db_one(db_path, "SELECT COALESCE(SUM(amount_cents), 0) FROM refunds WHERE payment_method = 'EFECTIVO'")
                 refunds_before = db_one(db_path, "SELECT COUNT(*) FROM refunds")
 
-                # --- Historial: columna y botón
+                # --- Historial: columna y botón (ventana de 960x600: el reembolso con la casilla «Ya se preparó»)
+                set_client_logical_size(hwnd_main, 960, 600, x_log=16, y_log=16)
+                time.sleep(0.4)
                 hwnd_hist = open_ticket_history(p2.pid, hwnd_main)
                 heads = read_list_headers(history_list(hwnd_hist))
                 assert "Reembolsado" in heads, f"Falta la columna «Reembolsado»: {heads}"
@@ -557,6 +569,8 @@ def run_suite(label, exe_path):
                 hwnd_ref, _ = wait_for_window(p2.pid, "Reembolso de venta", timeout=8.0)
                 time.sleep(0.4)
                 dw, dh = assert_dialog_ok(hwnd_ref, f"Reembolso ({prof})", f"{tag}_reembolso.png")
+                scale_now = get_window_scale(hwnd_main)
+                assert dh <= round(600 * scale_now) and dw <= round(960 * scale_now), f"El reembolso no cabe en 960x600 lógicos ({prof}): {dw}x{dh} px"
                 print(f"  [OK] Diálogo de reembolso {prof}: {dw}x{dh} px", flush=True)
 
                 edits = sorted([(get_rect(h), h) for (h, c, t) in visible(hwnd_ref) if c.lower() == "edit"], key=lambda x: (x[0][1], x[0][0]))
@@ -597,7 +611,9 @@ def run_suite(label, exe_path):
                 # historial recargado con «Reembolsado»
                 row = next(r for r in read_list_rows(history_list(hwnd_hist), 7) if r[0] == sandwich_folio)
                 assert row[3] == "$100.00", f"Columna «Reembolsado»: {row}"
-                # reembolso con tarjeta: el cargo no se devuelve
+                # reembolso con tarjeta: el cargo no se devuelve (ventana de 1200x720)
+                set_client_logical_size(hwnd_main, 1200, 720, x_log=16, y_log=16)
+                time.sleep(0.4)
                 select_ticket(hwnd_hist, card_folio)
                 post_click_button(find_button(hwnd_hist, "Reembolsar", exact=True))
                 hwnd_ref2, _ = wait_for_window(p2.pid, "Reembolso de venta", timeout=8.0)

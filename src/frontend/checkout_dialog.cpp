@@ -18,6 +18,33 @@ wxString percent_text(std::int64_t hundredths) {
 
 wxString money_text(const contracts::Money& m) { return wxString::FromUTF8(m.to_string().c_str()); }
 
+// Parte un texto en renglones de hasta max_px píxeles (por palabras), sin depender de wxStaticText::Wrap.
+wxString wrap_px(wxWindow* w, const wxFont& font, const wxString& text, int max_px) {
+    wxClientDC dc(w);
+    dc.SetFont(font);
+    wxString out, cur;
+    size_t pos = 0;
+    while (pos < text.length()) {
+        size_t next = text.find(wxT(' '), pos);
+        wxString word = (next == wxString::npos) ? text.Mid(pos) : text.Mid(pos, next - pos);
+        wxString cand = cur.IsEmpty() ? word : (cur + wxT(" ") + word);
+        if (!cur.IsEmpty() && dc.GetTextExtent(cand).GetWidth() > max_px) {
+            if (!out.IsEmpty()) out += wxT('\n');
+            out += cur;
+            cur = word;
+        } else {
+            cur = cand;
+        }
+        if (next == wxString::npos) break;
+        pos = next + 1;
+    }
+    if (!cur.IsEmpty()) {
+        if (!out.IsEmpty()) out += wxT('\n');
+        out += cur;
+    }
+    return out;
+}
+
 } // namespace
 
 CheckoutDialog::CheckoutDialog(
@@ -95,7 +122,7 @@ CheckoutDialog::CheckoutDialog(
     auto* lbl_method = new wxStaticText(payment_card, wxID_ANY, wxT("Método de pago:"));
     lbl_method->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_method->SetForegroundColour(Theme::ColorTextSecondary);
-    pay_card_sizer->Add(lbl_method, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(6));
+    pay_card_sizer->Add(lbl_method, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(16));
 
     wxArrayString methods;
     methods.Add(wxT("Efectivo"));
@@ -106,7 +133,7 @@ CheckoutDialog::CheckoutDialog(
     choice_method_->SetFont(Theme::get_font_body());
     choice_method_->SetMinSize(FromDIP(wxSize(-1, combo_h_logical)));
     choice_method_->SetSelection(0);
-    pay_card_sizer->Add(choice_method_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+    pay_card_sizer->Add(choice_method_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     // Sección de Efectivo (Recibido y Cambio)
     cash_details_sizer_ = new wxBoxSizer(wxVERTICAL);
@@ -134,12 +161,13 @@ CheckoutDialog::CheckoutDialog(
     change_row->Add(lbl_change_val_, 0, wxALIGN_CENTER_VERTICAL);
     cash_details_sizer_->Add(change_row, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
-    pay_card_sizer->Add(cash_details_sizer_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+    pay_card_sizer->Add(cash_details_sizer_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
     payment_card->SetSizer(pay_card_sizer);
 
     main_sizer->Add(payment_card, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
 
     main_sizer->AddStretchSpacer(1);
+    main_sizer->AddSpacer(FromDIP(12));   // separación mínima entre la tarjeta de pago y los botones
 
     // Botones de acción
     auto* btn_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -158,14 +186,37 @@ CheckoutDialog::CheckoutDialog(
     main_sizer->Add(btn_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     if (touch) {
-        main_sizer->SetMinSize(FromDIP(wxSize(436, 540)));
+        main_sizer->SetMinSize(FromDIP(wxSize(452, 564)));   // mismo tamaño con cualquier método de pago
         outer_sizer->Add(main_sizer, 1, wxEXPAND);
 
         keypad_ = new ui::NumericKeypad(this, true, false);
         keypad_->set_target_field(txt_cash_received_, false);
-        outer_sizer->Add(
-            keypad_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT | wxTOP | wxBOTTOM | wxRESERVE_SPACE_EVEN_IF_HIDDEN, FromDIP(16));
+        // Columna derecha de tamaño fijo (el del teclado): Efectivo muestra el teclado; Tarjeta y Transferencia, el aviso.
+        right_col_ = new wxBoxSizer(wxVERTICAL);
+        right_col_->Add(keypad_, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_CENTER_HORIZONTAL);
+        pay_info_card_ = new CardPanel(this);
+        pay_info_card_->set_card_background(Theme::ColorSurface);
+        auto* info_sizer = new wxBoxSizer(wxVERTICAL);
+        lbl_pay_info_title_ = new wxStaticText(pay_info_card_, wxID_ANY, wxEmptyString);
+        lbl_pay_info_title_->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
+        lbl_pay_info_title_->SetForegroundColour(Theme::ColorBrandDeep);
+        info_sizer->AddStretchSpacer(1);
+        info_sizer->Add(lbl_pay_info_title_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+        lbl_pay_info_text_ = new wxStaticText(pay_info_card_, wxID_ANY, wxEmptyString);
+        lbl_pay_info_text_->SetFont(Theme::get_font_body());
+        lbl_pay_info_text_->SetForegroundColour(Theme::ColorText);
+        info_sizer->Add(lbl_pay_info_text_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+        info_sizer->AddStretchSpacer(1);
+        info_sizer->AddSpacer(FromDIP(16));   // el aviso queda centrado en la tarjeta
+        pay_info_card_->SetSizer(info_sizer);
+        right_col_->Add(pay_info_card_, 1, wxEXPAND);
+        pay_info_card_->Hide();
+        outer_sizer->Add(right_col_, 0, wxEXPAND | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(16));
         SetSizerAndFit(outer_sizer);
+        // El tamaño real del teclado se conoce tras el ajuste: la columna conserva ese tamaño con cualquier método
+        const wxSize kp = keypad_->GetSize();
+        right_col_->SetMinSize(kp);
+        pay_info_wrap_px_ = std::max(FromDIP(160), kp.GetWidth() - FromDIP(32));
     } else {
         main_sizer->SetMinSize(FromDIP(wxSize(440, 520)));
         outer_sizer->Add(main_sizer, 1, wxEXPAND);
@@ -222,7 +273,32 @@ void CheckoutDialog::refresh_preview() {
     lbl_surcharge_caption_->Wrap(wrap_w - FromDIP(110));
     update_cash_calculations();
     update_confirm_label();
+    update_pay_info();
     relayout();
+}
+
+// Aviso de la columna derecha en Táctil con Tarjeta o Transferencia (el cobro real se hace por Mercado Pago).
+void CheckoutDialog::update_pay_info() {
+    if (!pay_info_card_ || !lbl_pay_info_title_ || !lbl_pay_info_text_) return;
+    const bool card = selected_method_ == contracts::PaymentMethod::Tarjeta;
+    const wxString total = preview_ok_ ? money_text(total_) : wxString(wxT("el total"));
+    lbl_pay_info_title_->SetLabel(card ? wxT("Pago con tarjeta") : wxT("Pago por transferencia"));
+    lbl_pay_info_text_->SetLabel(card
+        ? wxString::Format(wxT("Cobre %s con la terminal de Mercado Pago. Cuando el cliente haya pagado, confirme la venta. "
+                               "El programa solo registra el método de pago."), total)
+        : wxString::Format(wxT("Espere la transferencia de %s por Mercado Pago. Cuando llegue, confirme la venta. "
+                               "El programa solo registra el método de pago."), total));
+    // Parte el texto con medidas reales y fija el ancho del renglón más largo (la columna nunca se ensancha)
+    for (wxStaticText* lbl : {lbl_pay_info_title_, lbl_pay_info_text_}) {
+        const wxString wrapped = wrap_px(lbl, lbl->GetFont(), lbl->GetLabel(), pay_info_wrap_px_);
+        lbl->SetMinSize(wxDefaultSize);
+        lbl->SetLabel(wrapped);
+        wxClientDC dc(lbl);
+        dc.SetFont(lbl->GetFont());
+        const wxSize ext = dc.GetMultiLineTextExtent(wrapped);
+        lbl->SetMinSize(wxSize(ext.GetWidth() + FromDIP(2), ext.GetHeight() + FromDIP(2)));
+        lbl->SetMaxSize(wxSize(pay_info_wrap_px_, -1));
+    }
 }
 
 void CheckoutDialog::update_confirm_label() {
@@ -257,6 +333,7 @@ void CheckoutDialog::on_payment_method_changed(wxCommandEvent&) {
     }
     if (keypad_) {
         keypad_->Show(sel == 0);
+        if (pay_info_card_) pay_info_card_->Show(sel != 0);
     }
     if (sel == 0 && preview_ok_) txt_cash_received_->ChangeValue(money_text(preview_.products_total));
     refresh_preview();

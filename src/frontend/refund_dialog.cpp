@@ -83,7 +83,7 @@ void RefundDialog::build_ui() {
     auto* title = new wxStaticText(this, wxID_ANY, wxString::Format(wxT("Reembolsar venta %s"), utf8(detail_.folio)));
     title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
     title->SetForegroundColour(Theme::ColorBrandDeep);
-    main->Add(title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+    main->Add(title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
 
     const char* method_name = detail_.payment_method == contracts::PaymentMethod::Efectivo ? "Efectivo"
                               : detail_.payment_method == contracts::PaymentMethod::Tarjeta ? "Tarjeta" : "Transferencia";
@@ -91,7 +91,8 @@ void RefundDialog::build_ui() {
         wxString::Format(wxT("%s · %s · Cobrado %s"), utf8(detail_.created_at), wxString::FromUTF8(method_name), money_text(detail_.charged_total)));
     info->SetFont(Theme::get_font_body());
     info->SetForegroundColour(Theme::ColorTextSecondary);
-    main->Add(info, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
+    main->AddSpacer(FromDIP(4));
+    main->Add(info, 0, wxLEFT | wxRIGHT, FromDIP(16));
 
     // Tabla de líneas: solo se desplaza en vertical; las columnas se reparten en el ancho disponible
     wrap_width_ = touch ? 520 : 640;
@@ -125,7 +126,10 @@ void RefundDialog::build_ui() {
         auto* name = new wxStaticText(scroll_, wxID_ANY, utf8(l.product_name), wxDefaultPosition, wxDefaultSize, wxST_ELLIPSIZE_END);
         name->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
         name->SetMinSize(wxSize(FromDIP(110), -1));
-        grid->Add(name, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
+        // La casilla «Ya se preparó» va bajo el nombre del producto (misma fila): la tabla no crece en alto ni en ancho
+        auto* name_box = new wxBoxSizer(wxVERTICAL);
+        name_box->Add(name, 0, wxEXPAND);
+        grid->Add(name_box, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
         auto* sold = new wxStaticText(scroll_, wxID_ANY, wxString::Format(wxT("%lld"), static_cast<long long>(l.quantity_sold)));
         sold->SetFont(Theme::get_font_body());
         grid->Add(sold, 0, wxALIGN_RIGHT | wxALIGN_CENTER_VERTICAL);
@@ -155,10 +159,7 @@ void RefundDialog::build_ui() {
             row.prepared->SetFont(Theme::get_font_body());
             row.prepared->SetValue(true);   // por omisión: si se desmarca por error, el inventario subiría con ingredientes que ya no existen
             row.prepared->SetMinSize(wxSize(-1, FromDIP(ctrl_h)));
-            grid->Add(row.prepared, 0, wxALIGN_CENTER_VERTICAL);
-            grid->AddSpacer(0);
-            grid->AddSpacer(0);
-            grid->AddSpacer(0);
+            name_box->Add(row.prepared, 0, wxTOP, FromDIP(2));
         }
         rows_.push_back(row);
     }
@@ -167,28 +168,31 @@ void RefundDialog::build_ui() {
     scroll_->SetSizer(scroll_sizer);
     // Filas visibles sin desplazar: pocas, para que el diálogo quepa en 960x600 (más líneas se desplazan en vertical)
     int content_h = 0;
-    for (const auto& r : rows_) content_h += ctrl_h + 8 + (r.has_prepared_parts ? ctrl_h + 8 : 0);
+    for (const auto& r : rows_) content_h += std::max(ctrl_h, r.has_prepared_parts ? 24 + ctrl_h : 0) + 8;
     const int budget_h = touch ? 120 : 190;   // alto lógico visible de las filas; el resto se desplaza
     const int visible_h = std::max(ctrl_h + 8, std::min(content_h, budget_h));
     scroll_->SetMinSize(FromDIP(wxSize(wrap_width_, 24 + 16 + visible_h + 16)));
-    main->Add(scroll_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    main->AddSpacer(FromDIP(8));
+    main->Add(scroll_, 1, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
 
     if (any_prepared_parts) {
         auto* help = new wxStaticText(this, wxID_ANY,
-            wxT("Desmarca «Ya se preparó» solo si no se preparó: los ingredientes regresan al inventario. "
-                "Marcada, quedan consumidos y se registran como merma."));
+            wxT("Marcada: queda como merma. Desmarcada: los ingredientes regresan al inventario."));
         help->SetFont(Theme::get_font_small());
         help->SetForegroundColour(Theme::ColorTextSecondary);
         help->Wrap(FromDIP(wrap_width_));
-        main->Add(help, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+        main->AddSpacer(FromDIP(8));
+        main->Add(help, 0, wxLEFT | wxRIGHT, FromDIP(16));
     }
 
     auto* lbl_reason = new wxStaticText(this, wxID_ANY, wxT("Motivo del reembolso (de 3 a 200 caracteres)"));
     lbl_reason->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_reason->SetForegroundColour(Theme::ColorTextSecondary);
-    main->Add(lbl_reason, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    main->AddSpacer(FromDIP(8));
+    main->Add(lbl_reason, 0, wxLEFT | wxRIGHT, FromDIP(16));
     auto* reason_field = ui::make_text_field(this, txt_reason_, touch ? 48 : 36, -1, Theme::get_font_body());
-    main->Add(reason_field, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
+    main->AddSpacer(FromDIP(4));
+    main->Add(reason_field, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
 
     // Resumen: el importe lo calcula el servicio
     auto* summary = new CardPanel(this);
@@ -201,18 +205,22 @@ void RefundDialog::build_ui() {
     lbl_method_ = new wxStaticText(summary, wxID_ANY, wxEmptyString);
     lbl_method_->SetFont(Theme::get_font_body());
     lbl_method_->SetForegroundColour(Theme::ColorText);
-    sum_sizer->Add(lbl_method_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
+    sum_sizer->AddSpacer(FromDIP(6));
+    sum_sizer->Add(lbl_method_, 0, wxLEFT | wxRIGHT, FromDIP(16));
     lbl_surcharge_note_ = new wxStaticText(summary, wxID_ANY, wxEmptyString);
     lbl_surcharge_note_->SetFont(Theme::get_font_body());
     lbl_surcharge_note_->SetForegroundColour(Theme::ColorTextSecondary);
-    sum_sizer->Add(lbl_surcharge_note_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
+    sum_sizer->AddSpacer(FromDIP(6));
+    sum_sizer->Add(lbl_surcharge_note_, 0, wxLEFT | wxRIGHT, FromDIP(16));
     lbl_error_ = new wxStaticText(summary, wxID_ANY, wxEmptyString);
     lbl_error_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_error_->SetForegroundColour(Theme::ColorError);
-    sum_sizer->Add(lbl_error_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
+    sum_sizer->AddSpacer(FromDIP(6));
+    sum_sizer->Add(lbl_error_, 0, wxLEFT | wxRIGHT, FromDIP(16));
     sum_sizer->AddSpacer(FromDIP(16));
     summary->SetSizer(sum_sizer);
-    main->Add(summary, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    main->AddSpacer(FromDIP(8));
+    main->Add(summary, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
 
     auto* btn_row = new wxBoxSizer(wxHORIZONTAL);
     auto* btn_cancel = new wxButton(this, wxID_CANCEL, wxT("Cancelar"));
@@ -223,7 +231,7 @@ void RefundDialog::build_ui() {
     Theme::ensure_button_min_size(btn_confirm_, 170, btn_h);
     btn_row->Add(btn_cancel, 0, wxRIGHT, FromDIP(12));
     btn_row->Add(btn_confirm_, 1);
-    main->Add(btn_row, 0, wxEXPAND | wxALL, FromDIP(12));
+    main->Add(btn_row, 0, wxEXPAND | wxALL, FromDIP(16));
 
     if (touch) {
         outer->Add(main, 1, wxEXPAND);
