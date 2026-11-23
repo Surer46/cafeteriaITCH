@@ -1053,7 +1053,7 @@ void PosPanel::on_checkout(wxCommandEvent&) {
     contracts::Money total = cart_res.value().total;
     contracts::Money discount = cart_res.value().discount;
 
-    CheckoutDialog dlg(this, total, discount);
+    CheckoutDialog dlg(this, total, discount, services_.sale_service);
     if (dlg.ShowModal() != wxID_OK) {
         return;
     }

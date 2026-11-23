@@ -208,12 +208,23 @@ contracts::Result<contracts::SaleDetailDto> SqliteRefundService::get_sale_for_re
             l.promotion_name = st.get_text(7);
             l.is_prepared = st.get_int64(8) != 0;
             l.is_combo = st.get_int64(9) != 0;
+            l.has_prepared_parts = l.is_prepared;
             l.quantity_refunded = st.get_int64(10);
             l.quantity_refundable = l.quantity_sold - l.quantity_refunded;
             l.net_paid = Money::from_cents(st.get_int64(5) - st.get_int64(6));
             l.net_refunded = Money::from_cents(st.get_int64(11));
             d.lines.push_back(std::move(l));
         }
+    }
+    for (auto& l : d.lines) {
+        if (!l.is_combo || l.has_prepared_parts) continue;
+        auto prep = db_.prepare("SELECT COUNT(*) FROM combo_items ci JOIN products p ON p.id = ci.component_product_id "
+                                "WHERE ci.combo_product_id = ? AND p.is_prepared = 1;");
+        if (!prep.is_success()) continue;
+        auto st = std::move(prep.value());
+        st.bind_text(1, l.product_id);
+        auto step = st.step();
+        if (step.is_success() && step.value()) l.has_prepared_parts = st.get_int64(0) > 0;
     }
     if (!load_refunds_of_sale(sale_id, d.refunds)) return R::fail(ErrorCode::StorageFailure, "No se pudieron leer los reembolsos de la venta.");
     for (const auto& r : d.refunds) d.refunded_total = d.refunded_total + r.amount;
@@ -231,16 +242,39 @@ contracts::Result<contracts::SaleDetailDto> SqliteRefundService::get_sale_for_re
     return R::ok(std::move(d));
 }
 
-contracts::Result<contracts::RefundDto> SqliteRefundService::refund_sale(const contracts::RefundRequestDto& req) {
+contracts::Result<contracts::RefundDto> SqliteRefundService::refund_sale(const contracts::RefundRequestDto& request) {
+    return run(request, false, nullptr);
+}
+
+contracts::Result<contracts::RefundPreviewDto> SqliteRefundService::preview_refund(const contracts::RefundRequestDto& request) {
+    using PR = contracts::Result<contracts::RefundPreviewDto>;
+    std::string reason_error;
+    auto r = run(request, true, &reason_error);
+    if (!r.is_success()) return PR::fail(r.error_code(), r.error_message());
+    contracts::RefundPreviewDto p;
+    p.amount = r.value().amount;
+    p.lines = r.value().lines;
+    p.payment_method = r.value().payment_method;
+    p.returns_cash = r.value().payment_method == contracts::PaymentMethod::Efectivo;
+    p.card_surcharge_not_refunded = r.value().card_surcharge_not_refunded;
+    p.reason_error = reason_error;
+    return PR::ok(std::move(p));
+}
+
+contracts::Result<contracts::RefundDto> SqliteRefundService::run(const contracts::RefundRequestDto& req, bool dry_run, std::string* reason_error) {
     using R = contracts::Result<contracts::RefundDto>;
     if (!account_service_ || !account_service_->is_authenticated()) return R::fail(ErrorCode::Forbidden, "Se requiere inicio de sesión");
     if (!account_service_->has_permission("pos.refund")) return R::fail(ErrorCode::Forbidden, "No tienes permiso para hacer reembolsos.");
     auto user = account_service_->current_user();
     if (!user.is_success()) return R::fail(ErrorCode::Forbidden, "No hay usuario activo.");
 
-    const std::string reason = trim_copy(req.reason);
+    std::string reason = trim_copy(req.reason);
     if (utf8_chars(reason) < 3 || utf8_chars(reason) > 200 || has_control_chars(reason)) {
-        return R::fail(ErrorCode::InvalidInput, "Escribe el motivo del reembolso (de 3 a 200 caracteres).");
+        const std::string msg = "Escribe el motivo del reembolso (de 3 a 200 caracteres).";
+        if (!dry_run) return R::fail(ErrorCode::InvalidInput, msg);
+        // Vista previa: el motivo es una regla más; el importe se calcula igual y el mensaje va aparte.
+        if (reason_error) *reason_error = msg;
+        reason = "Vista previa";
     }
     if (req.folio.empty()) return R::fail(ErrorCode::InvalidInput, "Indica el folio de la venta.");
     if (req.lines.empty()) return R::fail(ErrorCode::InvalidInput, "Elige al menos una pieza para reembolsar.");
@@ -270,7 +304,7 @@ contracts::Result<contracts::RefundDto> SqliteRefundService::refund_sale(const c
         if (!load_refund(rid, dto)) return fail_r<contracts::RefundDto>(ErrorCode::StorageFailure, "No se pudo leer el reembolso.");
         return R::ok(std::move(dto));
     };
-    if (!req.idempotency_key.empty()) {
+    if (!dry_run && !req.idempotency_key.empty()) {
         auto prior = existing_by_key();
         if (prior.is_success() || prior.error_code() != ErrorCode::NotFound) return prior;
     }
@@ -282,7 +316,7 @@ contracts::Result<contracts::RefundDto> SqliteRefundService::refund_sale(const c
         return R::fail(code, msg);
     };
     // Otro reintento con la misma clave pudo terminar mientras esperábamos
-    if (!req.idempotency_key.empty()) {
+    if (!dry_run && !req.idempotency_key.empty()) {
         auto prior = existing_by_key();
         if (prior.is_success()) { db_.execute("ROLLBACK;"); return prior; }
         if (prior.error_code() != ErrorCode::NotFound) { db_.execute("ROLLBACK;"); return prior; }
@@ -368,7 +402,7 @@ contracts::Result<contracts::RefundDto> SqliteRefundService::refund_sale(const c
             return fail(ErrorCode::StorageFailure, "No se pudo calcular el efectivo en caja.");
         }
         if (refund_total > expected) {
-            return fail(ErrorCode::InvalidInput, "No hay tanto efectivo en caja para este reembolso. En caja hay " + Money::from_cents(expected).to_string() + ".");
+            return fail(ErrorCode::InvalidInput, "No hay tanto efectivo en caja para este reembolso.");   // sin decir cuánto hay en caja
         }
     }
 
@@ -399,7 +433,7 @@ contracts::Result<contracts::RefundDto> SqliteRefundService::refund_sale(const c
         st.bind_text(7, contracts::to_string(method));
         st.bind_int64(8, refund_total);
         st.bind_text(9, reason);
-        if (req.idempotency_key.empty()) st.bind_null(10); else st.bind_text(10, req.idempotency_key);
+        if (req.idempotency_key.empty() || dry_run) st.bind_null(10); else st.bind_text(10, req.idempotency_key);
         st.bind_text(11, ts.local);
         st.bind_text(12, ts.utc);
         auto step = st.step();
@@ -514,6 +548,15 @@ contracts::Result<contracts::RefundDto> SqliteRefundService::refund_sale(const c
         if (!audit.is_success()) return fail(audit.error_code(), "No se pudo registrar el reembolso en la bitácora: " + audit.error_message());
     }
 
+    if (dry_run) {
+        // Vista previa: se lee lo que se habría escrito y se revierte todo.
+        contracts::RefundDto preview;
+        const bool loaded = load_refund(refund_id, preview);
+        db_.execute("ROLLBACK;");
+        if (!loaded) return R::fail(ErrorCode::StorageFailure, "No se pudo calcular la vista previa del reembolso.");
+        preview.refund_id.clear();
+        return R::ok(std::move(preview));
+    }
     auto commit = db_.execute("COMMIT;");
     if (!commit.is_success()) {
         db_.execute("ROLLBACK;");

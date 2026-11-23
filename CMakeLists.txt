@@ -246,6 +246,7 @@ if(wxWidgets_FOUND)
         src/frontend/backoffice_settings_panel.cpp
         src/frontend/backoffice_settings_panel.hpp
         src/frontend/checkout_dialog.cpp
+        src/frontend/refund_dialog.cpp
         src/frontend/checkout_dialog.hpp
         src/frontend/ticket_layout.cpp
         src/frontend/ticket_layout.hpp

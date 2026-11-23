@@ -16,10 +16,14 @@ public:
 
     contracts::Result<contracts::SaleDetailDto> get_sale_for_refund(const std::string& folio) override;
     contracts::Result<contracts::RefundDto> refund_sale(const contracts::RefundRequestDto& request) override;
+    contracts::Result<contracts::RefundPreviewDto> preview_refund(const contracts::RefundRequestDto& request) override;
     contracts::Result<std::vector<contracts::RefundDto>> list_refunds(const std::string& sale_folio) override;
     contracts::Result<contracts::RefundDto> get_refund(const std::string& refund_id) override;
 
 private:
+    // Un solo lugar con las reglas: refund_sale y preview_refund pasan por aquí. Con dry_run se ejecuta todo dentro
+    // de la transacción y al final se revierte (no queda nada escrito); el motivo inválido se informa en reason_error.
+    contracts::Result<contracts::RefundDto> run(const contracts::RefundRequestDto& request, bool dry_run, std::string* reason_error);
     struct SaleRow;
     struct LineRow;
     bool load_refund(const std::string& refund_id, contracts::RefundDto& out);

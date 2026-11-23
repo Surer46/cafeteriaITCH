@@ -25,6 +25,7 @@
 #include "app/services/sqlite_refund_service.hpp"
 #include "app/services/sqlite_payment_settings_service.hpp"
 #include "app/services/mock_services.hpp"
+#include "ticket_golden_t17.hpp"
 
 #define TEST_CHECK(condition, message) \
     do { \
@@ -431,8 +432,8 @@ void test_cash_rules_and_closeout(Env& e) {
     TEST_CHECK(e.shift->record_cash_movement(CashMovementKind::Outflow, Money::from_cents(600), "Compra de hielo").is_success(), "Salida de caja");
     auto big = e.refund->refund_sale(e.req(cash_folio, {{cash_line, 1, false}}));
     TEST_CHECK(big.error_code() == ErrorCode::InvalidInput &&
-               big.error_message().rfind("No hay tanto efectivo en caja para este reembolso. En caja hay ", 0) == 0, "Efectivo insuficiente: " + big.error_message());
-    TEST_CHECK(big.error_message().find("$4.00") != std::string::npos, "Dice cuánto hay en caja: " + big.error_message());
+               big.error_message() == "No hay tanto efectivo en caja para este reembolso.", "Efectivo insuficiente: " + big.error_message());
+    TEST_CHECK(big.error_message().find('$') == std::string::npos, "No dice cuánto efectivo hay en caja: " + big.error_message());
     TEST_CHECK(e.num("SELECT COUNT(*) FROM refunds WHERE payment_method = 'EFECTIVO';") == 0, "No se escribió nada");
     TEST_CHECK(e.shift->record_cash_movement(CashMovementKind::Inflow, Money::from_cents(5000), "Cambio para la caja").is_success(), "Entrada de caja");
 
@@ -670,6 +671,173 @@ void test_mock_and_migration(Env& e) {
     TEST_CHECK(e.num("SELECT COUNT(*) FROM pragma_table_info('sales') WHERE name IN ('card_surcharge_cents','card_surcharge_bp','card_surcharge_fixed_cents');") == 3, "Columnas de sales");
 }
 
+
+// ============================================================================================= T17
+
+TicketDto golden_sample(bool cash) {
+    TicketDto t;
+    t.folio = "V-TEST-0001";
+    t.created_at = "2026-11-22 10:15:00";
+    t.cashier_name = "Cajero Prueba";
+    TicketLineItemDto a;
+    a.product_name = "Café americano grande"; a.quantity = 2; a.unit_price = Money::from_cents(3000); a.subtotal = Money::from_cents(6000);
+    a.notes = "sin azúcar"; a.discount = Money::from_cents(500); a.promotion_name = "Promo de prueba larga";
+    TicketLineItemDto b;
+    b.product_name = "Pan"; b.quantity = 1; b.unit_price = Money::from_cents(1500); b.subtotal = Money::from_cents(1500);
+    t.items = {a, b};
+    t.subtotal = Money::from_cents(7500);
+    t.discount = Money::from_cents(500);
+    if (cash) {
+        t.payment_method = PaymentMethod::Efectivo;
+        t.total = Money::from_cents(7000); t.cash_received = Money::from_cents(10000); t.change = Money::from_cents(3000);
+        TicketRefundDto r; r.refund_folio = "V-TEST-0001-R1"; r.amount = Money::from_cents(1500);
+        t.refunds.push_back(r);
+    } else {
+        t.payment_method = PaymentMethod::Tarjeta;
+        t.card_surcharge = Money::from_cents(280);
+        t.total = Money::from_cents(7280);
+    }
+    return t;
+}
+
+void test_t17_preview_receipt_and_golden(Env& e) {
+    std::cout << "[TEST] T17: preview_refund igual que refund_sale, comprobante, ticket idéntico con los campos por omisión..." << std::endl;
+    // El ticket de una venta sale idéntico byte a byte con los campos de presentación en su valor por omisión
+    TEST_CHECK(golden_sample(false).to_formatted_text(40) == ticket_golden::k_card40, "Ticket con tarjeta a 40 columnas idéntico");
+    TEST_CHECK(golden_sample(false).to_formatted_text(28) == ticket_golden::k_card28, "Ticket con tarjeta a 28 columnas idéntico");
+    TEST_CHECK(golden_sample(true).to_formatted_text(40) == ticket_golden::k_cash40, "Ticket en efectivo a 40 columnas idéntico");
+    TEST_CHECK(golden_sample(true).to_formatted_text(28) == ticket_golden::k_cash28, "Ticket en efectivo a 28 columnas idéntico");
+
+    e.owner();
+    e.open_shift(50000);
+    auto d = e.direct("Galleta T17", 1500, 20);
+    const std::string folio = e.sell({{d.first, 3}}, PaymentMethod::Efectivo);   // 4500
+    const auto det = e.detail(folio);
+    const std::string line = det.lines.at(0).sale_item_id;
+    TEST_CHECK(!det.lines.at(0).has_prepared_parts, "Un directo no pregunta «ya se preparó»");
+
+    auto counts = [&]() {
+        return e.text("SELECT (SELECT COUNT(*) FROM refunds) || '|' || (SELECT COUNT(*) FROM refund_items) || '|' || (SELECT COUNT(*) FROM stock_movements) || '|' || "
+                      "(SELECT COUNT(*) FROM audit_events) || '|' || (SELECT current_stock FROM ingredients WHERE id = '" + d.second + "');");
+    };
+    const std::string before = counts();
+    auto pv = e.refund->preview_refund(e.req(folio, {{line, 2, false}}, "Pedido equivocado"));
+    TEST_CHECK(pv.is_success() && pv.value().amount.cents() == 3000 && pv.value().returns_cash && pv.value().reason_error.empty() &&
+               pv.value().lines.size() == 1 && pv.value().lines[0].quantity == 2, "Vista previa: 2 piezas = $30.00 en efectivo");
+    TEST_CHECK(counts() == before, "La vista previa no escribe nada (reembolsos, movimientos, bitácora ni existencias)");
+    // Mismo importe y mismas líneas que el reembolso real
+    auto real = e.refund->refund_sale(e.req(folio, {{line, 2, false}}, "Pedido equivocado"));
+    TEST_CHECK(real.is_success() && real.value().amount.cents() == pv.value().amount.cents() &&
+               real.value().lines[0].amount.cents() == pv.value().lines[0].amount.cents(), "preview_refund y refund_sale dan el mismo importe");
+
+    // Mismos mensajes para las mismas entradas
+    auto cmp = [&](const RefundRequestDto& rq, const std::string& what) {
+        auto a = e.refund->preview_refund(rq);
+        auto b = e.refund->refund_sale(rq);
+        TEST_CHECK(!a.is_success() && !b.is_success(), what + ": ambos rechazan");
+        TEST_CHECK(a.error_code() == b.error_code() && a.error_message() == b.error_message(), what + ": mismo mensaje: '" + a.error_message() + "' / '" + b.error_message() + "'");
+    };
+    cmp(e.req(folio, {{line, 5, false}}), "Exceso");
+    cmp(e.req(folio, {{line, 0, false}}), "Cantidad 0");
+    cmp(e.req(folio, {}), "Sin líneas");
+    cmp(e.req("NO-EXISTE", {{line, 1, false}}), "Folio inexistente");
+    cmp(e.req(folio, {{"ajena", 1, false}}), "Línea ajena");
+    // Motivo inválido: el importe se calcula igual y el mensaje llega aparte, el mismo que da refund_sale
+    auto bad_reason = e.refund->preview_refund(e.req(folio, {{line, 1, false}}, ""));
+    auto bad_real = e.refund->refund_sale(e.req(folio, {{line, 1, false}}, ""));
+    TEST_CHECK(bad_reason.is_success() && bad_reason.value().amount.cents() == 1500 && !bad_reason.value().reason_error.empty(), "Motivo vacío: importe en vivo");
+    TEST_CHECK(!bad_real.is_success() && bad_reason.value().reason_error == bad_real.error_message(), "El mensaje del motivo es el mismo");
+    // Otro día
+    e.exec("UPDATE sales SET created_at = '2026-01-05 10:00:00' WHERE folio = '" + folio + "';");
+    cmp(e.req(folio, {{line, 1, false}}), "Otro día");
+    // Permisos
+    e.login("cajero_b18", kCashierPwd);
+    TEST_CHECK(e.refund->preview_refund(e.req(folio, {{line, 1, false}})).error_code() == ErrorCode::Forbidden, "Sin permiso: vista previa rechazada");
+    e.owner();
+
+    // Efectivo insuficiente: mismo mensaje y sin decir cuánto hay en caja
+    const std::string folio2 = e.sell({{d.first, 1}}, PaymentMethod::Efectivo);
+    const std::string line2 = e.detail(folio2).lines.at(0).sale_item_id;
+    const std::string expected_now = std::to_string(e.shift->preview_closeout().value().expected_cash.cents());
+    TEST_CHECK(e.shift->record_cash_movement(CashMovementKind::Outflow, e.shift->preview_closeout().value().expected_cash - Money::from_cents(100), "Retiro del dueño").is_success(), "Dejar $1.00 en caja");
+    cmp(e.req(folio2, {{line2, 1, false}}), "Efectivo insuficiente");
+
+    // Comprobante
+    const auto& rd = real.value();
+    const std::string text = rd.to_formatted_text(40);
+    TEST_CHECK(text.find("COMPROBANTE DE REEMBOLSO") != std::string::npos && text.find("TOTAL REEMBOLSADO:") != std::string::npos &&
+               text.find(rd.refund_folio) != std::string::npos && text.find("Motivo: Pedido equivocado") != std::string::npos &&
+               text.find("Se devolvió en efectivo de la caja.") != std::string::npos && text.find("Venta: " + folio) != std::string::npos &&
+               text.find("2x Galleta T17") != std::string::npos && text.find("$30.00") != std::string::npos, "Texto del comprobante:\n" + text);
+    TEST_CHECK(text.find("Gracias") == std::string::npos && text.find("Subtotal") == std::string::npos && text.find("Recibido") == std::string::npos &&
+               text.find("(2 x") == std::string::npos, "Sin agradecimiento, subtotal, recibido ni precio unitario");
+    TEST_CHECK(rd.to_formatted_text(28).find("COMPROBANTE DE REEMBOLSO") != std::string::npos, "También a 28 columnas");
+    // Mock
+    MockRefundService mr;
+    RefundRequestDto mrq;
+    mrq.folio = "V-20260924-1001"; mrq.reason = "";
+    mrq.lines = {{"line-mock-1", 1, false}};
+    auto mp = mr.preview_refund(mrq);
+    TEST_CHECK(mp.is_success() && mp.value().amount.cents() == 5500 && !mp.value().reason_error.empty(), "Mock: vista previa con el motivo aparte");
+    TEST_CHECK(mr.get_sale_for_refund("V-20260924-1001").value().refunds.empty(), "Mock: la vista previa no cambia nada");
+}
+
+void test_t17_has_prepared_parts(Env& e) {
+    std::cout << "[TEST] T17: has_prepared_parts en preparados y combos..." << std::endl;
+    e.owner();
+    e.open_shift(50000);
+    const std::string ing = e.ingredient("Harina T17", "MASS", "mg");
+    e.buy(ing, 10000, "mg", 5000);
+    const std::string prep = e.prepared("Pastel T17", 3000, ing, 100);
+    auto d1 = e.direct("Directo uno T17", 500, 10);
+    auto d2 = e.direct("Directo dos T17", 600, 10);
+    const std::string combo_prepared = e.combo("Combo con preparado T17", 3300, {{d1.first, 1}, {prep, 1}});
+    const std::string combo_direct = e.combo("Combo sellado T17", 1000, {{d1.first, 1}, {d2.first, 1}});
+    auto has = [&](const std::string& pid) {
+        const std::string folio = e.sell({{pid, 1}}, PaymentMethod::Efectivo);
+        const auto det = e.detail(folio);
+        return det.lines.at(0).has_prepared_parts;
+    };
+    TEST_CHECK(has(prep), "Preparado: pregunta");
+    TEST_CHECK(has(combo_prepared), "Combo con una parte preparada: pregunta");
+    TEST_CHECK(!has(combo_direct), "Combo solo de productos sellados: no pregunta");
+    TEST_CHECK(!has(d1.first), "Directo: no pregunta");
+}
+
+void test_t17_card_receipt_and_surcharge_preview(Env& e) {
+    std::cout << "[TEST] T17: ejemplo del cargo con el servicio; comprobante de un reembolso con tarjeta..." << std::endl;
+    e.owner();
+    e.open_shift(50000);
+    // Ejemplo en vivo: lo calcula el servicio (4.06 % + $4.00 sobre $100.00 = $4.06 + $4.00)
+    auto ex = e.settings->preview_card_surcharge(406, Money::from_cents(400), Money::from_cents(10000));
+    TEST_CHECK(ex.is_success() && ex.value().cents() == 806, "Ejemplo 4.06 % + $4.00 sobre $100.00 = $8.06");
+    TEST_CHECK(e.settings->preview_card_surcharge(0, Money::zero(), Money::from_cents(10000)).value().cents() == 0, "Desactivado: $0.00");
+    TEST_CHECK(e.settings->preview_card_surcharge(5, Money::zero(), Money::from_cents(1000)).value().cents() == 1, "Mismo redondeo que el cobro (0.5 sube)");
+    TEST_CHECK(e.settings->preview_card_surcharge(2001, Money::zero(), Money::from_cents(10000)).error_code() == ErrorCode::InvalidInput, "Mismo rango del porcentaje");
+    TEST_CHECK(e.settings->preview_card_surcharge(0, Money::from_cents(10001), Money::from_cents(10000)).error_code() == ErrorCode::InvalidInput, "Mismo rango del fijo");
+    TEST_CHECK(e.num("SELECT card_surcharge_bp FROM payment_settings;") == 0, "El ejemplo no guarda nada");
+    e.login("cajero_b18", kCashierPwd);
+    TEST_CHECK(e.settings->preview_card_surcharge(406, Money::from_cents(400), Money::from_cents(10000)).error_code() == ErrorCode::Forbidden, "El cajero no calcula el ejemplo");
+    e.owner();
+    MockPaymentSettingsService ms;
+    TEST_CHECK(ms.preview_card_surcharge(406, Money::from_cents(400), Money::from_cents(10000)).value().cents() == 806, "Mock: mismo ejemplo");
+
+    // Comprobante de un reembolso con tarjeta: el cargo no se devuelve
+    TEST_CHECK(e.settings->set_card_surcharge_config(406, Money::from_cents(400)).is_success(), "4.06 % + $4.00");
+    auto d = e.direct("Pastel tarjeta T17", 10000, 5);
+    const std::string folio = e.sell({{d.first, 1}}, PaymentMethod::Tarjeta);   // 10000 + 806
+    auto ticket = e.sale->get_ticket(folio);
+    TEST_CHECK(ticket.is_success() && ticket.value().total.cents() == 10806, "Total con cargo");
+    const std::string line = e.detail(folio).lines.at(0).sale_item_id;
+    auto rf = e.refund->refund_sale(e.req(folio, {{line, 1, false}}, "Se equivocaron de producto"));
+    TEST_CHECK(rf.is_success() && rf.value().amount.cents() == 10000 && rf.value().card_surcharge_not_refunded.cents() == 806, "Reembolso con tarjeta");
+    const std::string text = rf.value().to_formatted_text(40);
+    TEST_CHECK(text.find("Mercado Pago") != std::string::npos && text.find("El cargo por pago con tarjeta ($8.06) no") != std::string::npos && text.find("se devuelve.") != std::string::npos &&
+               text.find("TARJETA") != std::string::npos, "Comprobante con tarjeta:\n" + text);
+    auto pv = e.refund->preview_refund(e.req(folio, {{line, 1, false}}));
+    TEST_CHECK(!pv.is_success(), "Ya no queda nada por reembolsar");
+}
+
 } // namespace
 
 int main(int argc, char** argv) {
@@ -692,10 +860,13 @@ int main(int argc, char** argv) {
         run(test_prepared_combo_and_untracked);
         run(test_cash_rules_and_closeout);
         run(test_other_day_and_reports);
+        run(test_t17_preview_receipt_and_golden);
+        run(test_t17_has_prepared_parts);
     } else {
         run(test_card_surcharge);
         run(test_card_surcharge_reports_and_closeout);
         run(test_mock_and_migration);
+        run(test_t17_card_receipt_and_surcharge_preview);
     }
     std::cout << "\n>>> TODAS LAS PRUEBAS B18 (" << suite << ") PASARON CON EXITO! <<<\n" << std::endl;
     return 0;

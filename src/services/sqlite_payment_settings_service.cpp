@@ -78,4 +78,19 @@ contracts::OperationResult SqlitePaymentSettingsService::set_card_surcharge_conf
     return OperationResult::ok();
 }
 
+contracts::Result<contracts::Money> SqlitePaymentSettingsService::preview_card_surcharge(
+    std::int64_t percent_hundredths, contracts::Money fixed, contracts::Money sale_amount) {
+    using R = contracts::Result<contracts::Money>;
+    if (!account_service_ || !account_service_->is_authenticated()) return R::fail(ErrorCode::Forbidden, "Se requiere inicio de sesión");
+    if (!account_service_->has_permission("config.manage")) return R::fail(ErrorCode::Forbidden, "No tienes permiso para cambiar el cargo por tarjeta.");
+    if (percent_hundredths < 0 || percent_hundredths > domain::kMaxCardSurchargeHundredths)
+        return R::fail(ErrorCode::InvalidInput, "El porcentaje del cargo por tarjeta debe estar entre 0 % y 20.00 %.");
+    if (fixed.cents() < 0 || fixed.cents() > domain::kMaxCardSurchargeFixedCents)
+        return R::fail(ErrorCode::InvalidInput, "El monto fijo del cargo por tarjeta debe estar entre $0.00 y $100.00.");
+    std::int64_t out = 0;
+    if (sale_amount.cents() < 0 || !domain::card_surcharge_cents(sale_amount.cents(), percent_hundredths, fixed.cents(), out))
+        return R::fail(ErrorCode::InvalidInput, "El importe de la venta de ejemplo no es válido.");
+    return R::ok(contracts::Money::from_cents(out));
+}
+
 } // namespace app::services

@@ -29,6 +29,9 @@ public:
     // Requiere config.manage (solo el Dueño por omisión). Valida rangos, audita CARD_SURCHARGE_CONFIGURED con
     // los valores anterior y nuevo.
     virtual OperationResult set_card_surcharge_config(std::int64_t percent_hundredths, Money fixed) = 0;
+    // T17: el cargo que resultaría de una venta de `sale_amount` con esa configuración, sin guardarla (el ejemplo en
+    // vivo de Configuración). Mismo redondeo y mismos rangos que el cobro. Requiere config.manage.
+    virtual Result<Money> preview_card_surcharge(std::int64_t percent_hundredths, Money fixed, Money sale_amount) = 0;
 };
 
 } // namespace app::contracts

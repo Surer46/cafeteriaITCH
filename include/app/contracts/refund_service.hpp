@@ -61,6 +61,57 @@ struct RefundDto {
     std::string reason;
     std::vector<RefundLineDto> lines;
     Money card_surcharge_not_refunded{Money::zero()};   // cargo de la venta que NO se devuelve (solo tarjeta)
+
+    // T17: el comprobante de reembolso se presenta con el mismo formato de texto que un ticket (mismo ancho de
+    // columnas y el mismo diálogo de impresión).
+    TicketDto to_ticket() const {
+        TicketDto t;
+        t.business_name = business_name;
+        t.folio = refund_folio;
+        t.created_at = created_at;
+        t.cashier_name = user_name;
+        t.document_title = "COMPROBANTE DE REEMBOLSO";
+        t.total_label = "TOTAL REEMBOLSADO:";
+        t.show_subtotal = false;
+        t.show_cash_details = false;
+        t.thanks_text.clear();
+        t.payment_method = payment_method;
+        t.total = amount;
+        t.subtotal = amount;
+        t.products_total = amount;
+        for (const auto& l : lines) {
+            TicketLineItemDto it;
+            it.product_name = l.product_name + (l.already_prepared ? " (ya preparado)" : "");
+            it.quantity = l.quantity;
+            it.subtotal = l.amount;
+            it.show_unit_detail = false;
+            t.items.push_back(std::move(it));
+        }
+        t.extra_lines.push_back("Venta: " + sale_folio);
+        t.extra_lines.push_back("Motivo: " + reason);
+        if (payment_method == PaymentMethod::Efectivo) {
+            t.extra_lines.push_back("Se devolvió en efectivo de la caja.");
+        } else {
+            t.extra_lines.push_back("Devolución por Mercado Pago (aquí solo se registró).");
+        }
+        if (card_surcharge_not_refunded.cents() > 0) {
+            t.extra_lines.push_back("El cargo por pago con tarjeta (" + card_surcharge_not_refunded.to_string() + ") no se devuelve.");
+        }
+        return t;
+    }
+    std::string to_formatted_text(size_t max_cols = 40) const { return to_ticket().to_formatted_text(max_cols); }
+};
+
+// T17: lo que se devolvería con una solicitud, SIN escribir nada. Aplica las mismas reglas y produce los mismos
+// mensajes que refund_sale (el servicio es el único lugar con las reglas). El motivo se valida como una regla más: si
+// es inválido, el importe se calcula igual y el mensaje llega en reason_error (vacío si el motivo es válido).
+struct RefundPreviewDto {
+    Money amount{Money::zero()};
+    std::vector<RefundLineDto> lines;
+    PaymentMethod payment_method{PaymentMethod::Efectivo};
+    bool returns_cash{false};                           // true: sale efectivo de la caja del turno abierto
+    Money card_surcharge_not_refunded{Money::zero()};
+    std::string reason_error;
 };
 
 struct SaleLineDetailDto {
@@ -69,6 +120,7 @@ struct SaleLineDetailDto {
     std::string product_name;
     bool is_prepared{false};                  // producto preparado: la interfaz pregunta si ya se preparó
     bool is_combo{false};
+    bool has_prepared_parts{false};           // T17: preparado, o combo con alguna parte preparada («¿ya se preparó?»)
     std::int64_t quantity_sold{0};
     std::int64_t quantity_refunded{0};
     std::int64_t quantity_refundable{0};      // vendido − reembolsado
@@ -104,6 +156,9 @@ public:
     // Consulta de la venta con lo reembolsable por línea. Requiere pos.refund.
     virtual Result<SaleDetailDto> get_sale_for_refund(const std::string& folio) = 0;
     virtual Result<RefundDto> refund_sale(const RefundRequestDto& request) = 0;
+    // T17: igual que refund_sale pero sin escribir nada. Requiere pos.refund. Un error de cualquier regla (excepto el
+    // motivo) llega como fallo con el mismo mensaje de refund_sale.
+    virtual Result<RefundPreviewDto> preview_refund(const RefundRequestDto& request) = 0;
     // Requieren pos.refund o pos.reprint.
     virtual Result<std::vector<RefundDto>> list_refunds(const std::string& sale_folio) = 0;
     virtual Result<RefundDto> get_refund(const std::string& refund_id) = 0;
