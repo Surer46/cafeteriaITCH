@@ -334,7 +334,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Roles y permisos | switch/combo | Restaurar un respaldo | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Actualizar el programa | 60.0x48.0 | OK
   Roles y permisos | button | Guardar | 134.4x48.0 | OK
-  Roles y permisos | list_row | SysListView32#0 (2 filas) | 341.6x43.2 | OK
+  Roles y permisos | list_row | SysListView32#0 (2 filas) | 338.4x43.2 | OK
 
 === Configuración (total=16, marcados=0) ===
   Configuración | button | Estándar | 137.6x48.0 | OK

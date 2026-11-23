@@ -13,7 +13,7 @@ Estandar | caja_historial       | SI | SI | 1662x1076 | 1600x1010 |  96.3% |  93
 Estandar | bitacora             | SI | NO | 1662x1076 | 1587x1001 |  95.5% |  93.0% |  88.8% |   45px( 2.7%) |   45px( 4.2%) |  81.7% |   30px |   38px | LV(620px,22f/3it,cols=100%,OK) | -
 Estandar | reportes             | SI | NO | 1662x1076 | 1608x1031 |  96.8% |  95.8% |  92.7% |   28px( 1.7%) |   30px( 2.8%) |  93.1% |   16px |   16px | LV(880px,31f/2it,cols=100%,OK) | -
 Estandar | usuarios             | SI | NO | 1662x1076 | 1598x1010 |  96.1% |  93.9% |  90.3% |   33px( 2.0%) |   33px( 3.1%) |  81.2% |   34px |   34px | LV(850px,30f/3it,cols=100%,OK) | -
-Estandar | roles                | SI | SI | 1662x1076 | 1629x1061 |  98.0% |  98.6% |  96.6% |   19px( 1.1%) |   15px( 1.4%) |  91.1% |   16px |   16px | LV(885px,31f/3it,cols=100%,CLIP[Descripción(376>324)]); SCROLL(842px,14/22toggles) | -
+Estandar | roles                | SI | SI | 1662x1076 | 1622x1061 |  97.6% |  98.6% |  96.2% |   25px( 1.5%) |   33px( 3.1%) |  90.2% |   16px |   16px | LV(843px,30f/3it,cols=99%,CLIP[Descripción(376>230)]); SCROLL(773px,11/23toggles) | -
 Estandar | configuracion        | SI | NO | 1662x1076 | 1568x984  |  94.3% |  91.4% |  86.3% |   48px( 2.9%) |   46px( 4.3%) |  86.7% |   28px |   28px | - | -
 Estandar | respaldos            | SI | NO | 1662x1076 | 1621x1010 |  97.5% |  93.9% |  91.6% |   23px( 1.4%) |   49px( 4.6%) |  91.6% |   16px |   20px | LV(297px,9f/0it,cols=100%,OK); LV(176px,5f/0it,cols=100%,OK) | -
 Estandar | actualizaciones      | NO | NO | 1662x1076 | 1601x1006 |  96.3% |  93.5% |  90.1% |   46px( 2.8%) |  780px(72.5%) |  94.5% |   16px |   16px | - | -
@@ -30,7 +30,7 @@ Tactil   | caja_historial       | SI | SI | 1615x1044 | 1553x978  |  96.2% |  93
 Tactil   | bitacora             | SI | NO | 1615x1044 | 1540x969  |  95.4% |  92.8% |  88.5% |   45px( 2.8%) |   47px( 4.5%) |  79.2% |   30px |   38px | LV(508px,9f/4it,cols=100%,OK) | -
 Tactil   | reportes             | SI | NO | 1615x1044 | 1561x999  |  96.7% |  95.7% |  92.5% |   28px( 1.7%) |   30px( 2.9%) |  90.5% |   16px |   16px | LV(812px,15f/2it,cols=100%,OK) | -
 Tactil   | usuarios             | SI | NO | 1615x1044 | 1551x978  |  96.0% |  93.7% |  90.0% |   33px( 2.0%) |   33px( 3.2%) |  79.1% |   34px |   34px | LV(786px,14f/3it,cols=100%,OK) | -
-Tactil   | roles                | SI | SI | 1615x1044 | 1575x1029 |  97.5% |  98.6% |  96.1% |   25px( 1.5%) |   15px( 1.4%) |  89.8% |   16px |   16px | LV(832px,15f/3it,cols=100%,CLIP[Descripción(424>258)]); SCROLL(749px,12/22toggles) | -
+Tactil   | roles                | SI | SI | 1615x1044 | 1575x1029 |  97.5% |  98.6% |  96.1% |   25px( 1.5%) |   33px( 3.2%) |  88.8% |   16px |   16px | LV(790px,14f/3it,cols=99%,CLIP[Descripción(424>166)]); SCROLL(680px,7/23toggles) | -
 Tactil   | configuracion        | SI | NO | 1615x1044 | 1521x952  |  94.2% |  91.2% |  85.9% |   48px( 3.0%) |   46px( 4.4%) |  86.4% |   28px |   28px | - | -
 Tactil   | respaldos            | SI | NO | 1615x1044 | 1574x983  |  97.5% |  94.2% |  91.8% |   23px( 1.4%) |   36px( 3.4%) |  91.9% |   16px |   20px | LV(233px,7f/0it,cols=100%,OK); LV(52px,1f/0it,cols=100%,OK) | -
 Tactil   | actualizaciones      | NO | NO | 1615x1044 | 1554x974  |  96.2% |  93.3% |  89.8% |   46px( 2.8%) |  724px(69.3%) |  94.3% |   16px |   16px | - | -

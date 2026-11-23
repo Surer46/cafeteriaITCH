@@ -212,19 +212,21 @@ void BackofficeRolesPanel::setup_ui() {
     pnl_warning_->Show(!can_manage_);
 
     // 3. Layout principal dividido en dos columnas adaptativas (Tarjetas)
+    // Margen interior estándar de CardPanel = FromDIP(16), igual que BackofficeSettingsPanel
+    // (src/frontend/backoffice_settings_panel.cpp:39,48,107).
+    const int card_pad = FromDIP(16);
     main_sizer_ = new wxBoxSizer(wxHORIZONTAL);
 
     // --- Columna izquierda: Lista de Roles ---
     left_card_ = new CardPanel(this, wxID_ANY);
     left_card_->set_card_background(Theme::ColorSurface);
+    auto* left_outer = new wxBoxSizer(wxVERTICAL);
     auto* left_sizer = new wxBoxSizer(wxVERTICAL);
 
     auto* left_title = new wxStaticText(left_card_, wxID_ANY, wxT("Roles Registrados"));
     left_title->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     left_title->SetForegroundColour(Theme::ColorText);
-    left_sizer->AddSpacer(FromDIP(4));
-    left_sizer->Add(left_title, 0, wxLEFT | wxRIGHT, FromDIP(8));
-    left_sizer->AddSpacer(FromDIP(4));
+    left_sizer->Add(left_title, 0, wxBOTTOM, FromDIP(8));
 
     list_roles_ = new wxListCtrl(left_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
     list_roles_->SetFont(Theme::get_font_body());
@@ -243,21 +245,23 @@ void BackofficeRolesPanel::setup_ui() {
     });
     list_roles_->Bind(wxEVT_LIST_ITEM_SELECTED, &BackofficeRolesPanel::on_role_selected, this);
     list_roles_->Bind(wxEVT_LIST_ITEM_DESELECTED, &BackofficeRolesPanel::on_role_deselected, this);
-    left_sizer->Add(list_roles_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+    left_sizer->Add(list_roles_, 1, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     lbl_roles_count_ = new wxStaticText(left_card_, wxID_ANY, wxEmptyString);
     lbl_roles_count_->SetFont(Theme::get_font_small());
     lbl_roles_count_->SetForegroundColour(Theme::ColorTextSecondary);
-    left_sizer->Add(lbl_roles_count_, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+    left_sizer->Add(lbl_roles_count_, 0);
 
-    left_card_->SetSizer(left_sizer);
-    const int left_min_w = FromDIP(Theme::is_touch() ? 360 : 344);
+    left_outer->Add(left_sizer, 1, wxEXPAND | wxALL, card_pad);
+    left_card_->SetSizer(left_outer);
+    const int left_min_w = FromDIP(Theme::is_touch() ? 376 : 360);
     left_card_->SetMinSize(wxSize(left_min_w, -1));
-    main_sizer_->Add(left_card_, 38, wxEXPAND | wxRIGHT, FromDIP(8));
+    main_sizer_->Add(left_card_, 38, wxEXPAND | wxRIGHT, FromDIP(12));
 
     // --- Columna derecha: Detalle del Rol y Lista de Permisos ---
     right_card_ = new CardPanel(this, wxID_ANY);
     right_card_->set_card_background(Theme::ColorSurface);
+    auto* right_outer = new wxBoxSizer(wxVERTICAL);
     auto* right_sizer = new wxBoxSizer(wxVERTICAL);
 
     rhead_container_ = new wxBoxSizer(wxVERTICAL);
@@ -272,9 +276,7 @@ void BackofficeRolesPanel::setup_ui() {
     lbl_system_notice_->SetForegroundColour(Theme::ColorBrand);
     lbl_system_notice_->Show(false);
 
-    right_sizer->AddSpacer(FromDIP(4));
-    right_sizer->Add(rhead_container_, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(8));
-    right_sizer->AddSpacer(FromDIP(2));
+    right_sizer->Add(rhead_container_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     // Touch: campos de 48 px lógicos con el texto centrado (fábrica común). Estándar: campo natural.
     const int field_h_logical = Theme::is_touch() ? 48 : 0;
@@ -289,7 +291,7 @@ void BackofficeRolesPanel::setup_ui() {
     lbl_desc_->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     field_desc_box_ = ui::make_text_field(right_card_, txt_desc_, field_h_logical, -1, field_font);
 
-    right_sizer->Add(form_container_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(2));
+    right_sizer->Add(form_container_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     // Encabezado de permisos + retroalimentación de validación/guardado (oculta si vacía; en línea cuando cabe)
     perm_header_container_ = new wxBoxSizer(wxVERTICAL);
@@ -301,7 +303,7 @@ void BackofficeRolesPanel::setup_ui() {
     lbl_form_feedback_->SetFont(Theme::get_font_small());
     lbl_form_feedback_->Show(false);
 
-    right_sizer->Add(perm_header_container_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(2));
+    right_sizer->Add(perm_header_container_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     scroll_perms_ = new wxScrolledWindow(
         right_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize,
@@ -318,7 +320,7 @@ void BackofficeRolesPanel::setup_ui() {
             update_permission_matrix_layout();
         }
     });
-    right_sizer->Add(scroll_perms_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(2));
+    right_sizer->Add(scroll_perms_, 1, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     // Barra de acciones inferior (siempre visible sin desplazarse)
     auto* btm_sizer = new wxWrapSizer(wxHORIZONTAL, wxWRAPSIZER_DEFAULT_FLAGS);
@@ -338,13 +340,14 @@ void BackofficeRolesPanel::setup_ui() {
     btn_delete_->Bind(wxEVT_BUTTON, &BackofficeRolesPanel::on_delete_role, this);
     btm_sizer->Add(btn_delete_, 0, wxALIGN_CENTER_VERTICAL | wxBOTTOM, FromDIP(4));
 
-    right_sizer->Add(btm_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(8));
+    right_sizer->Add(btm_sizer, 0, wxEXPAND);
 
-    right_card_->SetSizer(right_sizer);
+    right_outer->Add(right_sizer, 1, wxEXPAND | wxALL, card_pad);
+    right_card_->SetSizer(right_outer);
     right_card_->SetMinSize(FromDIP(wxSize(240, -1)));
     main_sizer_->Add(right_card_, 62, wxEXPAND);
 
-    root->AddSpacer(FromDIP(4));
+    root->AddSpacer(FromDIP(10));
     root->Add(main_sizer_, 1, wxEXPAND);
     SetSizer(root);
 
@@ -423,9 +426,9 @@ void BackofficeRolesPanel::build_permission_matrix() {
     }
 
     const int pad_x = FromDIP(10);
-    const int pad_y = FromDIP(4);
-    const int title_desc_gap = FromDIP(2);
-    const int text_switch_gap = FromDIP(10);
+    const int pad_y = FromDIP(8);
+    const int title_desc_gap = FromDIP(4);
+    const int text_switch_gap = FromDIP(12);
 
     for (const auto& sec : section_order) {
         auto it = groups.find(sec);
@@ -541,10 +544,10 @@ void BackofficeRolesPanel::rebuild_permission_sizers(bool two_cols) {
     perms_sizer_->Clear(false);
 
     const int pad_x = FromDIP(10);
-    const int hdr_top = FromDIP(6);
-    const int hdr_bottom = FromDIP(4);
+    const int hdr_top = FromDIP(12);
+    const int hdr_bottom = FromDIP(6);
     const int col_gap = FromDIP(12);
-    const int group_gap = FromDIP(two_cols ? 6 : 12);
+    const int group_gap = FromDIP(two_cols ? 8 : 10);
 
     bool first_group = true;
     for (auto& grp : perm_groups_) {
@@ -623,7 +626,7 @@ void BackofficeRolesPanel::update_responsive_layout() {
         }
     }
 
-    // Ancho útil interno de right_card_
+    // Ancho útil interno de right_card_ (descontando margen interior FromDIP(16) a cada lado)
     int right_card_w = right_card_->GetClientSize().GetWidth();
     if (right_card_w <= FromDIP(80) && panel_w > FromDIP(160)) {
         const int main_w = std::max(FromDIP(200), panel_w - FromDIP(24));
@@ -631,7 +634,7 @@ void BackofficeRolesPanel::update_responsive_layout() {
         const int left_est = std::max(left_min, (main_w * (wide ? 40 : 38)) / 100);
         right_card_w = std::max(FromDIP(200), main_w - left_est);
     }
-    const int right_inner_w = std::max(FromDIP(120), right_card_w - FromDIP(16));
+    const int right_inner_w = std::max(FromDIP(120), right_card_w - FromDIP(32));
 
     // Regla B: encabezado derecho en 1 fila o 2 filas (umbral calculado desde los textos reales; ref plan: ~520 lógicos)
     if (rhead_container_ && lbl_editor_title_ && lbl_system_notice_) {
@@ -702,8 +705,9 @@ void BackofficeRolesPanel::update_responsive_layout() {
         int sample_name_w = 0, sample_name_h = 0, sample_desc_w = 0, sample_desc_h = 0;
         txt_name_->GetTextExtent(wxT("Supervisor Táctil"), &sample_name_w, &sample_name_h);
         txt_desc_->GetTextExtent(wxT("Prueba de centrado"), &sample_desc_w, &sample_desc_h);
-        const int min_name_field_w = sample_name_w + FromDIP(28);
-        const int min_desc_field_w = sample_desc_w + FromDIP(32);
+        // Incluir relleno/borde interno de ui::make_text_field (14 lógicos) + margen de lectura (20 lógicos)
+        const int min_name_field_w = sample_name_w + FromDIP(34);
+        const int min_desc_field_w = sample_desc_w + FromDIP(34);
         const int need_form_one_row = ln_w + FromDIP(6) + min_name_field_w
                                     + FromDIP(10) + ld_w + FromDIP(6) + min_desc_field_w;
         const bool single_row = (right_inner_w >= need_form_one_row);
@@ -721,9 +725,9 @@ void BackofficeRolesPanel::update_responsive_layout() {
             if (single_row) {
                 auto* row = new wxBoxSizer(wxHORIZONTAL);
                 row->Add(lbl_name_, 0, wxALIGN_CENTER_VERTICAL);
-                row->Add(field_name_box_, 9, wxEXPAND | wxLEFT, FromDIP(6));
+                row->Add(field_name_box_, 15, wxEXPAND | wxLEFT, FromDIP(6));
                 row->Add(lbl_desc_, 0, wxALIGN_CENTER_VERTICAL | wxLEFT, FromDIP(10));
-                row->Add(field_desc_box_, 11, wxEXPAND | wxLEFT, FromDIP(6));
+                row->Add(field_desc_box_, 17, wxEXPAND | wxLEFT, FromDIP(6));
                 form_active_ = row;
             } else {
                 auto* grid = new wxFlexGridSizer(2, 2, FromDIP(6), FromDIP(8));
@@ -821,10 +825,10 @@ void BackofficeRolesPanel::update_permission_matrix_layout() {
     const int win_w = scroll_perms_->GetSize().GetWidth();
     if (client_w <= FromDIP(60)) {
         const int panel_w = GetClientSize().GetWidth();
-        int left_w = left_card_ ? left_card_->GetSize().GetWidth() : FromDIP(Theme::is_touch() ? 364 : 344);
-        if (left_w <= FromDIP(100)) left_w = FromDIP(Theme::is_touch() ? 364 : 344);
+        int left_w = left_card_ ? left_card_->GetSize().GetWidth() : FromDIP(Theme::is_touch() ? 376 : 360);
+        if (left_w <= FromDIP(100)) left_w = FromDIP(Theme::is_touch() ? 376 : 360);
         const int right_card_w = std::max(FromDIP(200), panel_w - left_w - FromDIP(24));
-        client_w = std::max(FromDIP(160), right_card_w - FromDIP(16));
+        client_w = std::max(FromDIP(160), right_card_w - FromDIP(32));
     }
     if (win_w <= 0 || client_w >= win_w - 2) {
         int sb_w = wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, scroll_perms_);
@@ -835,9 +839,9 @@ void BackofficeRolesPanel::update_permission_matrix_layout() {
     const int avail_w = std::max(FromDIP(140), client_w);
 
     const int pad_x = FromDIP(10);
-    const int pad_y = FromDIP(4);
-    const int title_desc_gap = FromDIP(2);
-    const int text_switch_gap = FromDIP(10);
+    const int pad_y = FromDIP(8);
+    const int title_desc_gap = FromDIP(4);
+    const int text_switch_gap = FromDIP(12);
     const int col_gap = FromDIP(12);
     const int min_row_h = FromDIP(Theme::is_touch() ? 68 : 52);
 

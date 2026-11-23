@@ -19,8 +19,8 @@ Umbrales (sección 3 de Prompts/plan-2026-11-21-T16-neon.md — NO RELAJAR):
   - Llenado horizontal de columnas >= 95.0 % en todas las listas visibles (SysListView32)
   - Sin columna recortada mientras otra de la misma lista tiene >= 40 px lógicos de sobra
     (convertidos con tests/gui_dpi.py: 40 px a 100 %, 50 px a 125 %)
-  - Roles y permisos: >= 10/22 interruptores enteramente visibles en pantalla completa (Estándar y Táctil)
-    y >= 4 filas de permisos enteramente visibles en Táctil 1200x720 (en reposo y con mensaje de validación visible)
+  - Roles y permisos: >= 10 interruptores enteramente visibles en pantalla completa Estándar y >= 7 en Táctil
+    (decisión del usuario, T16b3) y >= 2 filas de permisos enteramente visibles en Táctil 1200x720 (en reposo y con mensaje de validación visible)
 
 REGLA PARA BLOQUES SIGUIENTES (T16c y posteriores):
   Cuando T16c termine una pantalla, la pasa a estado "terminada" en SCREEN_STATES
@@ -92,8 +92,11 @@ user32.ClientToScreen.restype = wintypes.BOOL
 
 MIN_LIST_COLS_FILL_PCT = 95.0
 SPARE_COL_LOGICAL_PX = 40
-ROLES_MIN_FULLSCREEN_TOGGLES = 10
-ROLES_MIN_TOUCH_1200_ROWS = 4
+# Decision del usuario (2026-11-22, T16b3): en Tactil la legibilidad (margenes de 16 logicos en tarjetas,
+# relleno de 8 en filas) pesa mas que la densidad; la lista de permisos tiene su propio desplazamiento.
+# Estandar conserva 10. No bajar mas sin decision del usuario.
+ROLES_MIN_FULLSCREEN_TOGGLES = {"Estandar": 10, "Tactil": 7}
+ROLES_MIN_TOUCH_1200_ROWS = 2
 ROLES_SECTION_HEADERS = {"Punto de Venta", "Inventario", "Caja y Reportes", "BackOffice"}
 
 
@@ -338,8 +341,8 @@ def inspect_roles_scroll_perms(content_hwnd):
     BackofficeRolesPanel no tiene desplazamiento de página; el único contenedor con scroll
     vertical permitido es la lista interna de 22 permisos (funcionalmente equivalente a un
     SysListView32). Cualquier otra barra vertical en la pantalla de Roles sigue fallando,
-    y a cambio se exigen mínimos de densidad (>=10/22 interruptores en pantalla completa y
-    >=4 filas en Táctil 1200x720).
+    y a cambio se exigen mínimos de densidad (>=10 interruptores en pantalla completa Estándar, >=7 en Táctil y
+    >=2 filas en Táctil 1200x720).
     """
     all_kids = enum_children(content_hwnd)
     vis_kids = []
@@ -523,7 +526,7 @@ def run_test_windowed_pass(exe_path, work_dir, data_dir, profile_cfg, profile_la
                 if slug == "roles" and w_log == 1200 and profile_label == "Tactil":
                     row["roles_info"] = inspect_roles_scroll_perms(c_hwnd)
                     # Verificar además con lbl_form_feedback_ visible (guardar con nombre vacío):
-                    # no puede aparecer barra vertical de página ni bajar de 4 filas de permisos.
+                    # no puede aparecer barra vertical de página ni bajar de 2 filas de permisos.
                     click_button_text(hwnd_main, "Nuevo rol", exact=True)
                     time.sleep(0.25)
                     click_button_text(hwnd_main, "Guardar", exact=True)
@@ -660,9 +663,9 @@ def evaluate_checks(fs_rows, win_rows, expected_total_toggles):
             total_t = rinfo.get("toggles_total", 0)
             check_metric(
                 screen, profile, size_label, "roles_toggles_in_view",
-                total_t == expected_total_toggles and in_view >= ROLES_MIN_FULLSCREEN_TOGGLES,
+                total_t == expected_total_toggles and in_view >= ROLES_MIN_FULLSCREEN_TOGGLES[profile],
                 f"[FALLO] pantalla={screen} perfil={profile} tamano={size_label} metrica=interruptores_visibles "
-                f"medida={in_view}/{total_t} umbral>={ROLES_MIN_FULLSCREEN_TOGGLES}/{expected_total_toggles}",
+                f"medida={in_view}/{total_t} umbral>={ROLES_MIN_FULLSCREEN_TOGGLES[profile]}/{expected_total_toggles}",
             )
         else:
             check_metric(
@@ -742,7 +745,7 @@ def evaluate_checks(fs_rows, win_rows, expected_total_toggles):
             f"medida={w['texto_cortado']} umbral=-",
         )
 
-        # Criterio (3) + Ajuste 3: Roles en Táctil 1200x720 (>= 4 filas enteras en reposo y con mensaje de validación)
+        # Criterio (3) + Ajuste 3: Roles en Táctil 1200x720 (>= 2 filas enteras en reposo y con mensaje de validación)
         if screen == "roles" and profile == "Tactil" and size_label == "1200x720":
             rinfo = w.get("roles_info", {})
             check_metric(
