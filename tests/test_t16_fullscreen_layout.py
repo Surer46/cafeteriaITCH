@@ -98,6 +98,7 @@ SPARE_COL_LOGICAL_PX = 40
 ROLES_MIN_FULLSCREEN_TOGGLES = {"Estandar": 10, "Tactil": 7}
 ROLES_MIN_TOUCH_1200_ROWS = 2
 ROLES_SECTION_HEADERS = {"Punto de Venta", "Inventario", "Caja y Reportes", "BackOffice"}
+T16C_SCREENS = {"venta", "productos_y_recetas", "promociones", "combos"}
 
 
 def count_visible_permissions_from_db(db_path):
@@ -143,14 +144,15 @@ SCREEN_STATES = {
         "estado": "terminada",
         "bloque": "T16b",
     },
-    # Pendientes T16c (Inventario, POS, Caja y Reportes)
-    "venta": {"estado": "pendiente T16c", "bloque": "T16c"},
+    # Terminadas en T16c (Venta, Productos y recetas, Promociones y Combos)
+    "venta": {"estado": "terminada", "bloque": "T16c"},
+    "productos_y_recetas": {"estado": "terminada", "bloque": "T16c"},
+    "promociones": {"estado": "terminada", "bloque": "T16c"},
+    "combos": {"estado": "terminada", "bloque": "T16c"},
+    # Pendientes T16c (resto: Existencias, Reabastecimiento, Ingredientes, Barra, Caja y Reportes)
     "existencias": {"estado": "pendiente T16c", "bloque": "T16c"},
     "reabastecimiento": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "productos_y_recetas": {"estado": "pendiente T16c", "bloque": "T16c"},
     "ingredientes": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "promociones": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "combos": {"estado": "pendiente T16c", "bloque": "T16c"},
     "barra": {"estado": "pendiente T16c", "bloque": "T16c"},
     "caja_corte": {"estado": "pendiente T16c", "bloque": "T16c"},
     "caja_historial": {"estado": "pendiente T16c", "bloque": "T16c"},
@@ -169,22 +171,6 @@ SCREEN_STATES = {
 # ---------------------------------------------------------------------------
 KNOWN_EXCEPTIONS = {
     # --- Pantalla completa ---
-    ("productos_y_recetas", "Estandar", "fullscreen", "texto_cortado"): {
-        "bloque": "T16c",
-        "detalle": 'Etiqueta "Falta registrar una compra..." recortada (48>25px, 2L)',
-    },
-    ("productos_y_recetas", "Tactil", "fullscreen", "vscroll"): {
-        "bloque": "T16c",
-        "detalle": "Detalle de receta en Táctil requiere desplazamiento vertical (costo/margen debajo)",
-    },
-    ("promociones", "Estandar", "fullscreen", "vscroll"): {
-        "bloque": "T16c",
-        "detalle": "Panel de Promociones muestra barra vertical en pantalla completa Estándar",
-    },
-    ("promociones", "Tactil", "fullscreen", "vscroll"): {
-        "bloque": "T16c",
-        "detalle": "Panel de Promociones muestra barra vertical en pantalla completa Táctil",
-    },
     ("caja_historial", "Estandar", "fullscreen", "vscroll"): {
         "bloque": "T16c",
         "detalle": "Historial de cortes muestra barra vertical en pantalla completa Estándar",
@@ -193,39 +179,7 @@ KNOWN_EXCEPTIONS = {
         "bloque": "T16c",
         "detalle": "Historial de cortes muestra barra vertical en pantalla completa Táctil",
     },
-    ("venta", "Estandar", "fullscreen", "lv_clip_sobra"): {
-        "bloque": "T16c",
-        "detalle": "Tabla de venta recorta Producto mientras sobra espacio en Notas",
-    },
-    ("venta", "Tactil", "fullscreen", "lv_clip_sobra"): {
-        "bloque": "T16c",
-        "detalle": "Tabla de venta recorta Producto mientras sobra espacio en Notas",
-    },
-    ("productos_y_recetas", "Tactil", "fullscreen", "lv_clip_sobra"): {
-        "bloque": "T16c",
-        "detalle": "Tabla de productos recorta Nombre mientras sobra espacio en Estado",
-    },
-    ("combos", "Tactil", "fullscreen", "lv_clip_sobra"): {
-        "bloque": "T16c",
-        "detalle": "Tabla de combos recorta Partes mientras sobra espacio en Estado",
-    },
     # --- Ventana normal (1200x720 y 960x600) ---
-    ("promociones", "Estandar", "960x600", "texto_cortado"): {
-        "bloque": "T16c",
-        "detalle": 'Etiqueta "Toca o haz clic en los prod..." recortada en 960x600 Estándar',
-    },
-    ("venta", "Tactil", "1200x720", "texto_cortado"): {
-        "bloque": "T16c",
-        "detalle": 'Etiqueta de producto largo "Agua Embotellada Natural 60..." recortada en 1200x720 Táctil',
-    },
-    ("productos_y_recetas", "Tactil", "960x600", "texto_cortado"): {
-        "bloque": "T16c",
-        "detalle": 'Etiqueta "Categoría (elige una o escr..." recortada en 960x600 Táctil',
-    },
-    ("combos", "Tactil", "960x600", "texto_cortado"): {
-        "bloque": "T16c",
-        "detalle": 'Etiqueta "Categoría (elige una o escr..." recortada en 960x600 Táctil',
-    },
     ("caja_corte", "Tactil", "960x600", "texto_cortado"): {
         "bloque": "T16c",
         "detalle": 'Etiqueta "Motivo de diferencia (oblig..." recortada en 960x600 Táctil',
@@ -330,6 +284,48 @@ def inspect_listviews(content_hwnd, scale):
             "spare_thr_px": spare_thr,
         })
     return results
+
+
+def inspect_products_cost_visible(content_hwnd):
+    """Comprueba que la etiqueta de costo/margen en Productos y recetas sea visible sin desplazarse."""
+    cost_hwnds = []
+    for h, cls, txt in enum_children(content_hwnd):
+        if cls.lower() != "static" or not user32.IsWindowVisible(h) or not txt:
+            continue
+        if (
+            txt.startswith("Costo por porción:")
+            or txt.startswith("Falta registrar una compra")
+            or txt.startswith("Falta registrar compras")
+            or txt.startswith("Margen:")
+        ):
+            cost_hwnds.append((h, txt, get_rect(h)))
+    if not cost_hwnds:
+        return {"found": False, "all_in_view": False, "details": "Etiqueta de costo/margen no visible"}
+
+    # Buscar el ancestro wxScrolledWindow (o content_hwnd si no hay) para verificar visibilidad sin scroll.
+    c_rect = get_client_screen_rect(content_hwnd)
+    details = []
+    all_ok = True
+    for h, txt, r in cost_hwnds:
+        clip_rect = c_rect
+        cur = user32.GetParent(h)
+        while cur and cur != content_hwnd:
+            cl_buf = ctypes.create_unicode_buffer(64)
+            user32.GetClassNameW(cur, cl_buf, 64)
+            if cl_buf.value.lower() == "wxwindownr":
+                crc = get_client_screen_rect(cur)
+                clip_rect = (
+                    max(clip_rect[0], crc[0]),
+                    max(clip_rect[1], crc[1]),
+                    min(clip_rect[2], crc[2]),
+                    min(clip_rect[3], crc[3]),
+                )
+            cur = user32.GetParent(cur)
+        in_view = r[1] >= clip_rect[1] - 1 and r[3] <= clip_rect[3] + 1 and r[3] > r[1]
+        if not in_view:
+            all_ok = False
+        details.append(f"'{txt[:28]}' rect_y=({r[1]}..{r[3]}) clip_y=({clip_rect[1]}..{clip_rect[3]}) in_view={in_view}")
+    return {"found": True, "all_in_view": all_ok, "details": "; ".join(details)}
 
 
 def inspect_roles_scroll_perms(content_hwnd):
@@ -461,6 +457,8 @@ def run_test_fullscreen_pass(exe_path, work_dir, data_dir, profile_cfg, profile_
             m["lv_metrics"] = inspect_listviews(c_hwnd, scale)
             if slug == "roles":
                 m["roles_info"] = inspect_roles_scroll_perms(c_hwnd)
+            if slug == "productos_y_recetas":
+                m["products_cost_info"] = inspect_products_cost_visible(c_hwnd)
             rows.append(m)
 
         iterate_all_17_screens(hwnd_main, snap, add_cart_item=True)
@@ -513,6 +511,7 @@ def run_test_windowed_pass(exe_path, work_dir, data_dir, profile_cfg, profile_la
             def measure_win(slug):
                 time.sleep(0.25)
                 c_hwnd, _ = find_content_container(hwnd_main)
+                scale = get_window_scale(hwnd_main)
                 has_h, has_v = detect_panel_scrollbars(c_hwnd)
                 txt_clip = detect_clipped_static_texts(c_hwnd)
                 row = {
@@ -523,6 +522,10 @@ def run_test_windowed_pass(exe_path, work_dir, data_dir, profile_cfg, profile_la
                     "vscroll": "SI" if has_v else "NO",
                     "texto_cortado": txt_clip,
                 }
+                if w_log == 1200:
+                    row["lv_metrics"] = inspect_listviews(c_hwnd, scale)
+                if w_log == 1200 and slug == "productos_y_recetas":
+                    row["products_cost_info"] = inspect_products_cost_visible(c_hwnd)
                 if slug == "roles" and w_log == 1200 and profile_label == "Tactil":
                     row["roles_info"] = inspect_roles_scroll_perms(c_hwnd)
                     # Verificar además con lbl_form_feedback_ visible (guardar con nombre vacío):
@@ -716,6 +719,15 @@ def evaluate_checks(fs_rows, win_rows, expected_total_toggles):
                 f"medida={'; '.join(bad_clip_sobra)}",
             )
 
+        if screen == "productos_y_recetas":
+            cinfo = m.get("products_cost_info", {})
+            check_metric(
+                screen, profile, size_label, "products_cost_visible",
+                cinfo.get("found", False) and cinfo.get("all_in_view", False),
+                f"[FALLO] pantalla={screen} perfil={profile} tamano={size_label} metrica=costo_visible_sin_scroll "
+                f"detalle={cinfo.get('details')}",
+            )
+
     # 2. Verificación en ventana normal (1200x720 y 960x600)
     seen_win = set()
     for w in win_rows:
@@ -744,6 +756,42 @@ def evaluate_checks(fs_rows, win_rows, expected_total_toggles):
             f"[FALLO] pantalla={screen} perfil={profile} tamano={size_label} metrica=texto_cortado "
             f"medida={w['texto_cortado']} umbral=-",
         )
+
+        # Criterio 4 (T16c): en 1200x720 las listas de las 4 pantallas de T16c llenan >=95% sin WS_HSCROLL y sin CLIP+SOBRA >= 40 log
+        if size_label == "1200x720" and screen in T16C_SCREENS:
+            lv_metrics_w = w.get("lv_metrics", [])
+            if lv_metrics_w:
+                bad_fill_w = [
+                    f"cols={lv['fill_pct']:.1f}%(hscroll={lv['has_hscroll']})"
+                    for lv in lv_metrics_w
+                    if lv["fill_pct"] < MIN_LIST_COLS_FILL_PCT or lv["has_hscroll"]
+                ]
+                check_metric(
+                    screen, profile, size_label, "lv_cols_fill",
+                    len(bad_fill_w) == 0,
+                    f"[FALLO] pantalla={screen} perfil={profile} tamano={size_label} metrica=llenado_columnas "
+                    f"medida={'; '.join(bad_fill_w)} umbral>={MIN_LIST_COLS_FILL_PCT:.1f}% sin WS_HSCROLL",
+                )
+                bad_clip_sobra_w = [
+                    f"CLIP[{','.join(lv['clipped_cols'])}]/SOBRA[{','.join(lv['spare_cols'])}](umbral={lv['spare_thr_px']}px)"
+                    for lv in lv_metrics_w
+                    if lv["clipped_cols"] and lv["spare_cols"]
+                ]
+                check_metric(
+                    screen, profile, size_label, "lv_clip_sobra",
+                    len(bad_clip_sobra_w) == 0,
+                    f"[FALLO] pantalla={screen} perfil={profile} tamano={size_label} metrica=columna_recortada_con_sobra "
+                    f"medida={'; '.join(bad_clip_sobra_w)}",
+                )
+
+        if size_label == "1200x720" and screen == "productos_y_recetas":
+            cinfo_w = w.get("products_cost_info", {})
+            check_metric(
+                screen, profile, size_label, "products_cost_visible",
+                cinfo_w.get("found", False) and cinfo_w.get("all_in_view", False),
+                f"[FALLO] pantalla={screen} perfil={profile} tamano={size_label} metrica=costo_visible_sin_scroll "
+                f"detalle={cinfo_w.get('details')}",
+            )
 
         # Criterio (3) + Ajuste 3: Roles en Táctil 1200x720 (>= 2 filas enteras en reposo y con mensaje de validación)
         if screen == "roles" and profile == "Tactil" and size_label == "1200x720":

@@ -305,7 +305,21 @@ def locate_products_controls(hwnd_main):
         [(h, get_rect(h)) for (h, c, _t) in visible if c.lower() == "edit" and is_descendant(h, panel) and not is_descendant(h, list_card)],
         key=lambda x: (x[1][1], x[1][0]),
     )
-    # En derecha, orden vertical/horizontal: fila 1 (Nombre, Precio), fila 2 (SKU, Código), fila 3 (Categoría), fila receta (Cantidad)
+    # En derecha: fila 1 (Nombre, Precio), fila 2 (SKU, Código), opcional Nueva categoría (encima de receta),
+    # y cantidad de receta debajo de recipe_list.
+    recipe_y_bottom = get_rect(recipe_list)[3] if recipe_list else None
+    txt_recipe_qty = None
+    txt_category = None
+    extra_edits = right_edits[4:]
+    if recipe_y_bottom is not None:
+        for h_ed, rc_ed in extra_edits:
+            if rc_ed[1] >= recipe_y_bottom - 4:
+                txt_recipe_qty = h_ed
+            elif txt_category is None:
+                txt_category = h_ed
+    elif extra_edits:
+        txt_category = extra_edits[0][0]
+
     right_combos = sorted(
         [(h, get_rect(h)) for (h, c, _t) in visible if c.lower() == "combobox" and is_descendant(h, panel) and not is_descendant(h, list_card)],
         key=lambda x: (x[1][1], x[1][0]),
@@ -325,8 +339,8 @@ def locate_products_controls(hwnd_main):
         "txt_price": right_edits[1][0] if len(right_edits) >= 2 else None,
         "txt_sku": right_edits[2][0] if len(right_edits) >= 3 else None,
         "txt_barcode": right_edits[3][0] if len(right_edits) >= 4 else None,
-        "txt_category": right_edits[4][0] if len(right_edits) >= 5 else None,
-        "txt_recipe_qty": right_edits[5][0] if len(right_edits) >= 6 else None,
+        "txt_category": txt_category,
+        "txt_recipe_qty": txt_recipe_qty,
         "combo_filter_cat": left_combos[0] if left_combos else None,
         "combo_cat": right_combos[0][0] if len(right_combos) >= 1 else None,
         "combo_recipe_ing": right_combos[1][0] if len(right_combos) >= 2 else None,
@@ -334,6 +348,27 @@ def locate_products_controls(hwnd_main):
         "btns": btns,
         "statics": statics,
     }
+
+
+def set_product_category(hwnd_main, pc, category_name):
+    """Selecciona una categoría existente en combo_cat o elige 'Nueva categoría...' y escribe el texto."""
+    combo = pc["combo_cat"]
+    assert combo is not None, "Desplegable de categoría no encontrado"
+    count = send_msg(combo, CB_GETCOUNT, 0, 0)
+    items = []
+    for i in range(count):
+        ln = send_msg(combo, CB_GETLBTEXTLEN, i, 0)
+        buf = ctypes.create_unicode_buffer(ln + 2)
+        send_msg(combo, CB_GETLBTEXT, i, ctypes.cast(buf, ctypes.c_void_p).value)
+        items.append(buf.value)
+    if category_name in items:
+        select_combo_by_prefix(combo, category_name)
+    else:
+        select_combo_by_prefix(combo, "Nueva categoría...")
+        time.sleep(0.15)
+        pc_now = locate_products_controls(hwnd_main)
+        assert pc_now["txt_category"] is not None, "Campo de texto de nueva categoría no se mostró"
+        set_edit_text(pc_now["txt_category"], category_name)
 
 
 def _click_keypad_btn(hwnd_btn):
@@ -595,7 +630,7 @@ def run_suite(label, exe_path):
             set_edit_text(pc["txt_name"], "Galleta Chispas")
             set_edit_text(pc["txt_price"], "18.00")
             set_edit_text(pc["txt_sku"], "GAL-01")
-            set_edit_text(pc["txt_category"], "Repostería")
+            set_product_category(hwnd_main2, pc, "Repostería")
             click_button(pc["btns"]["Directo"])
             click_button(pc["btns"]["Guardar"])
             time.sleep(0.35)
@@ -609,7 +644,7 @@ def run_suite(label, exe_path):
             set_edit_text(pc["txt_price"], "55.00")
             set_edit_text(pc["txt_sku"], "LAT-01")
             set_edit_text(pc["txt_barcode"], "750999000111")
-            set_edit_text(pc["txt_category"], "Bebidas")
+            set_product_category(hwnd_main2, pc, "Bebidas")
             click_button(pc["btns"]["Preparado"])
             click_button(pc["btns"]["Guardar"])
             time.sleep(0.35)
@@ -632,7 +667,7 @@ def run_suite(label, exe_path):
             set_edit_text(pc["txt_name"], "Copia Latte")
             set_edit_text(pc["txt_price"], "40.00")
             set_edit_text(pc["txt_sku"], "LAT-01")
-            set_edit_text(pc["txt_category"], "Bebidas")
+            set_product_category(hwnd_main2, pc, "Bebidas")
             click_button(pc["btns"]["Guardar"])
             time.sleep(0.3)
             pc = locate_products_controls(hwnd_main2)
@@ -648,7 +683,7 @@ def run_suite(label, exe_path):
             time.sleep(0.3)
             pc = locate_products_controls(hwnd_main2)
             set_edit_text(pc["txt_price"], "60.00")
-            set_edit_text(pc["txt_category"], "Bebidas Calientes")
+            set_product_category(hwnd_main2, pc, "Bebidas Calientes")
             click_button(pc["btns"]["Guardar"])
             time.sleep(0.35)
             con = sqlite3.connect(db_path)

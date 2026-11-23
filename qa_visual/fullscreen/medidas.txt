@@ -1,12 +1,12 @@
 # Medidas pantalla completa — Monitor: 1920x1200 px | DPI=120 (125%, escala=1.25)
 # Columnas: perfil | pantalla | cumple | vscroll | content_px | union_px | union_w% | union_h% | union_area% | max_gap_h_px(pct) | max_gap_v_px(pct) | pil_fg% | pil_bg_h_px | pil_bg_v_px | listas_tablas | texto_cortado
-Estandar | venta                | SI | NO | 1662x1076 | 1612x1038 |  97.0% |  96.5% |  93.6% |   36px( 2.2%) |   23px( 2.1%) |  89.3% |   18px |   16px | LV(767px,24f/1it,cols=100%,CLIP[Producto(278>198)]/SOBRA[Notas(+377)]) | -
+Estandar | venta                | SI | NO | 1662x1076 | 1612x1018 |  97.0% |  94.6% |  91.8% |   36px( 2.2%) |   35px( 3.3%) |  89.1% |   18px |   16px | LV(725px,23f/1it,cols=100%,OK) | -
 Estandar | existencias          | SI | NO | 1662x1076 | 1608x1031 |  96.8% |  95.8% |  92.7% |   28px( 1.7%) |   30px( 2.8%) |  95.4% |   16px |   16px | LV(885px,31f/16it,cols=100%,OK) | -
 Estandar | reabastecimiento     | SI | NO | 1662x1076 | 1603x1018 |  96.5% |  94.6% |  91.3% |   41px( 2.5%) |   30px( 2.8%) |  94.8% |   16px |   16px | LV(926px,33f/3it,cols=100%,OK) | -
-Estandar | productos_y_recetas  | SI | NO | 1662x1076 | 1609x1023 |  96.8% |  95.1% |  92.0% |   33px( 2.0%) |   28px( 2.6%) |  88.6% |   16px |   16px | LV(827px,29f/6it,cols=100%,OK); LV(106px,3f/3it,cols=100%,OK) | "Falta registrar una compra ..."(48>25px,2L)
+Estandar | productos_y_recetas  | SI | NO | 1662x1076 | 1594x1006 |  95.9% |  93.5% |  89.7% |   48px( 2.9%) |   35px( 3.3%) |  78.1% |   16px |   16px | LV(810px,28f/6it,cols=100%,OK); LV(351px,12f/3it,cols=100%,OK) | -
 Estandar | ingredientes         | SI | NO | 1662x1076 | 1632x1041 |  98.2% |  96.7% |  95.0% |   26px( 1.6%) |   20px( 1.9%) |  90.1% |   16px |   16px | LV(949px,33f/8it,cols=100%,OK) | -
-Estandar | promociones          | SI | SI | 1662x1076 | 1598x1056 |  96.1% |  98.1% |  94.4% |   49px( 2.9%) |   23px( 2.1%) |  87.3% |   16px |   16px | LV(793px,28f/4it,cols=100%,CLIP[Nombre(272>187),Aplica a(305>83)]); LV(101px,3f/6it,cols=100%,OK) | -
-Estandar | combos               | SI | NO | 1662x1076 | 1619x1036 |  97.4% |  96.3% |  93.8% |   33px( 2.0%) |   25px( 2.3%) |  84.5% |   16px |   16px | LV(824px,29f/2it,cols=100%,CLIP[Partes(669>228)]); LV(97px,3f/2it,cols=100%,OK) | -
+Estandar | promociones          | SI | NO | 1662x1076 | 1614x1026 |  97.1% |  95.4% |  92.6% |   48px( 2.9%) |   35px( 3.3%) |  78.3% |   16px |   16px | LV(774px,27f/4it,cols=100%,CLIP[Nombre(272>140),Aplica a(305>151)]); LV(343px,12f/6it,cols=100%,OK) | -
+Estandar | combos               | SI | NO | 1662x1076 | 1614x1026 |  97.1% |  95.4% |  92.6% |   48px( 2.9%) |   35px( 3.3%) |  84.8% |   16px |   16px | LV(807px,28f/2it,cols=100%,CLIP[Nombre(289>280),Partes(669>305)]); LV(97px,3f/2it,cols=100%,OK) | -
 Estandar | barra                | SI | NO | 1662x1076 | 1607x1018 |  96.7% |  94.6% |  91.5% |   33px( 2.0%) |   33px( 3.1%) |  94.1% |   16px |   16px | LV(426px,15f/8it,cols=100%,OK) | -
 Estandar | caja_corte           | SI | NO | 1662x1076 | 1593x1007 |  95.8% |  93.6% |  89.7% |   41px( 2.5%) |   41px( 3.8%) |  86.1% |   28px |   30px | LV(599px,21f/2it,cols=100%,OK) | -
 Estandar | caja_historial       | SI | SI | 1662x1076 | 1600x1010 |  96.3% |  93.9% |  90.4% |   34px( 2.0%) |   38px( 3.5%) |  85.8% |   28px |   30px | LV(223px,7f/1it,cols=100%,OK); LV(350px,12f/2it,cols=100%,OK) | -
@@ -17,13 +17,13 @@ Estandar | roles                | SI | SI | 1662x1076 | 1622x1061 |  97.6% |  98
 Estandar | configuracion        | SI | NO | 1662x1076 | 1568x984  |  94.3% |  91.4% |  86.3% |   48px( 2.9%) |   46px( 4.3%) |  86.7% |   28px |   28px | - | -
 Estandar | respaldos            | SI | NO | 1662x1076 | 1621x1010 |  97.5% |  93.9% |  91.6% |   23px( 1.4%) |   49px( 4.6%) |  91.6% |   16px |   20px | LV(297px,9f/0it,cols=100%,OK); LV(176px,5f/0it,cols=100%,OK) | -
 Estandar | actualizaciones      | NO | NO | 1662x1076 | 1601x1006 |  96.3% |  93.5% |  90.1% |   46px( 2.8%) |  780px(72.5%) |  94.5% |   16px |   16px | - | -
-Tactil   | venta                | SI | NO | 1615x1044 | 1562x1004 |  96.7% |  96.2% |  93.0% |   41px( 2.5%) |   25px( 2.4%) |  88.2% |   20px |   16px | LV(630px,11f/1it,cols=100%,CLIP[Producto(310>198)]/SOBRA[Notas(+249)]) | -
+Tactil   | venta                | SI | NO | 1615x1044 | 1562x984  |  96.7% |  94.3% |  91.2% |   41px( 2.5%) |   35px( 3.4%) |  88.0% |   20px |   16px | LV(588px,10f/1it,cols=100%,OK) | -
 Tactil   | existencias          | SI | NO | 1615x1044 | 1559x999  |  96.5% |  95.7% |  92.4% |   28px( 1.7%) |   30px( 2.9%) |  95.2% |   16px |   16px | LV(817px,15f/16it,cols=100%,OK) | -
 Tactil   | reabastecimiento     | SI | NO | 1615x1044 | 1564x991  |  96.8% |  94.9% |  91.9% |   33px( 2.0%) |   28px( 2.7%) |  94.6% |   16px |   16px | LV(885px,16f/3it,cols=100%,OK) | -
-Tactil   | productos_y_recetas  | SI | SI | 1615x1044 | 1548x1019 |  95.9% |  97.6% |  93.6% |   44px( 2.7%) |   25px( 2.4%) |  89.0% |   16px |   16px | LV(754px,13f/6it,cols=100%,CLIP[Nombre(354>290)]/SOBRA[Estado(+58)]); LV(129px,2f/3it,cols=100%,OK) | -
+Tactil   | productos_y_recetas  | SI | NO | 1615x1044 | 1547x974  |  95.8% |  93.3% |  89.4% |   48px( 3.0%) |   35px( 3.4%) |  83.6% |   16px |   16px | LV(730px,13f/6it,cols=100%,OK); LV(205px,3f/3it,cols=100%,OK) | -
 Tactil   | ingredientes         | SI | NO | 1615x1044 | 1585x1009 |  98.1% |  96.6% |  94.9% |   17px( 1.1%) |   20px( 1.9%) |  88.5% |   16px |   16px | LV(903px,16f/8it,cols=100%,OK) | -
-Tactil   | promociones          | SI | SI | 1615x1044 | 1556x1029 |  96.3% |  98.6% |  95.0% |   44px( 2.7%) |   20px( 1.9%) |  84.3% |   16px |   16px | LV(682px,12f/4it,cols=100%,CLIP[Nombre(302>95),Aplica a(341>91)]); LV(127px,2f/6it,cols=100%,OK) | -
-Tactil   | combos               | SI | NO | 1615x1044 | 1577x1004 |  97.6% |  96.2% |  93.9% |   28px( 1.7%) |   25px( 2.4%) |  81.4% |   16px |   16px | LV(739px,13f/2it,cols=100%,CLIP[Partes(751>144)]/SOBRA[Estado(+55)]); LV(120px,2f/2it,cols=100%,OK) | -
+Tactil   | promociones          | SI | NO | 1615x1044 | 1567x994  |  97.0% |  95.2% |  92.4% |   48px( 3.0%) |   35px( 3.4%) |  83.8% |   16px |   16px | LV(663px,12f/4it,cols=100%,CLIP[Nombre(302>102),Aplica a(341>104)]); LV(147px,2f/6it,cols=100%,OK) | -
+Tactil   | combos               | SI | NO | 1615x1044 | 1567x994  |  97.0% |  95.2% |  92.4% |   48px( 3.0%) |   35px( 3.4%) |  82.0% |   16px |   16px | LV(722px,13f/2it,cols=100%,CLIP[Nombre(318>257),Partes(751>280)]); LV(120px,2f/2it,cols=100%,OK) | -
 Tactil   | barra                | SI | NO | 1615x1044 | 1567x989  |  97.0% |  94.7% |  91.9% |   26px( 1.6%) |   30px( 2.9%) |  94.0% |   16px |   16px | LV(401px,7f/8it,cols=100%,OK) | -
 Tactil   | caja_corte           | SI | NO | 1615x1044 | 1549x978  |  95.9% |  93.7% |  89.8% |   38px( 2.4%) |   38px( 3.6%) |  84.4% |   28px |   30px | LV(476px,8f/2it,cols=100%,OK) | -
 Tactil   | caja_historial       | SI | SI | 1615x1044 | 1553x978  |  96.2% |  93.7% |  90.1% |   34px( 2.1%) |   43px( 4.1%) |  84.2% |   28px |   30px | LV(193px,3f/1it,cols=100%,OK); LV(290px,5f/2it,cols=100%,OK) | -
@@ -58,7 +58,7 @@ Estandar | 960x600  | existencias          | hscroll=NO | vscroll=NO | texto_cor
 Estandar | 960x600  | reabastecimiento     | hscroll=NO | vscroll=NO | texto_cortado=-
 Estandar | 960x600  | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado=-
 Estandar | 960x600  | ingredientes         | hscroll=NO | vscroll=NO | texto_cortado=-
-Estandar | 960x600  | promociones          | hscroll=NO | vscroll=SI | texto_cortado="Toca o haz clic en los prod..."(40>21px,2L)
+Estandar | 960x600  | promociones          | hscroll=NO | vscroll=SI | texto_cortado=-
 Estandar | 960x600  | combos               | hscroll=NO | vscroll=SI | texto_cortado=-
 Estandar | 960x600  | barra                | hscroll=NO | vscroll=NO | texto_cortado=-
 Estandar | 960x600  | caja_corte           | hscroll=NO | vscroll=SI | texto_cortado=-
@@ -70,7 +70,7 @@ Estandar | 960x600  | roles                | hscroll=NO | vscroll=SI | texto_cor
 Estandar | 960x600  | configuracion        | hscroll=NO | vscroll=SI | texto_cortado=-
 Estandar | 960x600  | respaldos            | hscroll=NO | vscroll=SI | texto_cortado=-
 Estandar | 960x600  | actualizaciones      | hscroll=NO | vscroll=NO | texto_cortado=-
-Tactil   | 1200x720 | venta                | hscroll=NO | vscroll=NO | texto_cortado="Agua Embotellada Natural 60..."(46>24px,2L)
+Tactil   | 1200x720 | venta                | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 1200x720 | existencias          | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 1200x720 | reabastecimiento     | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 1200x720 | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado=-
@@ -90,10 +90,10 @@ Tactil   | 1200x720 | actualizaciones      | hscroll=NO | vscroll=NO | texto_cor
 Tactil   | 960x600  | venta                | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | existencias          | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | reabastecimiento     | hscroll=NO | vscroll=NO | texto_cortado=-
-Tactil   | 960x600  | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado="Categoría (elige una o escr..."(52>27px,2L)
+Tactil   | 960x600  | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | ingredientes         | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | promociones          | hscroll=NO | vscroll=SI | texto_cortado=-
-Tactil   | 960x600  | combos               | hscroll=NO | vscroll=SI | texto_cortado="Categoría (elige una o escr..."(52>27px,2L)
+Tactil   | 960x600  | combos               | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | barra                | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | caja_corte           | hscroll=NO | vscroll=SI | texto_cortado="Motivo de diferencia (oblig..."(46>24px,2L)
 Tactil   | 960x600  | caja_historial       | hscroll=NO | vscroll=SI | texto_cortado=-

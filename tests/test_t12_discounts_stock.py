@@ -435,6 +435,10 @@ def locate_products_controls(hwnd_main):
         [(h, get_rect(h)) for (h, c, _t) in visible if c.lower() == "edit" and is_descendant(h, panel) and not is_descendant(h, list_card)],
         key=lambda x: (x[1][1], x[1][0]),
     )
+    right_combos = sorted(
+        [(h, get_rect(h)) for (h, c, _t) in visible if c.lower() == "combobox" and is_descendant(h, panel) and not is_descendant(h, list_card)],
+        key=lambda x: (x[1][1], x[1][0]),
+    )
     btns = {t: h for (h, c, t) in visible if c.lower() == "button" and is_descendant(h, panel) and t}
     statics = [t for (h, c, t) in visible if c.lower() == "static" and is_descendant(h, panel) and t]
     return {
@@ -445,10 +449,31 @@ def locate_products_controls(hwnd_main):
         "txt_price": right_edits[1][0],
         "txt_sku": right_edits[2][0],
         "txt_barcode": right_edits[3][0],
-        "txt_category": right_edits[4][0],
+        "txt_category": right_edits[4][0] if len(right_edits) >= 5 else None,
+        "combo_cat": right_combos[0][0] if right_combos else None,
         "btns": btns,
         "statics": statics,
     }
+
+
+def set_product_category(hwnd_main, pc, category_name):
+    combo = pc["combo_cat"]
+    assert combo is not None, "Desplegable de categoría no encontrado"
+    count = send_msg(combo, CB_GETCOUNT, 0, 0)
+    items = []
+    for idx in range(count):
+        ln = send_msg(combo, CB_GETLBTEXTLEN, idx, 0)
+        buf = ctypes.create_unicode_buffer(max(1, ln + 2))
+        send_msg(combo, CB_GETLBTEXT, idx, ctypes.addressof(buf))
+        items.append(buf.value)
+    if category_name in items:
+        select_combo_by_prefix(combo, category_name)
+    else:
+        select_combo_by_prefix(combo, "Nueva categoría...")
+        time.sleep(0.15)
+        pc_now = locate_products_controls(hwnd_main)
+        assert pc_now["txt_category"] is not None, "Campo de nueva categoría no visible"
+        set_edit_text(pc_now["txt_category"], category_name)
 
 
 def run_suite(label, exe_path):
@@ -812,7 +837,7 @@ def run_suite(label, exe_path):
             set_edit_text(pc["txt_name"], "Jugo Naranja")
             set_edit_text(pc["txt_price"], "30.00")
             set_edit_text(pc["txt_sku"], "JUG-12")
-            set_edit_text(pc["txt_category"], "Bebidas")
+            set_product_category(hwnd_main, pc, "Bebidas")
             click_button(pc["btns"]["Guardar"])
             time.sleep(0.35)
 
@@ -836,7 +861,7 @@ def run_suite(label, exe_path):
             set_edit_text(pc["txt_name"], "Agua Natural")
             set_edit_text(pc["txt_price"], "15.00")
             set_edit_text(pc["txt_sku"], "AGU-12")
-            set_edit_text(pc["txt_category"], "Bebidas")
+            set_product_category(hwnd_main, pc, "Bebidas")
             click_button(pc["btns"]["Guardar"])
             time.sleep(0.35)
             con = sqlite3.connect(db_path)

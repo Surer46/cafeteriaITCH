@@ -7,7 +7,9 @@
 #include <wx/statline.h>
 #include <wx/imaglist.h>
 #include <wx/dcclient.h>
+#include <wx/settings.h>
 #include <wx/wrapsizer.h>
+#include <algorithm>
 #include <chrono>
 
 #ifdef _WIN32
@@ -196,7 +198,9 @@ void PosPanel::setup_ui() {
     qty_add_row->Add(btn_add_, 0, wxALIGN_CENTER_VERTICAL | wxBOTTOM, FromDIP(touch ? 4 : 2));
     card_inner_sizer->Add(qty_add_row, 0, wxEXPAND);
 
-    search_card->SetSizer(card_inner_sizer);
+    auto* search_card_outer = new wxBoxSizer(wxVERTICAL);
+    search_card_outer->Add(card_inner_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    search_card->SetSizer(search_card_outer);
     left_box->Add(search_card, 0, wxEXPAND | wxBOTTOM, FromDIP(touch ? 12 : 10));
 
     // Tabla de líneas de venta (ListCtrl)
@@ -476,8 +480,45 @@ void PosPanel::update_line_detail_wrap() {
     if (!lbl_cart_line_detail_ || !lbl_cart_line_detail_->IsShown()) return;
     int avail_w = list_items_ ? list_items_->GetSize().GetWidth() : GetClientSize().GetWidth();
     if (avail_w <= 40) avail_w = FromDIP(340);
-    lbl_cart_line_detail_->SetLabel(wxString::FromUTF8(last_line_detail_));
-    lbl_cart_line_detail_->Wrap(std::max(FromDIP(160), avail_w - FromDIP(8)));
+    const int wrap_w = std::max(FromDIP(160), avail_w - FromDIP(12));
+    const wxString text = wxString::FromUTF8(last_line_detail_);
+
+    wxClientDC dc(lbl_cart_line_detail_);
+    dc.SetFont(lbl_cart_line_detail_->GetFont());
+    wxString wrapped;
+    wxString cur_line;
+    int line_count = 0;
+    size_t pos = 0;
+    while (pos < text.length()) {
+        size_t next = text.find(wxT(' '), pos);
+        wxString word = (next == wxString::npos) ? text.Mid(pos) : text.Mid(pos, next - pos);
+        wxString cand = cur_line.IsEmpty() ? word : (cur_line + wxT(" ") + word);
+        if (!cur_line.IsEmpty() && dc.GetTextExtent(cand).GetWidth() > wrap_w) {
+            if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+            wrapped += cur_line;
+            ++line_count;
+            cur_line = word;
+        } else {
+            cur_line = cand;
+        }
+        if (next == wxString::npos) break;
+        pos = next + 1;
+    }
+    if (!cur_line.IsEmpty()) {
+        if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+        wrapped += cur_line;
+        ++line_count;
+    }
+    line_count = std::max(1, line_count);
+    const int line_h = dc.GetTextExtent(wxT("Ág")).GetHeight();
+    const wxSize ext = dc.GetMultiLineTextExtent(wrapped);
+    const int min_h = std::max(ext.GetHeight(), line_count * line_h) + FromDIP(2);
+
+    lbl_cart_line_detail_->SetMinSize(wxDefaultSize);
+    lbl_cart_line_detail_->SetLabel(wrapped);
+    lbl_cart_line_detail_->InvalidateBestSize();
+    lbl_cart_line_detail_->SetMinSize(wxSize(-1, min_h));
+    Layout();
 }
 
 void PosPanel::update_list_column_widths() {
@@ -486,8 +527,44 @@ void PosPanel::update_list_column_widths() {
         return;
     }
     sizing_columns_ = true;
+
+    const int client_w = list_items_->GetClientSize().GetWidth();
+    int budget = client_w;
+    if (!ui::has_vertical_scrollbar(list_items_)) {
+        const int item_count = list_items_->GetItemCount();
+        if (item_count > 0) {
+            wxRect r0;
+            int row_h = list_items_->FromDIP(Theme::is_touch() ? 42 : 24);
+            if (list_items_->GetItemRect(0, r0, wxLIST_RECT_BOUNDS) && r0.GetHeight() > 0) {
+                row_h = r0.GetHeight();
+            }
+            const int avail_h = list_items_->GetClientSize().GetHeight() - ui::header_height(list_items_);
+            if (avail_h > 0 && item_count * row_h > avail_h) {
+                budget -= wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, list_items_);
+            }
+        }
+    }
+    budget = std::max(0, budget - list_items_->FromDIP(2));
+    if (budget <= 0) {
+        sizing_columns_ = false;
+        return;
+    }
+
     wxClientDC dc(list_items_);
     dc.SetFont(list_items_->GetFont());
+
+    const int pad_px = list_items_->FromDIP(14);
+    const int hdr_pad_px = list_items_->FromDIP(16);
+    const int sku_extra_px = list_items_->FromDIP(Theme::is_touch() ? 30 : 26);
+
+    const wxString headers[7] = {
+        wxT("SKU"), wxT("Producto"), wxT("Notas"), wxT("Cant."),
+        wxT("Subtotal"), wxT("Descuento"), wxT("Total")
+    };
+    int hdr_floor[7]{};
+    for (int i = 0; i < 7; ++i) {
+        hdr_floor[i] = ui::header_text_width(list_items_, headers[i]) + hdr_pad_px;
+    }
 
     int max_sku = dc.GetTextExtent(wxT("BAG-01")).GetWidth();
     int max_prod = dc.GetTextExtent(wxT("Producto")).GetWidth();
@@ -512,17 +589,94 @@ void PosPanel::update_list_column_widths() {
         max_tot = std::max(max_tot, dc.GetTextExtent(wxString::FromUTF8(item.line_total.to_string())).GetWidth());
     }
 
-    const int pad = 18;
-    const int sku_extra = Theme::is_touch() ? 30 : 26;
-    std::vector<ui::ColumnSpec> specs;
-    specs.push_back({wxT("SKU"), max_sku, max_sku, 0, sku_extra});
-    specs.push_back({wxT("Producto"), std::min(max_prod, FromDIP(140)), dc.GetTextExtent(wxT("Producto")).GetWidth(), pad, 0});
-    specs.push_back({wxT("Notas"), max_notas, 0, pad, 0});
-    specs.push_back({wxT("Cant."), max_cant, max_cant, pad, 0});
-    specs.push_back({wxT("Subtotal"), max_sub, max_sub, pad, 0});
-    specs.push_back({wxT("Descuento"), max_desc, max_desc, pad, 0});
-    specs.push_back({wxT("Total"), max_tot, max_tot, pad, 0});
-    ui::distribute_list_columns(list_items_, specs, 2);
+    int w[7]{};
+    w[0] = std::max(hdr_floor[0], max_sku + sku_extra_px);
+    w[3] = std::max(hdr_floor[3], max_cant + pad_px);
+    w[4] = std::max(hdr_floor[4], max_sub + pad_px);
+    w[5] = std::max(hdr_floor[5], max_desc + pad_px);
+    w[6] = std::max(hdr_floor[6], max_tot + pad_px);
+
+    const int prod_floor = hdr_floor[1];
+    const int notas_floor = hdr_floor[2];
+    const int prod_need = std::max(prod_floor, max_prod + pad_px);
+    const int notas_need = std::max(notas_floor, max_notas + pad_px);
+
+    auto sum_fixed = [&]() { return w[0] + w[3] + w[4] + w[5] + w[6]; };
+    int rem = budget - sum_fixed();
+
+    // En 960x600 estrecho, Descuento cede primero hasta su encabezado antes de recortar encabezados.
+    if (rem < prod_floor + notas_floor) {
+        const int deficit = (prod_floor + notas_floor) - rem;
+        const int desc_spare = std::max(0, w[5] - hdr_floor[5]);
+        const int cut_desc = std::min(deficit, desc_spare);
+        w[5] -= cut_desc;
+        rem += cut_desc;
+    }
+    if (rem < prod_floor + notas_floor) {
+        int deficit = (prod_floor + notas_floor) - rem;
+        const int order[4] = {4, 6, 3, 0};
+        for (int idx : order) {
+            if (deficit <= 0) break;
+            const int spare = std::max(0, w[idx] - hdr_floor[idx]);
+            const int cut = std::min(deficit, spare);
+            w[idx] -= cut;
+            rem += cut;
+            deficit -= cut;
+        }
+    }
+
+    if (rem <= prod_floor + notas_floor) {
+        w[1] = std::max(list_items_->FromDIP(48), rem - notas_floor);
+        w[2] = std::max(list_items_->FromDIP(36), rem - w[1]);
+    } else {
+        // Producto recibe lo que necesita hasta max(280 logicos, 65 % de rem) antes de dar el resto a Notas.
+        const int max_prod_for_rem = std::max(prod_floor, rem - notas_floor);
+        const int prod_cap = std::min(
+            max_prod_for_rem,
+            std::max(list_items_->FromDIP(280), (rem * 65) / 100)
+        );
+        w[1] = std::min(std::max(prod_floor, prod_need), prod_cap);
+        w[2] = rem - w[1];
+        // Si Producto aun necesita mas y Notas ya supera su contenido medido, transferir excedente a Producto.
+        if (w[1] < prod_need && w[2] > notas_need) {
+            const int transfer = std::min(prod_need - w[1], w[2] - notas_need);
+            w[1] += transfer;
+            w[2] -= transfer;
+        }
+    }
+
+    // Ajuste final exacto para evitar WS_HSCROLL y cubrir 100 % del presupuesto.
+    int total_w = 0;
+    for (int i = 0; i < 7; ++i) total_w += w[i];
+    if (total_w < budget) {
+        w[2] += (budget - total_w);
+    } else if (total_w > budget) {
+        int excess = total_w - budget;
+        const int trim_order[7] = {2, 1, 5, 4, 6, 3, 0};
+        for (int idx : trim_order) {
+            if (excess <= 0) break;
+            const int can_cut = std::max(0, w[idx] - hdr_floor[idx]);
+            const int cut = std::min(excess, can_cut);
+            w[idx] -= cut;
+            excess -= cut;
+        }
+        if (excess > 0) {
+            const int min_col = list_items_->FromDIP(28);
+            for (int idx : trim_order) {
+                if (excess <= 0) break;
+                const int can_cut = std::max(0, w[idx] - min_col);
+                const int cut = std::min(excess, can_cut);
+                w[idx] -= cut;
+                excess -= cut;
+            }
+        }
+    }
+
+    for (int i = 0; i < 7; ++i) {
+        if (list_items_->GetColumnWidth(i) != w[i]) {
+            list_items_->SetColumnWidth(i, w[i]);
+        }
+    }
     sizing_columns_ = false;
 }
 
@@ -530,6 +684,7 @@ void PosPanel::on_size(wxSizeEvent& evt) {
     evt.Skip();
     CallAfter([this]() {
         if (destroying_ || IsBeingDeleted()) return;
+        Layout();
         update_list_column_widths();
         update_line_detail_wrap();
         Layout();

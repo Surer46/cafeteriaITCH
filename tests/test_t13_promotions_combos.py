@@ -394,21 +394,53 @@ def locate_combo_tab_controls(hwnd_main):
     btns = {t: h for (h, c, t) in visible if c.lower() == "button" and is_descendant(h, panel) and t}
     statics = [t for (h, c, t) in visible if c.lower() == "static" and is_descendant(h, panel) and t]
 
+    parts_list = right_lists[0] if right_lists else None
+    parts_y_bottom = get_rect(parts_list)[3] if parts_list else None
+    txt_category = None
+    txt_part_qty = None
+    for h_ed, rc_ed in right_edits[3:]:
+        if parts_y_bottom is not None and rc_ed[1] >= parts_y_bottom - 4:
+            txt_part_qty = h_ed
+        elif txt_category is None:
+            txt_category = h_ed
+    if txt_part_qty is None and len(right_edits) >= 4:
+        txt_part_qty = right_edits[-1][0]
+
     return {
         "panel": panel,
         "list": left_lists[0] if left_lists else None,
-        "parts_list": right_lists[0] if right_lists else None,
+        "parts_list": parts_list,
         "txt_search": left_edits[0],
         "txt_name": right_edits[0][0],
         "txt_price": right_edits[1][0],
         "txt_sku": right_edits[2][0],
-        "txt_category": right_edits[3][0],
-        "txt_part_qty": right_edits[4][0],
+        "txt_category": txt_category,
+        "txt_part_qty": txt_part_qty,
         "combo_cat": right_combos[0][0] if len(right_combos) >= 1 else None,
         "combo_part_prod": right_combos[1][0] if len(right_combos) >= 2 else None,
         "btns": btns,
         "statics": statics,
     }
+
+
+def set_combo_category(hwnd_main, cc, category_name):
+    combo = cc["combo_cat"]
+    assert combo is not None, "Desplegable de categoría de combo no encontrado"
+    count = send_msg(combo, CB_GETCOUNT, 0, 0)
+    items = []
+    for idx in range(count):
+        ln = send_msg(combo, CB_GETLBTEXTLEN, idx, 0)
+        buf = ctypes.create_unicode_buffer(max(1, ln + 2))
+        send_msg(combo, CB_GETLBTEXT, idx, ctypes.addressof(buf))
+        items.append(buf.value)
+    if category_name in items:
+        select_combo_by_prefix(combo, category_name)
+    else:
+        select_combo_by_prefix(combo, "Nueva categoría...")
+        time.sleep(0.15)
+        cc_now = locate_combo_tab_controls(hwnd_main)
+        assert cc_now["txt_category"] is not None, "Campo de texto de nueva categoría de combo no visible"
+        set_edit_text(cc_now["txt_category"], category_name)
 
 
 def click_keypad_seq(hwnd_main, edit_hwnd, seq):
@@ -723,7 +755,8 @@ def run_suite(label, exe_path):
             set_edit_text(cc["txt_name"], "Combo Desayuno")
             set_edit_text(cc["txt_price"], "90.00")
             set_edit_text(cc["txt_sku"], "CMB-13")
-            set_edit_text(cc["txt_category"], "Combos")
+            set_combo_category(hwnd_main, cc, "Combos")
+            cc = locate_combo_tab_controls(hwnd_main)
 
             select_combo_by_prefix(cc["combo_part_prod"], "Café Americano")
             set_edit_text(cc["txt_part_qty"], "2")

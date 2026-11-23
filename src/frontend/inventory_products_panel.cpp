@@ -10,7 +10,9 @@
 #include <wx/filename.h>
 #include <wx/image.h>
 #include <wx/mstream.h>
+#include <wx/settings.h>
 #include <wx/statline.h>
+#include <wx/wrapsizer.h>
 
 #include <algorithm>
 #include <cctype>
@@ -21,6 +23,49 @@
 namespace app::frontend {
 
 namespace {
+
+constexpr int kWideSplitThresholdLogical = 1100;
+constexpr const char* kNewCategoryOptionUtf8 = "Nueva categoría...";
+
+void wrap_static_text_deterministic(wxStaticText* lbl, const wxString& raw, int wrap_w) {
+    if (!lbl) return;
+    const int safe_w = std::max(lbl->FromDIP(100), wrap_w);
+    wxClientDC dc(lbl);
+    dc.SetFont(lbl->GetFont());
+    wxString wrapped;
+    wxString cur_line;
+    int line_count = 0;
+    size_t pos = 0;
+    while (pos < raw.length()) {
+        size_t next = raw.find(wxT(' '), pos);
+        wxString word = (next == wxString::npos) ? raw.Mid(pos) : raw.Mid(pos, next - pos);
+        wxString cand = cur_line.IsEmpty() ? word : (cur_line + wxT(" ") + word);
+        if (!cur_line.IsEmpty() && dc.GetTextExtent(cand).GetWidth() > safe_w) {
+            if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+            wrapped += cur_line;
+            ++line_count;
+            cur_line = word;
+        } else {
+            cur_line = cand;
+        }
+        if (next == wxString::npos) break;
+        pos = next + 1;
+    }
+    if (!cur_line.IsEmpty()) {
+        if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+        wrapped += cur_line;
+        ++line_count;
+    }
+    line_count = std::max(1, line_count);
+    const int line_h = dc.GetTextExtent(wxT("Ág")).GetHeight();
+    const wxSize ext = dc.GetMultiLineTextExtent(wrapped);
+    const int min_h = std::max(ext.GetHeight(), line_count * line_h) + lbl->FromDIP(2);
+
+    lbl->SetMinSize(wxDefaultSize);
+    lbl->SetLabel(wrapped);
+    lbl->InvalidateBestSize();
+    lbl->SetMinSize(wxSize(-1, min_h));
+}
 
 template <typename T, typename = void>
 struct HasIsCombo : std::false_type {};
@@ -255,7 +300,8 @@ void InventoryProductsPanel::build_ui() {
 
     // --- Tarjeta izquierda: Catálogo de productos ---
     list_card_ = new CardPanel(this);
-    list_card_->SetMinSize(FromDIP(wxSize(touch ? 355 : 340, -1)));
+    list_card_->SetMinSize(FromDIP(wxSize(touch ? 372 : 352, -1)));
+    auto* list_card_outer = new wxBoxSizer(wxVERTICAL);
     auto* list_sizer = new wxBoxSizer(wxVERTICAL);
 
     auto* list_top = new wxBoxSizer(wxHORIZONTAL);
@@ -278,14 +324,14 @@ void InventoryProductsPanel::build_ui() {
     ensure_btn_width_fits(btn_refresh_, 88, btn_h_logical);
     btn_refresh_->Bind(wxEVT_BUTTON, &InventoryProductsPanel::on_refresh, this);
     list_top->Add(btn_refresh_, 0, wxALIGN_CENTER_VERTICAL);
-    list_sizer->Add(list_top, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(touch ? 8 : 10));
+    list_sizer->Add(list_top, 0, wxEXPAND);
 
     wxWindow* search_box = ui::make_text_field(
         list_card_, txt_search_, field_h_logical, 120, Theme::get_font_body()
     );
     txt_search_->SetHint(wxT("Buscar por nombre, SKU o código..."));
     txt_search_->Bind(wxEVT_TEXT, &InventoryProductsPanel::on_search_changed, this);
-    list_sizer->Add(search_box, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(touch ? 8 : 10));
+    list_sizer->Add(search_box, 0, wxEXPAND | wxTOP, FromDIP(touch ? 8 : 10));
 
     auto* filter_row = new wxBoxSizer(wxHORIZONTAL);
     if (touch) {
@@ -310,7 +356,7 @@ void InventoryProductsPanel::build_ui() {
     ensure_btn_width_fits(btn_toggle_inactive_, 132, btn_h_logical);
     btn_toggle_inactive_->Bind(wxEVT_BUTTON, &InventoryProductsPanel::on_toggle_inactive, this);
     filter_row->Add(btn_toggle_inactive_, 0, wxALIGN_CENTER_VERTICAL);
-    list_sizer->Add(filter_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(touch ? 6 : 8));
+    list_sizer->Add(filter_row, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
 
     lbl_list_empty_ = new wxStaticText(
         list_card_, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL
@@ -335,14 +381,15 @@ void InventoryProductsPanel::build_ui() {
         ui::apply_touch_row_height(list_);
     }
     list_->Bind(wxEVT_LIST_ITEM_SELECTED, &InventoryProductsPanel::on_product_selected, this);
-    list_sizer->Add(list_, 1, wxEXPAND | wxALL, FromDIP(touch ? 6 : 8));
+    list_sizer->Add(list_, 1, wxEXPAND | wxTOP, FromDIP(touch ? 8 : 8));
 
-    list_card_->SetSizer(list_sizer);
-    main_body_->Add(list_card_, 10, wxEXPAND | wxRIGHT, FromDIP(8));
+    list_card_outer->Add(list_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    list_card_->SetSizer(list_card_outer);
+    main_body_->Add(list_card_, 48, wxEXPAND | wxRIGHT, FromDIP(8));
 
     // --- Tarjeta derecha: Detalle, imagen y receta ---
     detail_card_ = new CardPanel(this);
-    detail_card_->SetMinSize(FromDIP(wxSize(touch ? 345 : 340, -1)));
+    detail_card_->SetMinSize(FromDIP(wxSize(touch ? 320 : 336, -1)));
     auto* detail_outer = new wxBoxSizer(wxVERTICAL);
 
     detail_scroll_ = new wxScrolledWindow(detail_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
@@ -355,57 +402,59 @@ void InventoryProductsPanel::build_ui() {
     lbl_detail_title_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Producto nuevo"));
     lbl_detail_title_->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     lbl_detail_title_->SetForegroundColour(Theme::ColorBrandDeep);
-    detail_sizer_->Add(lbl_detail_title_, 0, wxEXPAND | wxBOTTOM, FromDIP(touch ? 4 : 6));
+    detail_sizer_->Add(lbl_detail_title_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
-    // Fila 1: Nombre y Precio
+    // Fila 1: Nombre y Precio (etiquetas inline en pantalla ancha, apiladas cuando es estrecho)
     auto* row_np = new wxBoxSizer(wxHORIZONTAL);
-    auto* col_name = new wxBoxSizer(wxVERTICAL);
-    auto* lbl_name = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Nombre:"));
-    lbl_name->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_name->SetForegroundColour(Theme::ColorText);
-    col_name->Add(lbl_name, 0, wxEXPAND);
-    wxWindow* name_box = ui::make_text_field(detail_scroll_, txt_name_, field_h_logical, 110, Theme::get_font_body());
-    col_name->Add(name_box, 0, wxEXPAND | wxTOP, FromDIP(2));
-    row_np->Add(col_name, 3, wxEXPAND | wxRIGHT, FromDIP(8));
+    col_name_sizer_ = new wxBoxSizer(wxVERTICAL);
+    lbl_name_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Nombre:"));
+    lbl_name_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_name_->SetForegroundColour(Theme::ColorText);
+    col_name_sizer_->Add(lbl_name_, 0, wxEXPAND);
+    name_box_ = ui::make_text_field(detail_scroll_, txt_name_, field_h_logical, 110, Theme::get_font_body());
+    col_name_sizer_->Add(name_box_, 0, wxEXPAND | wxTOP, FromDIP(6));
+    row_np->Add(col_name_sizer_, 3, wxEXPAND | wxRIGHT, FromDIP(8));
 
-    auto* col_price = new wxBoxSizer(wxVERTICAL);
-    auto* lbl_price = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Precio ($):"));
-    lbl_price->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_price->SetForegroundColour(Theme::ColorText);
-    col_price->Add(lbl_price, 0, wxEXPAND);
-    wxWindow* price_box = ui::make_text_field(detail_scroll_, txt_price_, field_h_logical, 80, Theme::get_font_body());
-    col_price->Add(price_box, 0, wxEXPAND | wxTOP, FromDIP(2));
-    row_np->Add(col_price, 2, wxEXPAND);
+    col_price_sizer_ = new wxBoxSizer(wxVERTICAL);
+    lbl_price_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Precio ($):"));
+    lbl_price_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_price_->SetForegroundColour(Theme::ColorText);
+    col_price_sizer_->Add(lbl_price_, 0, wxEXPAND);
+    price_box_ = ui::make_text_field(detail_scroll_, txt_price_, field_h_logical, 80, Theme::get_font_body());
+    col_price_sizer_->Add(price_box_, 0, wxEXPAND | wxTOP, FromDIP(6));
+    row_np->Add(col_price_sizer_, 2, wxEXPAND);
     detail_sizer_->Add(row_np, 0, wxEXPAND);
 
-    // Fila 2: SKU y Código de barras
-    auto* row_sb = new wxBoxSizer(wxHORIZONTAL);
-    auto* col_sku = new wxBoxSizer(wxVERTICAL);
-    auto* lbl_sku = new wxStaticText(detail_scroll_, wxID_ANY, wxT("SKU:"));
-    lbl_sku->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_sku->SetForegroundColour(Theme::ColorText);
-    col_sku->Add(lbl_sku, 0, wxEXPAND);
+    // Fila 2: SKU y Código de barras (horizontal con reparto 2:3 cuando cabe, apilado en 960x600 estrecho)
+    row_sb_sizer_ = new wxBoxSizer(wxHORIZONTAL);
+    col_sku_sizer_ = new wxBoxSizer(wxVERTICAL);
+    lbl_sku_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("SKU:"));
+    lbl_sku_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_sku_->SetForegroundColour(Theme::ColorText);
+    col_sku_sizer_->Add(lbl_sku_, 0, wxEXPAND);
     wxWindow* sku_box = ui::make_text_field(detail_scroll_, txt_sku_, field_h_logical, 80, Theme::get_font_body());
-    col_sku->Add(sku_box, 0, wxEXPAND | wxTOP, FromDIP(2));
-    row_sb->Add(col_sku, 1, wxEXPAND | wxRIGHT, FromDIP(8));
+    col_sku_sizer_->Add(sku_box, 0, wxEXPAND | wxTOP, FromDIP(6));
+    row_sb_sizer_->Add(col_sku_sizer_, 2, wxEXPAND | wxRIGHT, FromDIP(8));
 
-    auto* col_bc = new wxBoxSizer(wxVERTICAL);
-    auto* lbl_bc = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Código de barras (opcional):"));
-    lbl_bc->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_bc->SetForegroundColour(Theme::ColorText);
-    col_bc->Add(lbl_bc, 0, wxEXPAND);
+    col_bc_sizer_ = new wxBoxSizer(wxVERTICAL);
+    lbl_bc_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Código de barras (opcional):"));
+    lbl_bc_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_bc_->SetForegroundColour(Theme::ColorText);
+    col_bc_sizer_->Add(lbl_bc_, 0, wxEXPAND);
     wxWindow* bc_box = ui::make_text_field(detail_scroll_, txt_barcode_, field_h_logical, 80, Theme::get_font_body());
-    col_bc->Add(bc_box, 0, wxEXPAND | wxTOP, FromDIP(2));
-    row_sb->Add(col_bc, 1, wxEXPAND);
-    detail_sizer_->Add(row_sb, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
+    col_bc_sizer_->Add(bc_box, 0, wxEXPAND | wxTOP, FromDIP(6));
+    row_sb_sizer_->Add(col_bc_sizer_, 3, wxEXPAND);
+    detail_sizer_->Add(row_sb_sizer_, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
 
-    // Fila 3: Categoría (elegir existente o escribir nueva)
-    auto* lbl_cat = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Categoría (elige una o escribe otra nueva):"));
-    lbl_cat->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_cat->SetForegroundColour(Theme::ColorText);
-    detail_sizer_->Add(lbl_cat, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
+    // Fila 3: Categoría (desplegable único + "Nueva categoría...") y Tipo de producto
+    cat_type_sizer_ = new wxBoxSizer(wxHORIZONTAL);
 
-    auto* cat_row = new wxBoxSizer(wxHORIZONTAL);
+    col_cat_sizer_ = new wxBoxSizer(wxVERTICAL);
+    lbl_cat_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Categoría:"));
+    lbl_cat_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_cat_->SetForegroundColour(Theme::ColorText);
+    col_cat_sizer_->Add(lbl_cat_, 0, wxEXPAND);
+
     if (touch) {
         cb_category_ = new ui::TouchComboBox(
             detail_scroll_, wxID_ANY, wxSize(-1, FromDIP(field_h_logical)), wxArrayString()
@@ -413,73 +462,74 @@ void InventoryProductsPanel::build_ui() {
         cb_category_->SetFont(Theme::get_font_body());
         cb_category_->SetMinSize(wxSize(FromDIP(130), FromDIP(field_h_logical)));
         cb_category_->Bind(wxEVT_COMBOBOX, &InventoryProductsPanel::on_category_combo_changed, this);
-        cat_row->Add(cb_category_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
+        col_cat_sizer_->Add(cb_category_, 0, wxEXPAND | wxTOP, FromDIP(6));
     } else {
         ch_category_ = new wxChoice(detail_scroll_, wxID_ANY);
         ch_category_->SetFont(Theme::get_font_body());
         ch_category_->SetMinSize(wxSize(FromDIP(130), FromDIP(field_h_logical)));
         ch_category_->Bind(wxEVT_CHOICE, &InventoryProductsPanel::on_category_combo_changed, this);
-        cat_row->Add(ch_category_, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
+        col_cat_sizer_->Add(ch_category_, 0, wxEXPAND | wxTOP, FromDIP(6));
     }
-    wxWindow* cat_box = ui::make_text_field(detail_scroll_, txt_category_, field_h_logical, 100, Theme::get_font_body());
-    txt_category_->SetHint(wxT("Categoría..."));
-    cat_row->Add(cat_box, 1, wxALIGN_CENTER_VERTICAL);
-    detail_sizer_->Add(cat_row, 0, wxEXPAND | wxTOP, FromDIP(2));
 
-    // Fila 4: Tipo (Preparado | Directo) + Imagen
-    auto* type_img_row = new wxBoxSizer(wxHORIZONTAL);
+    col_type_sizer_ = new wxBoxSizer(wxVERTICAL);
+    lbl_type_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Tipo de producto:"));
+    lbl_type_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_type_->SetForegroundColour(Theme::ColorText);
+    col_type_sizer_->Add(lbl_type_, 0, wxEXPAND);
 
-    auto* type_col = new wxBoxSizer(wxVERTICAL);
-    auto* lbl_type = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Tipo de producto:"));
-    lbl_type->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_type->SetForegroundColour(Theme::ColorText);
-    type_col->Add(lbl_type, 0, wxEXPAND);
-
-    auto* type_btns = new wxBoxSizer(wxHORIZONTAL);
+    type_btns_sizer_ = new wxBoxSizer(wxHORIZONTAL);
     btn_type_direct_ = new wxButton(detail_scroll_, wxID_ANY, wxT("Directo"));
     btn_type_direct_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     btn_type_direct_->Bind(wxEVT_BUTTON, &InventoryProductsPanel::on_type_direct, this);
-    type_btns->Add(btn_type_direct_, 1, wxRIGHT, FromDIP(6));
+    type_btns_sizer_->Add(btn_type_direct_, 1, wxRIGHT, FromDIP(6));
 
     btn_type_prepared_ = new wxButton(detail_scroll_, wxID_ANY, wxT("Preparado"));
     btn_type_prepared_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     btn_type_prepared_->Bind(wxEVT_BUTTON, &InventoryProductsPanel::on_type_prepared, this);
-    type_btns->Add(btn_type_prepared_, 1);
-    type_col->Add(type_btns, 0, wxEXPAND | wxTOP, FromDIP(2));
-    type_img_row->Add(type_col, 1, wxALIGN_TOP | wxRIGHT, FromDIP(8));
+    type_btns_sizer_->Add(btn_type_prepared_, 1);
+    col_type_sizer_->Add(type_btns_sizer_, 0, wxEXPAND | wxTOP, FromDIP(6));
 
-    detail_sizer_->Add(type_img_row, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
+    cat_type_sizer_->Add(col_cat_sizer_, 1, wxEXPAND | wxRIGHT, FromDIP(8));
+    cat_type_sizer_->Add(col_type_sizer_, 1, wxEXPAND);
+    detail_sizer_->Add(cat_type_sizer_, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
 
-    // Fila 4b: Imagen opcional
-    auto* img_row = new wxBoxSizer(wxHORIZONTAL);
+    // Campo de texto para nueva categoría (visible únicamente al elegir "Nueva categoría...")
+    cat_box_ = ui::make_text_field(detail_scroll_, txt_category_, field_h_logical, 100, Theme::get_font_body());
+    txt_category_->SetHint(wxT("Escribe el nombre de la nueva categoría..."));
+    cat_box_->Hide();
+    detail_sizer_->Add(cat_box_, 0, wxEXPAND | wxTOP, FromDIP(6));
+
+    // Fila 4: Imagen opcional (inline en ancho suficiente, apilada en 960x600)
+    img_row_sizer_ = new wxBoxSizer(wxHORIZONTAL);
     const wxSize thumb_sz = FromDIP(wxSize(48, 48));
     bmp_thumb_ = new wxStaticBitmap(detail_scroll_, wxID_ANY, make_placeholder_bitmap(thumb_sz), wxDefaultPosition, thumb_sz);
-    img_row->Add(bmp_thumb_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
+    img_row_sizer_->Add(bmp_thumb_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(8));
 
-    auto* img_btns_col = new wxBoxSizer(wxVERTICAL);
-    lbl_image_status_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Sin imagen"));
-    lbl_image_status_->SetFont(Theme::get_font_small());
-    lbl_image_status_->SetForegroundColour(Theme::ColorTextSecondary);
-    img_btns_col->Add(lbl_image_status_, 0, wxEXPAND);
-
-    auto* img_btn_row = new wxBoxSizer(wxHORIZONTAL);
+    img_right_sizer_ = new wxBoxSizer(wxVERTICAL);
+    auto* img_btn_wrap = new wxWrapSizer(wxHORIZONTAL, wxREMOVE_LEADING_SPACES);
     btn_pick_image_ = new wxButton(detail_scroll_, wxID_ANY, wxT("Elegir imagen"));
     btn_pick_image_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     Theme::style_button_secondary(btn_pick_image_, btn_h_logical);
     ensure_btn_width_fits(btn_pick_image_, 115, btn_h_logical);
     btn_pick_image_->Bind(wxEVT_BUTTON, &InventoryProductsPanel::on_pick_image, this);
-    img_btn_row->Add(btn_pick_image_, 0, wxRIGHT, FromDIP(6));
+    img_btn_wrap->Add(btn_pick_image_, 0, wxRIGHT | wxBOTTOM, FromDIP(6));
 
     btn_remove_image_ = new wxButton(detail_scroll_, wxID_ANY, wxT("Quitar imagen"));
     btn_remove_image_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     Theme::style_button_secondary(btn_remove_image_, btn_h_logical);
     ensure_btn_width_fits(btn_remove_image_, 115, btn_h_logical);
     btn_remove_image_->Bind(wxEVT_BUTTON, &InventoryProductsPanel::on_remove_image, this);
-    img_btn_row->Add(btn_remove_image_, 0);
-    img_btns_col->Add(img_btn_row, 0, wxEXPAND | wxTOP, FromDIP(2));
+    img_btn_wrap->Add(btn_remove_image_, 0, wxBOTTOM, FromDIP(6));
 
-    img_row->Add(img_btns_col, 1, wxALIGN_CENTER_VERTICAL);
-    detail_sizer_->Add(img_row, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
+    lbl_image_status_ = new wxStaticText(detail_scroll_, wxID_ANY, wxT("Sin imagen"));
+    lbl_image_status_->SetFont(Theme::get_font_small());
+    lbl_image_status_->SetForegroundColour(Theme::ColorTextSecondary);
+
+    img_right_sizer_->Add(img_btn_wrap, 0, wxEXPAND);
+    img_right_sizer_->Add(lbl_image_status_, 0, wxEXPAND | wxTOP, FromDIP(2));
+
+    img_row_sizer_->Add(img_right_sizer_, 1, wxALIGN_CENTER_VERTICAL);
+    detail_sizer_->Add(img_row_sizer_, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
 
     // Existencia de productos directos
     pnl_direct_stock_ = new wxPanel(detail_scroll_, wxID_ANY);
@@ -501,10 +551,11 @@ void InventoryProductsPanel::build_ui() {
     lbl_direct_stock_status_->SetForegroundColour(Theme::ColorText);
     direct_stock_sizer->Add(lbl_direct_stock_status_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
 
+    last_direct_stock_hint_ = "Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.";
     lbl_direct_stock_hint_ = new wxStaticText(
         pnl_direct_stock_,
         wxID_ANY,
-        wxT("Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.")
+        wxString::FromUTF8(last_direct_stock_hint_)
     );
     lbl_direct_stock_hint_->SetFont(Theme::get_font_small());
     lbl_direct_stock_hint_->SetForegroundColour(Theme::ColorTextSecondary);
@@ -541,7 +592,8 @@ void InventoryProductsPanel::build_ui() {
     lbl_feedback_ = new wxStaticText(detail_scroll_, wxID_ANY, wxEmptyString);
     lbl_feedback_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_feedback_->SetForegroundColour(Theme::ColorText);
-    detail_sizer_->Add(lbl_feedback_, 0, wxEXPAND | wxTOP, FromDIP(4));
+    lbl_feedback_->Hide();
+    detail_sizer_->Add(lbl_feedback_, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     // --- Sección Receta (solo productos preparados) ---
     pnl_recipe_ = new wxPanel(detail_scroll_, wxID_ANY);
@@ -553,18 +605,37 @@ void InventoryProductsPanel::build_ui() {
     auto* lbl_rcp_title = new wxStaticText(pnl_recipe_, wxID_ANY, wxT("Receta por porción"));
     lbl_rcp_title->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     lbl_rcp_title->SetForegroundColour(Theme::ColorBrandDeep);
-    recipe_sizer_->Add(lbl_rcp_title, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+    recipe_sizer_->Add(lbl_rcp_title, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     lbl_recipe_new_hint_ = new wxStaticText(
         pnl_recipe_, wxID_ANY, wxT("Guarda primero el producto para capturar su receta.")
     );
     lbl_recipe_new_hint_->SetFont(Theme::get_font_small());
     lbl_recipe_new_hint_->SetForegroundColour(Theme::ColorTextSecondary);
-    recipe_sizer_->Add(lbl_recipe_new_hint_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+    recipe_sizer_->Add(lbl_recipe_new_hint_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     pnl_recipe_editor_ = new wxPanel(pnl_recipe_, wxID_ANY);
     pnl_recipe_editor_->SetBackgroundColour(Theme::ColorSurface);
     auto* rcp_ed_sizer = new wxBoxSizer(wxVERTICAL);
+
+    // Franja compacta de costo por porción y margen (visible sin desplazarse en 1200x720 y pantalla completa)
+    pnl_costing_ = new wxPanel(pnl_recipe_editor_, wxID_ANY);
+    pnl_costing_->SetBackgroundColour(Theme::ColorSurfaceSubtle);
+    cost_sizer_ = new wxBoxSizer(wxVERTICAL);
+    lbl_cost_ = new wxStaticText(pnl_costing_, wxID_ANY, wxEmptyString);
+    lbl_cost_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_cost_->SetForegroundColour(Theme::ColorText);
+    cost_sizer_->Add(lbl_cost_, 0, wxEXPAND);
+
+    lbl_margin_ = new wxStaticText(pnl_costing_, wxID_ANY, wxEmptyString);
+    lbl_margin_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_margin_->SetForegroundColour(Theme::ColorSuccess);
+    cost_sizer_->Add(lbl_margin_, 0, wxEXPAND | wxTOP, FromDIP(4));
+
+    auto* cost_outer = new wxBoxSizer(wxVERTICAL);
+    cost_outer->Add(cost_sizer_, 1, wxEXPAND | wxALL, FromDIP(8));
+    pnl_costing_->SetSizer(cost_outer);
+    rcp_ed_sizer->Add(pnl_costing_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     recipe_list_ = new wxListView(
         pnl_recipe_editor_, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(-1, touch ? 132 : 112)),
@@ -622,7 +693,7 @@ void InventoryProductsPanel::build_ui() {
         ch_recipe_unit_->SetMinSize(wxSize(FromDIP(86), FromDIP(field_h_logical)));
         rcp_input_row->Add(ch_recipe_unit_, 0, wxALIGN_CENTER_VERTICAL);
     }
-    rcp_ed_sizer->Add(rcp_input_row, 0, wxEXPAND | wxTOP, FromDIP(3));
+    rcp_ed_sizer->Add(rcp_input_row, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     auto* rcp_btn_row = new wxBoxSizer(wxHORIZONTAL);
     btn_recipe_add_ = new wxButton(pnl_recipe_editor_, wxID_ANY, wxT("Añadir o cambiar"));
@@ -650,25 +721,8 @@ void InventoryProductsPanel::build_ui() {
     lbl_recipe_feedback_ = new wxStaticText(pnl_recipe_editor_, wxID_ANY, wxEmptyString);
     lbl_recipe_feedback_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_recipe_feedback_->SetForegroundColour(Theme::ColorText);
-    rcp_ed_sizer->Add(lbl_recipe_feedback_, 0, wxEXPAND | wxTOP, FromDIP(4));
-
-    pnl_costing_ = new wxPanel(pnl_recipe_editor_, wxID_ANY);
-    pnl_costing_->SetBackgroundColour(Theme::ColorSurfaceSubtle);
-    auto* cost_sizer = new wxBoxSizer(wxVERTICAL);
-    lbl_cost_ = new wxStaticText(pnl_costing_, wxID_ANY, wxEmptyString);
-    lbl_cost_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_cost_->SetForegroundColour(Theme::ColorText);
-    cost_sizer->Add(lbl_cost_, 0, wxEXPAND);
-
-    lbl_margin_ = new wxStaticText(pnl_costing_, wxID_ANY, wxEmptyString);
-    lbl_margin_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_margin_->SetForegroundColour(Theme::ColorSuccess);
-    cost_sizer->Add(lbl_margin_, 0, wxEXPAND | wxTOP, FromDIP(2));
-
-    auto* cost_outer = new wxBoxSizer(wxVERTICAL);
-    cost_outer->Add(cost_sizer, 1, wxEXPAND | wxALL, FromDIP(8));
-    pnl_costing_->SetSizer(cost_outer);
-    rcp_ed_sizer->Add(pnl_costing_, 0, wxEXPAND | wxTOP, FromDIP(6));
+    lbl_recipe_feedback_->Hide();
+    rcp_ed_sizer->Add(lbl_recipe_feedback_, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     pnl_recipe_editor_->SetSizer(rcp_ed_sizer);
     recipe_sizer_->Add(pnl_recipe_editor_, 0, wxEXPAND);
@@ -677,9 +731,9 @@ void InventoryProductsPanel::build_ui() {
     detail_sizer_->Add(pnl_recipe_, 0, wxEXPAND);
 
     detail_scroll_->SetSizer(detail_sizer_);
-    detail_outer->Add(detail_scroll_, 1, wxEXPAND | wxALL, FromDIP(touch ? 8 : 12));
+    detail_outer->Add(detail_scroll_, 1, wxEXPAND | wxALL, FromDIP(16));
     detail_card_->SetSizer(detail_outer);
-    main_body_->Add(detail_card_, 11, wxEXPAND);
+    main_body_->Add(detail_card_, 52, wxEXPAND);
 
     root->Add(main_body_, 1, wxEXPAND);
     SetSizer(root);
@@ -699,7 +753,7 @@ void InventoryProductsPanel::build_ui() {
             add_rect(btn_recipe_save_);
             return rects;
         };
-        keypad_->bind_field(txt_price_, price_box, true, detail_card_, protected_fn);
+        keypad_->bind_field(txt_price_, price_box_, true, detail_card_, protected_fn);
         keypad_->bind_field(txt_recipe_qty_, rcp_qty_box, false, detail_card_, protected_fn);
     }
 
@@ -719,12 +773,22 @@ void InventoryProductsPanel::refresh_all(const std::string& keep_product_id) {
     reload_ingredients_catalog();
     reload_product_list(keep_product_id);
     update_permissions_ui();
+    apply_responsive_layout();
     Layout();
     update_detail_scroll_layout();
 }
 
 void InventoryProductsPanel::reload_categories() {
     const std::string prev_filter = selected_filter_category();
+    std::string prev_cat_choice;
+    const bool was_new_cat = is_new_category_selected();
+    {
+        const int prev_idx = get_selector_index(ch_category_, cb_category_);
+        if (prev_idx >= 0 && static_cast<std::size_t>(prev_idx) < categories_.size()) {
+            prev_cat_choice = categories_[static_cast<std::size_t>(prev_idx)];
+        }
+    }
+
     categories_.clear();
     if (catalog_service_) {
         auto res = catalog_service_->list_categories();
@@ -745,11 +809,25 @@ void InventoryProductsPanel::reload_categories() {
     set_selector_items(ch_filter_cat_, cb_filter_cat_, filter_items, filter_idx);
 
     std::vector<std::string> detail_items;
-    detail_items.push_back("Elegir existente...");
+    detail_items.reserve(categories_.size() + 1);
     for (const auto& c : categories_) {
         detail_items.push_back(c);
     }
-    set_selector_items(ch_category_, cb_category_, detail_items, 0);
+    detail_items.push_back(kNewCategoryOptionUtf8);
+
+    int detail_idx = 0;
+    if (was_new_cat || categories_.empty()) {
+        detail_idx = static_cast<int>(categories_.size());
+    } else if (!prev_cat_choice.empty()) {
+        for (std::size_t i = 0; i < categories_.size(); ++i) {
+            if (categories_[i] == prev_cat_choice) {
+                detail_idx = static_cast<int>(i);
+                break;
+            }
+        }
+    }
+    set_selector_items(ch_category_, cb_category_, detail_items, detail_idx);
+    sync_category_input_visibility(false);
 }
 
 void InventoryProductsPanel::reload_ingredients_catalog() {
@@ -890,27 +968,30 @@ void InventoryProductsPanel::update_list_column_widths() {
     int max_name = dc.GetTextExtent(wxT("Nombre")).GetWidth();
     int max_cat = dc.GetTextExtent(wxT("Categoría")).GetWidth();
     int max_price = dc.GetTextExtent(wxT("Precio")).GetWidth();
-    const int type_w = std::max(
-        dc.GetTextExtent(wxT("Tipo")).GetWidth(),
-        dc.GetTextExtent(wxT("Preparado")).GetWidth()
-    );
-    const int state_w = std::max(
-        dc.GetTextExtent(wxT("Estado")).GetWidth(),
-        dc.GetTextExtent(wxT("Dado de baja")).GetWidth()
-    );
+    int max_type = dc.GetTextExtent(wxT("Tipo")).GetWidth();
+    int max_state = dc.GetTextExtent(wxT("Estado")).GetWidth();
     for (const auto& p : products_) {
         max_name = std::max(max_name, dc.GetTextExtent(wxString::FromUTF8(p.name)).GetWidth());
         max_cat = std::max(max_cat, dc.GetTextExtent(wxString::FromUTF8(p.category)).GetWidth());
         max_price = std::max(max_price, dc.GetTextExtent(wxString::FromUTF8(p.price.to_string())).GetWidth());
+        max_type = std::max(
+            max_type,
+            dc.GetTextExtent(p.is_prepared ? wxT("Preparado") : wxT("Directo")).GetWidth()
+        );
+        max_state = std::max(
+            max_state,
+            dc.GetTextExtent(p.is_active ? wxT("Activo") : wxT("Dado de baja")).GetWidth()
+        );
     }
 
     const int pad = 14;
+    const int touch_col0_extra = Theme::is_touch() ? 7 : 0;
     std::vector<ui::ColumnSpec> specs;
-    specs.push_back({wxT("Nombre"), max_name, 0, pad, 0});
+    specs.push_back({wxT("Nombre"), max_name, 0, pad, touch_col0_extra});
     specs.push_back({wxT("Categoría"), max_cat, 0, pad, 0});
     specs.push_back({wxT("Precio"), max_price, 0, pad, 0});
-    specs.push_back({wxT("Tipo"), type_w, 0, pad, 0});
-    specs.push_back({wxT("Estado"), state_w, 0, pad, 0});
+    specs.push_back({wxT("Tipo"), max_type, 0, pad, 0});
+    specs.push_back({wxT("Estado"), max_state, 0, pad, 0});
     ui::distribute_list_columns(list_, specs, 0);
     sizing_columns_ = false;
 }
@@ -963,29 +1044,29 @@ void InventoryProductsPanel::update_type_buttons_ui() {
             chk_track_stock_->Show(is_new);
             lbl_direct_stock_status_->Show(!is_new);
             if (is_new) {
-                lbl_direct_stock_hint_->SetLabel(
-                    wxT("Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.")
-                );
+                last_direct_stock_status_.clear();
+                last_direct_stock_hint_ = "Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.";
+                lbl_direct_stock_hint_->SetLabel(wxString::FromUTF8(last_direct_stock_hint_));
                 lbl_direct_stock_hint_->Show(true);
                 btn_enable_stock_->Show(false);
             } else if (editing_stock_tracked_) {
-                lbl_direct_stock_status_->SetLabel(wxString::Format(
+                last_direct_stock_status_ = std::string(wxString::Format(
                     wxT("Existencia controlada (%lld %s)"),
                     editing_stock_units_,
                     editing_stock_units_ == 1 ? wxT("pieza") : wxT("piezas")
-                ));
+                ).ToUTF8().data());
+                lbl_direct_stock_status_->SetLabel(wxString::FromUTF8(last_direct_stock_status_));
                 lbl_direct_stock_status_->SetForegroundColour(Theme::ColorSuccess);
-                lbl_direct_stock_hint_->SetLabel(
-                    wxT("Puedes registrar compras y mermas desde Reabastecimiento y Barra.")
-                );
+                last_direct_stock_hint_ = "Puedes registrar compras y mermas desde Reabastecimiento y Barra.";
+                lbl_direct_stock_hint_->SetLabel(wxString::FromUTF8(last_direct_stock_hint_));
                 lbl_direct_stock_hint_->Show(true);
                 btn_enable_stock_->Show(false);
             } else {
-                lbl_direct_stock_status_->SetLabel(wxT("Sin control de existencia"));
+                last_direct_stock_status_ = "Sin control de existencia";
+                lbl_direct_stock_status_->SetLabel(wxString::FromUTF8(last_direct_stock_status_));
                 lbl_direct_stock_status_->SetForegroundColour(Theme::ColorTextSecondary);
-                lbl_direct_stock_hint_->SetLabel(
-                    wxT("Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.")
-                );
+                last_direct_stock_hint_ = "Se creará un ingrediente por piezas con el mismo nombre para registrar compras y mermas.";
+                lbl_direct_stock_hint_->SetLabel(wxString::FromUTF8(last_direct_stock_hint_));
                 lbl_direct_stock_hint_->Show(true);
                 btn_enable_stock_->Show(true);
             }
@@ -1011,37 +1092,336 @@ void InventoryProductsPanel::update_recipe_unit_choices() {
     set_selector_items(ch_recipe_unit_, cb_recipe_unit_, recipe_units_, idx);
 }
 
+void InventoryProductsPanel::apply_responsive_layout() {
+    if (destroying_ || !main_body_ || !list_card_ || !detail_card_) return;
+    const int panel_w = GetClientSize().GetWidth();
+    if (panel_w <= 0) return;
+
+    const bool want_wide = panel_w >= FromDIP(kWideSplitThresholdLogical);
+    if (want_wide != wide_split_active_) {
+        wide_split_active_ = want_wide;
+        if (auto* item_l = main_body_->GetItem(list_card_)) {
+            item_l->SetProportion(want_wide ? 52 : 48);
+        }
+        if (auto* item_d = main_body_->GetItem(detail_card_)) {
+            item_d->SetProportion(want_wide ? 48 : 52);
+        }
+        Layout();
+    }
+}
+
+bool InventoryProductsPanel::is_new_category_selected() const {
+    const int idx = get_selector_index(ch_category_, cb_category_);
+    return idx >= static_cast<int>(categories_.size());
+}
+
+void InventoryProductsPanel::sync_category_input_visibility(bool focus_new_input) {
+    if (!cat_box_) return;
+    const bool show_new = is_new_category_selected();
+    if (cat_box_->IsShown() != show_new) {
+        cat_box_->Show(show_new);
+    }
+    if (!show_new && txt_category_) {
+        txt_category_->ChangeValue(wxEmptyString);
+    }
+    if (show_new && focus_new_input && txt_category_) {
+        txt_category_->SetFocus();
+    }
+}
+
+std::string InventoryProductsPanel::resolve_selected_category(std::string& out_error) const {
+    out_error.clear();
+    if (is_new_category_selected()) {
+        const std::string typed = txt_category_
+            ? trim_ascii(std::string(txt_category_->GetValue().ToUTF8().data()))
+            : std::string();
+        if (typed.empty()) {
+            out_error = "Escribe el nombre de la nueva categoría.";
+            return "";
+        }
+        if (typed == kNewCategoryOptionUtf8) {
+            out_error = "Escribe un nombre válido para la nueva categoría.";
+            return "";
+        }
+        return typed;
+    }
+    const int idx = get_selector_index(ch_category_, cb_category_);
+    if (idx >= 0 && static_cast<std::size_t>(idx) < categories_.size()) {
+        const std::string chosen = trim_ascii(categories_[static_cast<std::size_t>(idx)]);
+        if (chosen.empty() || chosen == kNewCategoryOptionUtf8) {
+            out_error = "Selecciona una categoría válida.";
+            return "";
+        }
+        return chosen;
+    }
+    out_error = "Selecciona una categoría o crea una nueva.";
+    return "";
+}
+
 void InventoryProductsPanel::update_detail_scroll_layout() {
     if (!detail_scroll_ || !detail_sizer_) return;
-    if (lbl_feedback_) {
-        const int wrap_w = std::max(FromDIP(180), detail_scroll_->GetClientSize().GetWidth() - FromDIP(16));
-        lbl_feedback_->SetLabel(wxString::FromUTF8(last_feedback_));
-        lbl_feedback_->Wrap(wrap_w);
-    }
-    if (lbl_recipe_feedback_) {
-        const int wrap_w = std::max(FromDIP(180), detail_scroll_->GetClientSize().GetWidth() - FromDIP(16));
-        lbl_recipe_feedback_->SetLabel(wxString::FromUTF8(last_recipe_feedback_));
-        lbl_recipe_feedback_->Wrap(wrap_w);
-    }
-    if (lbl_cost_ && pnl_costing_ && pnl_costing_->IsShown()) {
-        const int wrap_w = std::max(FromDIP(160), detail_scroll_->GetClientSize().GetWidth() - FromDIP(32));
-        lbl_cost_->Wrap(wrap_w);
-        lbl_margin_->Wrap(wrap_w);
-    }
-    if (pnl_direct_stock_ && pnl_direct_stock_->IsShown()) {
-        const int wrap_w = std::max(FromDIP(160), detail_scroll_->GetClientSize().GetWidth() - FromDIP(32));
-        if (lbl_direct_stock_status_ && lbl_direct_stock_status_->IsShown()) {
-            lbl_direct_stock_status_->Wrap(wrap_w);
+    const bool touch = Theme::is_touch();
+
+    auto run_pass = [&](int inner_w) {
+        // Regla de fila 1: Nombre y Precio con etiquetas inline cuando caben con campo amplio (umbral calculado)
+        if (col_name_sizer_ && col_price_sizer_ && lbl_name_ && lbl_price_ && name_box_ && price_box_) {
+            const int np_min_w = lbl_name_->GetBestSize().GetWidth() + FromDIP(8) + FromDIP(160) +
+                                 FromDIP(8) + lbl_price_->GetBestSize().GetWidth() + FromDIP(8) + FromDIP(80);
+            const bool want_inline = inner_w >= np_min_w;
+            if (want_inline != np_inline_active_) {
+                np_inline_active_ = want_inline;
+                auto apply_pair = [&](wxBoxSizer* sz, wxStaticText* lbl, wxWindow* box) {
+                    sz->SetOrientation(want_inline ? wxHORIZONTAL : wxVERTICAL);
+                    if (auto* il = sz->GetItem(lbl)) {
+                        il->SetProportion(0);
+                        il->SetFlag(want_inline ? (wxALIGN_CENTER_VERTICAL | wxRIGHT) : wxEXPAND);
+                        il->SetBorder(want_inline ? FromDIP(8) : 0);
+                    }
+                    if (auto* ib = sz->GetItem(box)) {
+                        ib->SetProportion(want_inline ? 1 : 0);
+                        ib->SetFlag(want_inline ? wxALIGN_CENTER_VERTICAL : (wxEXPAND | wxTOP));
+                        ib->SetBorder(want_inline ? 0 : FromDIP(6));
+                    }
+                };
+                apply_pair(col_name_sizer_, lbl_name_, name_box_);
+                apply_pair(col_price_sizer_, lbl_price_, price_box_);
+            }
         }
-        if (lbl_direct_stock_hint_ && lbl_direct_stock_hint_->IsShown()) {
-            lbl_direct_stock_hint_->Wrap(wrap_w);
+
+        // Regla de fila SKU | Código de barras (umbral calculado con controles reales)
+        if (row_sb_sizer_ && col_sku_sizer_ && col_bc_sizer_ && lbl_sku_ && lbl_bc_) {
+            const int sku_min = std::max(lbl_sku_->GetBestSize().GetWidth() + FromDIP(8), FromDIP(90));
+            const int bc_min = std::max(lbl_bc_->GetBestSize().GetWidth() + FromDIP(8), FromDIP(140));
+            const int sb_min_w = sku_min + FromDIP(8) + bc_min + FromDIP(4);
+            const bool want_horiz = inner_w >= sb_min_w;
+            if (want_horiz != sku_bc_horizontal_) {
+                sku_bc_horizontal_ = want_horiz;
+                row_sb_sizer_->SetOrientation(want_horiz ? wxHORIZONTAL : wxVERTICAL);
+                if (auto* it_s = row_sb_sizer_->GetItem(col_sku_sizer_)) {
+                    it_s->SetProportion(want_horiz ? 2 : 0);
+                    it_s->SetFlag(want_horiz ? (wxEXPAND | wxRIGHT) : (wxEXPAND | wxBOTTOM));
+                    it_s->SetBorder(FromDIP(want_horiz ? 8 : 6));
+                }
+                if (auto* it_b = row_sb_sizer_->GetItem(col_bc_sizer_)) {
+                    it_b->SetProportion(want_horiz ? 3 : 0);
+                    it_b->SetFlag(wxEXPAND);
+                    it_b->SetBorder(0);
+                }
+            }
         }
-        pnl_direct_stock_->Layout();
+
+        // Regla de fila combinada Categoría | Tipo de producto (umbral medido en tiempo de ejecución)
+        if (cat_type_sizer_ && col_cat_sizer_ && col_type_sizer_ && btn_type_direct_ && btn_type_prepared_ &&
+            lbl_type_ && lbl_cat_ && type_btns_sizer_) {
+            const int type_btns_w = btn_type_direct_->GetBestSize().GetWidth() + FromDIP(6) +
+                                    btn_type_prepared_->GetBestSize().GetWidth();
+            const int type_min_w = std::max(lbl_type_->GetBestSize().GetWidth(), type_btns_w);
+            const int cat_type_min_w = FromDIP(150) + FromDIP(8) + type_min_w + FromDIP(8);
+            const bool want_horiz = inner_w >= cat_type_min_w;
+            if (want_horiz != cat_type_horizontal_) {
+                cat_type_horizontal_ = want_horiz;
+                cat_type_sizer_->SetOrientation(want_horiz ? wxHORIZONTAL : wxVERTICAL);
+                if (auto* it_cat = cat_type_sizer_->GetItem(col_cat_sizer_)) {
+                    it_cat->SetProportion(want_horiz ? 1 : 0);
+                    it_cat->SetFlag(want_horiz ? (wxEXPAND | wxRIGHT) : (wxEXPAND | wxBOTTOM));
+                    it_cat->SetBorder(FromDIP(want_horiz ? 8 : 6));
+                }
+                if (auto* it_type = cat_type_sizer_->GetItem(col_type_sizer_)) {
+                    it_type->SetProportion(want_horiz ? 1 : 0);
+                    it_type->SetFlag(wxEXPAND);
+                    it_type->SetBorder(0);
+                }
+            }
+
+            // En pantalla ancha, etiquetas "Categoría:" y "Tipo:" inline para ganar altura útil sin apretar márgenes.
+            wxClientDC tdc(lbl_type_);
+            tdc.SetFont(lbl_type_->GetFont());
+            const int short_type_w = tdc.GetTextExtent(wxT("Tipo:")).GetWidth();
+            const int labels_inline_min_w = lbl_cat_->GetBestSize().GetWidth() + FromDIP(8) + FromDIP(145) +
+                                            FromDIP(8) + short_type_w + FromDIP(8) + type_btns_w + FromDIP(8);
+            const bool want_labels_inline = want_horiz && (inner_w >= labels_inline_min_w);
+            if (want_labels_inline != cat_type_labels_inline_) {
+                cat_type_labels_inline_ = want_labels_inline;
+                lbl_type_->SetLabel(want_labels_inline ? wxT("Tipo:") : wxT("Tipo de producto:"));
+                wxWindow* cat_ctrl = cb_category_ ? static_cast<wxWindow*>(cb_category_) : static_cast<wxWindow*>(ch_category_);
+                col_cat_sizer_->SetOrientation(want_labels_inline ? wxHORIZONTAL : wxVERTICAL);
+                if (auto* il = col_cat_sizer_->GetItem(lbl_cat_)) {
+                    il->SetProportion(0);
+                    il->SetFlag(want_labels_inline ? (wxALIGN_CENTER_VERTICAL | wxRIGHT) : wxEXPAND);
+                    il->SetBorder(want_labels_inline ? FromDIP(8) : 0);
+                }
+                if (cat_ctrl) {
+                    if (auto* ic = col_cat_sizer_->GetItem(cat_ctrl)) {
+                        ic->SetProportion(want_labels_inline ? 1 : 0);
+                        ic->SetFlag(want_labels_inline ? wxALIGN_CENTER_VERTICAL : (wxEXPAND | wxTOP));
+                        ic->SetBorder(want_labels_inline ? 0 : FromDIP(6));
+                    }
+                }
+                col_type_sizer_->SetOrientation(want_labels_inline ? wxHORIZONTAL : wxVERTICAL);
+                if (auto* il = col_type_sizer_->GetItem(lbl_type_)) {
+                    il->SetProportion(0);
+                    il->SetFlag(want_labels_inline ? (wxALIGN_CENTER_VERTICAL | wxRIGHT) : wxEXPAND);
+                    il->SetBorder(want_labels_inline ? FromDIP(8) : 0);
+                }
+                if (auto* ib = col_type_sizer_->GetItem(type_btns_sizer_)) {
+                    ib->SetProportion(want_labels_inline ? 1 : 0);
+                    ib->SetFlag(want_labels_inline ? wxALIGN_CENTER_VERTICAL : (wxEXPAND | wxTOP));
+                    ib->SetBorder(want_labels_inline ? 0 : FromDIP(6));
+                }
+            }
+        }
+
+        // Regla de fila de imagen compacta (umbral medido en tiempo de ejecución)
+        if (img_right_sizer_ && bmp_thumb_ && btn_pick_image_ && btn_remove_image_ && lbl_image_status_) {
+            wxClientDC idc(lbl_image_status_);
+            idc.SetFont(lbl_image_status_->GetFont());
+            const int status_w = std::max(
+                FromDIP(80),
+                idc.GetTextExtent(lbl_image_status_->GetLabel()).GetWidth() + FromDIP(8)
+            );
+            const int img_inline_min_w = bmp_thumb_->GetMinSize().GetWidth() + FromDIP(8) +
+                                         btn_pick_image_->GetBestSize().GetWidth() + FromDIP(6) +
+                                         btn_remove_image_->GetBestSize().GetWidth() + FromDIP(8) +
+                                         status_w;
+            const bool want_inline = inner_w >= img_inline_min_w;
+            if (want_inline != img_inline_active_) {
+                img_inline_active_ = want_inline;
+                img_right_sizer_->SetOrientation(want_inline ? wxHORIZONTAL : wxVERTICAL);
+                if (auto* it_st = img_right_sizer_->GetItem(lbl_image_status_)) {
+                    if (want_inline) {
+                        it_st->SetFlag(wxALIGN_CENTER_VERTICAL | wxLEFT);
+                        it_st->SetBorder(FromDIP(8));
+                    } else {
+                        it_st->SetFlag(wxEXPAND | wxTOP);
+                        it_st->SetBorder(FromDIP(2));
+                    }
+                }
+            }
+        }
+
+        const int wrap_w = std::max(FromDIP(140), inner_w - FromDIP(10));
+        if (lbl_feedback_) {
+            const bool has_fb = !last_feedback_.empty();
+            lbl_feedback_->Show(has_fb);
+            if (has_fb) {
+                wrap_static_text_deterministic(lbl_feedback_, wxString::FromUTF8(last_feedback_), wrap_w);
+            }
+        }
+        if (lbl_recipe_feedback_) {
+            const bool has_rfb = !last_recipe_feedback_.empty();
+            lbl_recipe_feedback_->Show(has_rfb);
+            if (has_rfb) {
+                wrap_static_text_deterministic(lbl_recipe_feedback_, wxString::FromUTF8(last_recipe_feedback_), wrap_w);
+            }
+        }
+        if (lbl_cost_ && pnl_costing_ && pnl_costing_->IsShown() && cost_sizer_) {
+            const int cost_wrap_w = std::max(FromDIP(140), inner_w - FromDIP(22));
+            const bool margin_vis = lbl_margin_ && lbl_margin_->IsShown() && !last_margin_text_.empty();
+            bool want_cost_horiz = false;
+            if (margin_vis) {
+                wxClientDC cdc(lbl_cost_);
+                cdc.SetFont(lbl_cost_->GetFont());
+                const int cw = cdc.GetTextExtent(wxString::FromUTF8(last_cost_text_)).GetWidth();
+                wxClientDC mdc(lbl_margin_);
+                mdc.SetFont(lbl_margin_->GetFont());
+                const int mw = mdc.GetTextExtent(wxString::FromUTF8(last_margin_text_)).GetWidth();
+                want_cost_horiz = (cw + mw + FromDIP(24) <= cost_wrap_w);
+            }
+            if (want_cost_horiz != costing_horizontal_) {
+                costing_horizontal_ = want_cost_horiz;
+                cost_sizer_->SetOrientation(want_cost_horiz ? wxHORIZONTAL : wxVERTICAL);
+                if (auto* it_c = cost_sizer_->GetItem(lbl_cost_)) {
+                    it_c->SetProportion(0);
+                    it_c->SetFlag(want_cost_horiz ? (wxALIGN_CENTER_VERTICAL | wxRIGHT) : wxEXPAND);
+                    it_c->SetBorder(want_cost_horiz ? FromDIP(16) : 0);
+                }
+                if (auto* it_m = cost_sizer_->GetItem(lbl_margin_)) {
+                    it_m->SetProportion(0);
+                    it_m->SetFlag(want_cost_horiz ? wxALIGN_CENTER_VERTICAL : (wxEXPAND | wxTOP));
+                    it_m->SetBorder(want_cost_horiz ? 0 : FromDIP(4));
+                }
+            }
+            if (want_cost_horiz) {
+                lbl_cost_->SetMinSize(wxDefaultSize);
+                lbl_cost_->SetLabel(wxString::FromUTF8(last_cost_text_));
+                lbl_cost_->InvalidateBestSize();
+                lbl_margin_->SetMinSize(wxDefaultSize);
+                lbl_margin_->SetLabel(wxString::FromUTF8(last_margin_text_));
+                lbl_margin_->InvalidateBestSize();
+            } else {
+                wrap_static_text_deterministic(lbl_cost_, wxString::FromUTF8(last_cost_text_), cost_wrap_w);
+                if (margin_vis) {
+                    wrap_static_text_deterministic(lbl_margin_, wxString::FromUTF8(last_margin_text_), cost_wrap_w);
+                }
+            }
+            pnl_costing_->Layout();
+        }
+        if (pnl_direct_stock_ && pnl_direct_stock_->IsShown()) {
+            const int ds_wrap_w = std::max(FromDIP(140), inner_w - FromDIP(16));
+            if (lbl_direct_stock_status_ && lbl_direct_stock_status_->IsShown() && !last_direct_stock_status_.empty()) {
+                wrap_static_text_deterministic(lbl_direct_stock_status_, wxString::FromUTF8(last_direct_stock_status_), ds_wrap_w);
+            }
+            if (lbl_direct_stock_hint_ && lbl_direct_stock_hint_->IsShown() && !last_direct_stock_hint_.empty()) {
+                // Conservar el texto sin '\n' artificiales y reservar la altura exacta para el ajuste nativo del control Static.
+                const wxString raw_hint = wxString::FromUTF8(last_direct_stock_hint_);
+                wxClientDC hdc(lbl_direct_stock_hint_);
+                hdc.SetFont(lbl_direct_stock_hint_->GetFont());
+                int line_count = 1;
+                wxString cur;
+                size_t pos = 0;
+                while (pos < raw_hint.length()) {
+                    size_t next = raw_hint.find(wxT(' '), pos);
+                    wxString word = (next == wxString::npos) ? raw_hint.Mid(pos) : raw_hint.Mid(pos, next - pos);
+                    wxString cand = cur.IsEmpty() ? word : (cur + wxT(" ") + word);
+                    if (!cur.IsEmpty() && hdc.GetTextExtent(cand).GetWidth() > ds_wrap_w) {
+                        ++line_count;
+                        cur = word;
+                    } else {
+                        cur = cand;
+                    }
+                    if (next == wxString::npos) break;
+                    pos = next + 1;
+                }
+                const int line_h = hdc.GetTextExtent(wxT("Ág")).GetHeight();
+                lbl_direct_stock_hint_->SetMinSize(wxDefaultSize);
+                lbl_direct_stock_hint_->SetLabel(raw_hint);
+                lbl_direct_stock_hint_->InvalidateBestSize();
+                lbl_direct_stock_hint_->SetMinSize(wxSize(FromDIP(60), line_count * line_h + FromDIP(2)));
+            }
+            pnl_direct_stock_->Layout();
+        }
+
+        if (recipe_list_ && pnl_recipe_editor_ && pnl_recipe_editor_->IsShown()) {
+            const int base_h = FromDIP(touch ? 132 : 112);
+            recipe_list_->SetMinSize(wxSize(-1, base_h));
+            pnl_recipe_editor_->Layout();
+            pnl_recipe_->Layout();
+            detail_sizer_->Layout();
+            const int avail_h = detail_scroll_->GetClientSize().GetHeight();
+            const int min_h = detail_sizer_->GetMinSize().GetHeight();
+            if (avail_h > min_h + FromDIP(8)) {
+                const int extra = avail_h - min_h - FromDIP(4);
+                recipe_list_->SetMinSize(wxSize(-1, base_h + extra));
+            }
+        }
+
+        if (pnl_recipe_editor_) pnl_recipe_editor_->Layout();
+        if (pnl_recipe_) pnl_recipe_->Layout();
+        detail_sizer_->Layout();
+        detail_scroll_->FitInside();
+        detail_scroll_->Layout();
+        if (detail_card_) detail_card_->Layout();
+    };
+
+    const int w1 = std::max(FromDIP(180), detail_scroll_->GetClientSize().GetWidth());
+    run_pass(w1);
+    const int w2 = std::max(FromDIP(180), detail_scroll_->GetClientSize().GetWidth());
+    if (w2 != w1) {
+        run_pass(w2);
     }
-    detail_sizer_->Layout();
-    detail_scroll_->FitInside();
-    detail_scroll_->Layout();
-    if (detail_card_) detail_card_->Layout();
+    if (pnl_recipe_editor_ && pnl_recipe_editor_->IsShown()) {
+        update_recipe_column_widths();
+    }
 }
 
 void InventoryProductsPanel::start_new_product() {
@@ -1072,6 +1452,7 @@ void InventoryProductsPanel::start_new_product() {
     txt_barcode_->ChangeValue(wxEmptyString);
     txt_category_->ChangeValue(wxEmptyString);
     set_selector_index(ch_category_, cb_category_, 0);
+    sync_category_input_visibility(false);
     is_prepared_selected_ = false;
     btn_toggle_active_->Hide();
     clear_image_preview(wxT("Sin imagen"));
@@ -1105,16 +1486,20 @@ void InventoryProductsPanel::load_product_into_form(const std::string& product_i
     txt_price_->ChangeValue(wxString::FromUTF8(format_pesos_plain(p.price)));
     txt_sku_->ChangeValue(wxString::FromUTF8(p.sku));
     txt_barcode_->ChangeValue(wxString::FromUTF8(p.barcode));
-    txt_category_->ChangeValue(wxString::FromUTF8(p.category));
-
-    int cat_sel = 0;
+    int cat_sel = static_cast<int>(categories_.size());
     for (std::size_t i = 0; i < categories_.size(); ++i) {
         if (categories_[i] == p.category) {
-            cat_sel = static_cast<int>(i + 1);
+            cat_sel = static_cast<int>(i);
             break;
         }
     }
     set_selector_index(ch_category_, cb_category_, cat_sel);
+    if (cat_sel >= static_cast<int>(categories_.size())) {
+        txt_category_->ChangeValue(wxString::FromUTF8(p.category));
+    } else {
+        txt_category_->ChangeValue(wxEmptyString);
+    }
+    sync_category_input_visibility(false);
 
     is_prepared_selected_ = p.is_prepared;
     btn_toggle_active_->SetLabel(p.is_active ? wxT("Dar de baja") : wxT("Reactivar"));
@@ -1207,15 +1592,17 @@ void InventoryProductsPanel::reload_recipe_and_costing() {
 
     auto cost_res = catalog_service_->get_recipe_costing(editing_product_id_);
     if (!cost_res.is_success()) {
+        last_margin_text_.clear();
         if (cost_res.error_code() == contracts::ErrorCode::NotFound) {
-            lbl_cost_->SetLabel(wxT("Todavía no hay receta guardada para calcular el costo."));
+            last_cost_text_ = "Todavía no hay receta guardada para calcular el costo.";
             lbl_cost_->SetForegroundColour(Theme::ColorTextSecondary);
             lbl_margin_->Hide();
         } else {
-            lbl_cost_->SetLabel(wxString::FromUTF8(cost_res.error_message()));
+            last_cost_text_ = cost_res.error_message();
             lbl_cost_->SetForegroundColour(Theme::ColorError);
             lbl_margin_->Hide();
         }
+        lbl_cost_->SetLabel(wxString::FromUTF8(last_cost_text_));
         update_detail_scroll_layout();
         return;
     }
@@ -1227,10 +1614,11 @@ void InventoryProductsPanel::reload_recipe_and_costing() {
             if (i > 0) names += ", ";
             names += c.unknown_ingredient_names[i];
         }
-        const std::string msg = names.empty()
+        last_cost_text_ = names.empty()
             ? "Falta registrar compras para calcular el costo."
             : "Falta registrar una compra de: " + names;
-        lbl_cost_->SetLabel(wxString::FromUTF8(msg));
+        last_margin_text_.clear();
+        lbl_cost_->SetLabel(wxString::FromUTF8(last_cost_text_));
         lbl_cost_->SetForegroundColour(Theme::ColorError);
         lbl_margin_->Hide();
     } else {
@@ -1238,7 +1626,8 @@ void InventoryProductsPanel::reload_recipe_and_costing() {
         if (c.uses_last_known_cost) {
             cost_line += " (se usó el último costo conocido)";
         }
-        lbl_cost_->SetLabel(wxString::FromUTF8(cost_line));
+        last_cost_text_ = cost_line;
+        lbl_cost_->SetLabel(wxString::FromUTF8(last_cost_text_));
         lbl_cost_->SetForegroundColour(Theme::ColorText);
 
         if (c.margin_known) {
@@ -1246,10 +1635,12 @@ void InventoryProductsPanel::reload_recipe_and_costing() {
             if (c.margin_percent_known) {
                 margin_line += " (" + format_margin_percent(c.margin_basis_points) + ")";
             }
-            lbl_margin_->SetLabel(wxString::FromUTF8(margin_line));
+            last_margin_text_ = margin_line;
+            lbl_margin_->SetLabel(wxString::FromUTF8(last_margin_text_));
             lbl_margin_->SetForegroundColour(c.margin.cents() < 0 ? Theme::ColorError : Theme::ColorSuccess);
             lbl_margin_->Show();
         } else {
+            last_margin_text_.clear();
             lbl_margin_->Hide();
         }
     }
@@ -1342,10 +1733,8 @@ void InventoryProductsPanel::on_product_selected(wxListEvent& event) {
 
 void InventoryProductsPanel::on_category_combo_changed(wxCommandEvent&) {
     if (destroying_) return;
-    const int idx = get_selector_index(ch_category_, cb_category_);
-    if (idx > 0 && static_cast<std::size_t>(idx - 1) < categories_.size()) {
-        txt_category_->ChangeValue(wxString::FromUTF8(categories_[static_cast<std::size_t>(idx - 1)]));
-    }
+    sync_category_input_visibility(true);
+    update_detail_scroll_layout();
 }
 
 void InventoryProductsPanel::on_type_prepared(wxCommandEvent&) {
@@ -1450,8 +1839,14 @@ void InventoryProductsPanel::on_save_product(wxCommandEvent&) {
     const std::string name = trim_ascii(std::string(txt_name_->GetValue().ToUTF8().data()));
     const std::string sku = trim_ascii(std::string(txt_sku_->GetValue().ToUTF8().data()));
     const std::string barcode = trim_ascii(std::string(txt_barcode_->GetValue().ToUTF8().data()));
-    const std::string category = trim_ascii(std::string(txt_category_->GetValue().ToUTF8().data()));
+    std::string cat_err;
+    const std::string category = resolve_selected_category(cat_err);
     const std::string price_raw = trim_ascii(std::string(txt_price_->GetValue().ToUTF8().data()));
+
+    if (!cat_err.empty()) {
+        set_feedback(cat_err, true);
+        return;
+    }
 
     if (price_raw.empty()) {
         set_feedback("Escribe el precio en pesos.", true);
@@ -1658,6 +2053,8 @@ void InventoryProductsPanel::on_size(wxSizeEvent& event) {
     event.Skip();
     CallAfter([this]() {
         if (destroying_ || IsBeingDeleted()) return;
+        apply_responsive_layout();
+        Layout();
         update_empty_state();
         update_list_column_widths();
         if (pnl_recipe_editor_ && pnl_recipe_editor_->IsShown()) {

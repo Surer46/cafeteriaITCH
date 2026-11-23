@@ -66,6 +66,10 @@ private:
     void update_promo_scope_ui();
     void update_promo_detail_scroll();
     void update_combo_detail_scroll();
+    void apply_responsive_layout();
+    void sync_combo_category_visibility(bool focus_new_input = false);
+    bool is_combo_new_category_selected() const;
+    std::string resolve_combo_category(std::string& out_error) const;
 
     void reload_catalog_sources();
     void reload_promotions(const std::string& keep_id = "");
@@ -165,6 +169,18 @@ private:
     bool editing_combo_active_{true};
     std::string last_combo_feedback_;
     bool last_combo_feedback_err_{false};
+    std::string last_combo_cost_text_;
+    std::string last_combo_margin_text_;
+
+    bool wide_split_active_{false};
+    bool promo_name_inline_{false};
+    bool promo_kind_inline_{false};
+    bool promo_val_inline_{false};
+    bool promo_scope_inline_{false};
+    bool promo_prio_inline_{false};
+    bool promo_vig_4col_{false};
+    bool promo_days_inline_{false};
+    bool combo_sku_cat_horizontal_{false};
 
     wxPanel* pnl_no_permission_{nullptr};
     wxBoxSizer* root_sizer_{nullptr};
@@ -174,6 +190,7 @@ private:
 
     // Controles Promociones
     wxPanel* pnl_promos_{nullptr};
+    wxBoxSizer* promo_split_{nullptr};
     CardPanel* promo_list_card_{nullptr};
     wxButton* btn_promo_new_{nullptr};
     wxButton* btn_promo_refresh_{nullptr};
@@ -187,31 +204,64 @@ private:
     wxScrolledWindow* promo_detail_scroll_{nullptr};
     wxBoxSizer* promo_detail_sizer_{nullptr};
     wxStaticText* lbl_promo_detail_title_{nullptr};
+    wxBoxSizer* promo_name_sizer_{nullptr};
+    wxStaticText* lbl_promo_name_{nullptr};
+    wxWindow* pname_box_{nullptr};
     wxTextCtrl* txt_promo_name_{nullptr};
+    wxBoxSizer* promo_kind_outer_{nullptr};
+    wxStaticText* lbl_kind_{nullptr};
+    wxSizer* kind_wrap_{nullptr};
     wxButton* btn_kind_percent_{nullptr};
     wxButton* btn_kind_fixed_{nullptr};
     wxButton* btn_kind_nxm_{nullptr};
 
     wxPanel* pnl_kind_percent_{nullptr};
+    wxBoxSizer* kp_sizer_{nullptr};
+    wxStaticText* lbl_pct_{nullptr};
+    wxWindow* pct_box_{nullptr};
     wxTextCtrl* txt_promo_percent_{nullptr};
     wxPanel* pnl_kind_fixed_{nullptr};
+    wxBoxSizer* kf_sizer_{nullptr};
+    wxStaticText* lbl_fix_{nullptr};
+    wxWindow* fix_box_{nullptr};
     wxTextCtrl* txt_promo_fixed_{nullptr};
     wxPanel* pnl_kind_nxm_{nullptr};
+    wxBoxSizer* col_buy_sizer_{nullptr};
+    wxBoxSizer* col_pay_sizer_{nullptr};
+    wxStaticText* lbl_buy_{nullptr};
+    wxStaticText* lbl_pay_{nullptr};
+    wxWindow* buy_box_{nullptr};
+    wxWindow* pay_box_{nullptr};
     wxTextCtrl* txt_promo_buy_{nullptr};
     wxTextCtrl* txt_promo_pay_{nullptr};
 
+    wxBoxSizer* promo_scope_outer_{nullptr};
+    wxStaticText* lbl_scope_{nullptr};
+    wxBoxSizer* scope_row_sizer_{nullptr};
     wxButton* btn_scope_product_{nullptr};
     wxButton* btn_scope_category_{nullptr};
     wxPanel* pnl_scope_product_{nullptr};
+    wxStaticText* lbl_sp_hint_{nullptr};
     wxListView* promo_products_list_{nullptr};
     wxPanel* pnl_scope_category_{nullptr};
     wxChoice* ch_promo_cat_{nullptr};
     ui::TouchComboBox* cb_promo_cat_{nullptr};
 
+    wxBoxSizer* promo_prio_sizer_{nullptr};
+    wxStaticText* lbl_prio_{nullptr};
+    wxWindow* prio_box_{nullptr};
     wxTextCtrl* txt_promo_priority_{nullptr};
     wxStaticText* lbl_priority_hint_{nullptr};
+    wxFlexGridSizer* vig_grid_{nullptr};
+    wxStaticText* lbl_df_{nullptr};
+    wxStaticText* lbl_dt_{nullptr};
+    wxStaticText* lbl_tf_{nullptr};
+    wxStaticText* lbl_tt_{nullptr};
     wxTextCtrl* txt_promo_valid_from_{nullptr};
     wxTextCtrl* txt_promo_valid_to_{nullptr};
+    wxBoxSizer* promo_days_outer_{nullptr};
+    wxStaticText* lbl_days_{nullptr};
+    wxSizer* days_wrap_{nullptr};
     wxCheckBox* chk_weekdays_[7]{nullptr};
     wxTextCtrl* txt_promo_time_from_{nullptr};
     wxTextCtrl* txt_promo_time_to_{nullptr};
@@ -222,6 +272,7 @@ private:
 
     // Controles Combos
     wxPanel* pnl_combos_{nullptr};
+    wxBoxSizer* combo_split_{nullptr};
     CardPanel* combo_list_card_{nullptr};
     wxButton* btn_combo_new_{nullptr};
     wxButton* btn_combo_refresh_{nullptr};
@@ -236,9 +287,14 @@ private:
     wxStaticText* lbl_combo_detail_title_{nullptr};
     wxTextCtrl* txt_combo_name_{nullptr};
     wxTextCtrl* txt_combo_price_{nullptr};
+    wxBoxSizer* combo_sku_cat_sizer_{nullptr};
+    wxBoxSizer* combo_col_sku_{nullptr};
+    wxBoxSizer* combo_col_cat_{nullptr};
+    wxStaticText* lbl_combo_sku_{nullptr};
     wxTextCtrl* txt_combo_sku_{nullptr};
     wxChoice* ch_combo_cat_{nullptr};
     ui::TouchComboBox* cb_combo_cat_{nullptr};
+    wxWindow* combo_cat_box_{nullptr};
     wxTextCtrl* txt_combo_category_{nullptr};
 
     wxListView* combo_parts_list_{nullptr};

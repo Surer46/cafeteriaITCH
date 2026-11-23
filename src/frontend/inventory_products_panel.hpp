@@ -50,6 +50,10 @@ private:
     void update_type_buttons_ui();
     void update_recipe_unit_choices();
     void update_detail_scroll_layout();
+    void apply_responsive_layout();
+    void sync_category_input_visibility(bool focus_new_input = false);
+    bool is_new_category_selected() const;
+    std::string resolve_selected_category(std::string& out_error) const;
 
     void start_new_product();
     void load_product_into_form(const std::string& product_id);
@@ -116,8 +120,19 @@ private:
     bool last_feedback_is_error_{false};
     std::string last_recipe_feedback_;
     bool last_recipe_feedback_is_error_{false};
+    std::string last_cost_text_;
+    std::string last_margin_text_;
+    std::string last_direct_stock_status_;
+    std::string last_direct_stock_hint_;
     std::vector<std::uint8_t> pending_image_bytes_;
     std::string pending_image_mime_;
+    bool wide_split_active_{false};
+    bool np_inline_active_{false};
+    bool sku_bc_horizontal_{true};
+    bool cat_type_horizontal_{true};
+    bool cat_type_labels_inline_{false};
+    bool img_inline_active_{false};
+    bool costing_horizontal_{false};
 
     wxPanel* pnl_no_permission_{nullptr};
     wxBoxSizer* main_body_{nullptr};
@@ -135,6 +150,26 @@ private:
     wxPanel* detail_card_{nullptr};
     wxScrolledWindow* detail_scroll_{nullptr};
     wxBoxSizer* detail_sizer_{nullptr};
+    wxBoxSizer* col_name_sizer_{nullptr};
+    wxBoxSizer* col_price_sizer_{nullptr};
+    wxStaticText* lbl_name_{nullptr};
+    wxStaticText* lbl_price_{nullptr};
+    wxWindow* name_box_{nullptr};
+    wxWindow* price_box_{nullptr};
+    wxBoxSizer* row_sb_sizer_{nullptr};
+    wxBoxSizer* col_sku_sizer_{nullptr};
+    wxBoxSizer* col_bc_sizer_{nullptr};
+    wxStaticText* lbl_sku_{nullptr};
+    wxStaticText* lbl_bc_{nullptr};
+    wxBoxSizer* cat_type_sizer_{nullptr};
+    wxBoxSizer* col_cat_sizer_{nullptr};
+    wxBoxSizer* col_type_sizer_{nullptr};
+    wxStaticText* lbl_cat_{nullptr};
+    wxBoxSizer* type_btns_sizer_{nullptr};
+    wxWindow* cat_box_{nullptr};
+    wxBoxSizer* img_row_sizer_{nullptr};
+    wxBoxSizer* img_right_sizer_{nullptr};
+    wxStaticText* lbl_type_{nullptr};
     wxStaticText* lbl_detail_title_{nullptr};
     wxTextCtrl* txt_name_{nullptr};
     wxTextCtrl* txt_price_{nullptr};
@@ -176,6 +211,7 @@ private:
     wxButton* btn_recipe_save_{nullptr};
     wxStaticText* lbl_recipe_feedback_{nullptr};
     wxPanel* pnl_costing_{nullptr};
+    wxBoxSizer* cost_sizer_{nullptr};
     wxStaticText* lbl_cost_{nullptr};
     wxStaticText* lbl_margin_{nullptr};
 

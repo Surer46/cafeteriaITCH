@@ -8,13 +8,13 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta | button | BackOffice | 220.0x56.0 | OK
   Venta | button | Venta | 64.0x48.0 | OK
   Venta | button | Catálogo visual | 124.0x48.0 | OK
-  Venta | edit | <edit> | 151.2x48.0 | OK
+  Venta | edit | <edit> | 140.8x48.0 | OK
   Venta | edit | Edit:1 | 64.0x48.0 | OK
-  Venta | edit | <edit> | 620.8x48.0 | OK
+  Venta | edit | <edit> | 588.8x48.0 | OK
   Venta | button | − | 75.2x48.0 | OK
   Venta | button | + | 75.2x48.0 | OK
   Venta | button | Buscar | 125.6x48.0 | OK
-  Venta | switch/combo | comboBox | 323.2x48.0 | OK
+  Venta | switch/combo | comboBox | 301.6x48.0 | OK
   Venta | button | Agregar al Carrito | 210.4x56.0 | OK
   Venta | button | Más acciones ▾ | 185.6x48.0 | OK
   Venta | button | Cobrar | 258.4x60.0 | OK
@@ -28,13 +28,13 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta (con linea) | button | BackOffice | 220.0x56.0 | OK
   Venta (con linea) | button | Venta | 64.0x48.0 | OK
   Venta (con linea) | button | Catálogo visual | 124.0x48.0 | OK
-  Venta (con linea) | edit | <edit> | 151.2x48.0 | OK
+  Venta (con linea) | edit | <edit> | 140.8x48.0 | OK
   Venta (con linea) | edit | Edit:1 | 64.0x48.0 | OK
-  Venta (con linea) | edit | <edit> | 620.8x48.0 | OK
+  Venta (con linea) | edit | <edit> | 588.8x48.0 | OK
   Venta (con linea) | button | − | 75.2x48.0 | OK
   Venta (con linea) | button | + | 75.2x48.0 | OK
   Venta (con linea) | button | Buscar | 125.6x48.0 | OK
-  Venta (con linea) | switch/combo | comboBox | 323.2x48.0 | OK
+  Venta (con linea) | switch/combo | comboBox | 301.6x48.0 | OK
   Venta (con linea) | button | Agregar al Carrito | 210.4x56.0 | OK
   Venta (con linea) | button | Editar cantidad | 183.2x48.0 | OK
   Venta (con linea) | button | Editar nota | 153.6x48.0 | OK
@@ -65,13 +65,13 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Venta (teclado) | button | Borrar | 88.0x64.0 | OK
   Venta (teclado) | button | Limpiar | 88.0x64.0 | OK
   Venta (teclado) | button | Listo | 88.0x136.0 | OK
-  Venta (teclado) | edit | <edit> | 151.2x48.0 | OK
+  Venta (teclado) | edit | <edit> | 140.8x48.0 | OK
   Venta (teclado) | edit | Edit:1 | 64.0x48.0 | OK
-  Venta (teclado) | edit | <edit> | 620.8x48.0 | OK
+  Venta (teclado) | edit | <edit> | 588.8x48.0 | OK
   Venta (teclado) | button | − | 75.2x48.0 | OK
   Venta (teclado) | button | + | 75.2x48.0 | OK
   Venta (teclado) | button | Buscar | 125.6x48.0 | OK
-  Venta (teclado) | switch/combo | comboBox | 323.2x48.0 | OK
+  Venta (teclado) | switch/combo | comboBox | 301.6x48.0 | OK
   Venta (teclado) | button | Agregar al Carrito | 210.4x56.0 | OK
   Venta (teclado) | button | Editar cantidad | 183.2x48.0 | OK
   Venta (teclado) | button | Editar nota | 153.6x48.0 | OK
@@ -633,7 +633,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Barra (teclado) | button | Registrar ajuste | 268.8x48.0 | OK
   Barra (teclado) | list_row | SysListView32#0 (2 filas) | 620.8x43.2 | OK
 
-=== Productos y recetas (total=33, marcados=0) ===
+=== Productos y recetas (total=32, marcados=0) ===
   Productos y recetas | button | Estándar | 137.6x48.0 | OK
   Productos y recetas | button | Punto de Venta | 220.0x56.0 | OK
   Productos y recetas | button | Inventario | 220.0x56.0 | OK
@@ -647,29 +647,28 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Productos y recetas | button | Barra | 64.0x48.0 | OK
   Productos y recetas | button | Nuevo producto | 139.2x48.0 | OK
   Productos y recetas | button | Actualizar | 98.4x48.0 | OK
-  Productos y recetas | edit | <edit> | 420.0x48.0 | OK
-  Productos y recetas | switch/combo | comboBox | 262.4x48.0 | OK
+  Productos y recetas | edit | <edit> | 407.2x48.0 | OK
+  Productos y recetas | switch/combo | comboBox | 246.4x48.0 | OK
   Productos y recetas | button | Ver dados de baja | 154.4x48.0 | OK
-  Productos y recetas | edit | <edit> | 264.8x48.0 | OK
-  Productos y recetas | edit | <edit> | 182.4x48.0 | OK
-  Productos y recetas | edit | <edit> | 220.0x48.0 | OK
-  Productos y recetas | edit | <edit> | 227.2x48.0 | OK
-  Productos y recetas | switch/combo | comboBox | 221.6x48.0 | OK
-  Productos y recetas | edit | <edit> | 227.2x48.0 | OK
-  Productos y recetas | button | Directo | 217.6x48.0 | OK
-  Productos y recetas | button | Preparado | 223.2x48.0 | OK
+  Productos y recetas | edit | <edit> | 183.2x48.0 | OK
+  Productos y recetas | edit | <edit> | 91.2x48.0 | OK
+  Productos y recetas | edit | <edit> | 166.4x48.0 | OK
+  Productos y recetas | edit | <edit> | 261.6x48.0 | OK
+  Productos y recetas | switch/combo | comboBox | 210.4x48.0 | OK
+  Productos y recetas | button | Directo | 102.4x48.0 | OK
+  Productos y recetas | button | Preparado | 108.8x48.0 | OK
   Productos y recetas | button | Elegir imagen | 123.2x48.0 | OK
-  Productos y recetas | button | Guardar | 221.6x48.0 | OK
-  Productos y recetas | button | Dar de baja | 227.2x48.0 | OK
-  Productos y recetas | switch/combo | comboBox | 235.2x48.0 | OK
-  Productos y recetas | edit | <edit> | 116.0x48.0 | OK
+  Productos y recetas | button | Guardar | 212.0x48.0 | OK
+  Productos y recetas | button | Dar de baja | 217.6x48.0 | OK
+  Productos y recetas | switch/combo | comboBox | 222.4x48.0 | OK
+  Productos y recetas | edit | <edit> | 109.6x48.0 | OK
   Productos y recetas | switch/combo | comboBox | 96.0x48.0 | OK
-  Productos y recetas | button | Añadir o cambiar | 184.0x48.0 | OK
+  Productos y recetas | button | Añadir o cambiar | 174.4x48.0 | OK
   Productos y recetas | button | Quitar | 76.0x48.0 | OK
-  Productos y recetas | button | Guardar receta | 187.2x48.0 | OK
-  Productos y recetas | list_row | SysListView32#0 (1 filas) | 417.6x43.2 | OK
+  Productos y recetas | button | Guardar receta | 177.6x48.0 | OK
+  Productos y recetas | list_row | SysListView32#0 (1 filas) | 401.6x43.2 | OK
 
-=== Productos y recetas (teclado) (total=47, marcados=0) ===
+=== Productos y recetas (teclado) (total=46, marcados=0) ===
   Productos y recetas (teclado) | button | Estándar | 137.6x48.0 | OK
   Productos y recetas (teclado) | button | Punto de Venta | 220.0x56.0 | OK
   Productos y recetas (teclado) | button | Inventario | 220.0x56.0 | OK
@@ -697,27 +696,26 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Productos y recetas (teclado) | button | Listo | 88.0x136.0 | OK
   Productos y recetas (teclado) | button | Nuevo producto | 139.2x48.0 | OK
   Productos y recetas (teclado) | button | Actualizar | 98.4x48.0 | OK
-  Productos y recetas (teclado) | edit | <edit> | 420.0x48.0 | OK
-  Productos y recetas (teclado) | switch/combo | comboBox | 262.4x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 407.2x48.0 | OK
+  Productos y recetas (teclado) | switch/combo | comboBox | 246.4x48.0 | OK
   Productos y recetas (teclado) | button | Ver dados de baja | 154.4x48.0 | OK
-  Productos y recetas (teclado) | edit | <edit> | 264.8x48.0 | OK
-  Productos y recetas (teclado) | edit | <edit> | 182.4x48.0 | OK
-  Productos y recetas (teclado) | edit | <edit> | 220.0x48.0 | OK
-  Productos y recetas (teclado) | edit | <edit> | 227.2x48.0 | OK
-  Productos y recetas (teclado) | switch/combo | comboBox | 221.6x48.0 | OK
-  Productos y recetas (teclado) | edit | <edit> | 227.2x48.0 | OK
-  Productos y recetas (teclado) | button | Directo | 217.6x48.0 | OK
-  Productos y recetas (teclado) | button | Preparado | 223.2x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 183.2x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 91.2x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 166.4x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 261.6x48.0 | OK
+  Productos y recetas (teclado) | switch/combo | comboBox | 210.4x48.0 | OK
+  Productos y recetas (teclado) | button | Directo | 102.4x48.0 | OK
+  Productos y recetas (teclado) | button | Preparado | 108.8x48.0 | OK
   Productos y recetas (teclado) | button | Elegir imagen | 123.2x48.0 | OK
-  Productos y recetas (teclado) | button | Guardar | 221.6x48.0 | OK
-  Productos y recetas (teclado) | button | Dar de baja | 227.2x48.0 | OK
-  Productos y recetas (teclado) | switch/combo | comboBox | 235.2x48.0 | OK
-  Productos y recetas (teclado) | edit | <edit> | 116.0x48.0 | OK
+  Productos y recetas (teclado) | button | Guardar | 212.0x48.0 | OK
+  Productos y recetas (teclado) | button | Dar de baja | 217.6x48.0 | OK
+  Productos y recetas (teclado) | switch/combo | comboBox | 222.4x48.0 | OK
+  Productos y recetas (teclado) | edit | <edit> | 109.6x48.0 | OK
   Productos y recetas (teclado) | switch/combo | comboBox | 96.0x48.0 | OK
-  Productos y recetas (teclado) | button | Añadir o cambiar | 184.0x48.0 | OK
+  Productos y recetas (teclado) | button | Añadir o cambiar | 174.4x48.0 | OK
   Productos y recetas (teclado) | button | Quitar | 76.0x48.0 | OK
-  Productos y recetas (teclado) | button | Guardar receta | 187.2x48.0 | OK
-  Productos y recetas (teclado) | list_row | SysListView32#0 (1 filas) | 417.6x43.2 | OK
+  Productos y recetas (teclado) | button | Guardar receta | 177.6x48.0 | OK
+  Productos y recetas (teclado) | list_row | SysListView32#0 (1 filas) | 401.6x43.2 | OK
 
 === Existencias (total=15, marcados=0) ===
   Existencias | button | Estándar | 137.6x48.0 | OK
@@ -753,18 +751,20 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Promociones | button | Combos | 120.0x48.0 | OK
   Promociones | button | Nueva promoción | 151.2x48.0 | OK
   Promociones | button | Actualizar | 98.4x48.0 | OK
-  Promociones | edit | <edit> | 345.6x48.0 | OK
+  Promociones | edit | <edit> | 326.4x48.0 | OK
   Promociones | button | Solo activas | 115.2x48.0 | OK
-  Promociones | edit | <edit> | 411.2x48.0 | OK
+  Promociones | edit | <edit> | 324.8x48.0 | OK
   Promociones | button | Porcentaje | 104.8x48.0 | OK
   Promociones | button | Monto menos por pieza | 194.4x48.0 | OK
   Promociones | button | Lleva N, paga M | 140.8x48.0 | OK
-  Promociones | edit | <edit> | 411.2x48.0 | OK
-  Promociones | button | Productos | 199.2x48.0 | OK
-  Promociones | button | Una categoría | 205.6x48.0 | OK
-  Promociones | edit | <edit> | 411.2x48.0 | OK
-  Promociones | edit | <edit> | 197.6x48.0 | OK
-  Promociones | edit | <edit> | 205.6x48.0 | OK
+  Promociones | edit | <edit> | 176.8x48.0 | OK
+  Promociones | button | Productos | 140.8x48.0 | OK
+  Promociones | button | Una categoría | 147.2x48.0 | OK
+  Promociones | edit | <edit> | 84.0x48.0 | OK
+  Promociones | edit | <edit> | 193.6x48.0 | OK
+  Promociones | edit | <edit> | 193.6x48.0 | OK
+  Promociones | edit | <edit> | 193.6x48.0 | OK
+  Promociones | edit | <edit> | 193.6x48.0 | OK
   Promociones | button | Lun | 57.6x48.0 | OK
   Promociones | button | Mar | 58.4x48.0 | OK
   Promociones | button | Mié | 57.6x48.0 | OK
@@ -772,10 +772,8 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Promociones | button | Vie | 56.0x48.0 | OK
   Promociones | button | Sáb | 57.6x48.0 | OK
   Promociones | button | Dom | 63.2x48.0 | OK
-  Promociones | edit | <edit> | 197.6x48.0 | OK
-  Promociones | edit | <edit> | 205.6x48.0 | OK
-  Promociones | button | Guardar promoción | 404.8x48.0 | OK
-  Promociones | list_row | SysListView32#0 (1 filas) | 405.6x43.2 | OK
+  Promociones | button | Guardar promoción | 388.8x48.0 | OK
+  Promociones | list_row | SysListView32#0 (1 filas) | 389.6x43.2 | OK
 
 === Promociones (teclado) (total=51, marcados=0) ===
   Promociones (teclado) | button | Estándar | 137.6x48.0 | OK
@@ -807,18 +805,20 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Promociones (teclado) | button | Combos | 120.0x48.0 | OK
   Promociones (teclado) | button | Nueva promoción | 151.2x48.0 | OK
   Promociones (teclado) | button | Actualizar | 98.4x48.0 | OK
-  Promociones (teclado) | edit | <edit> | 345.6x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 326.4x48.0 | OK
   Promociones (teclado) | button | Solo activas | 115.2x48.0 | OK
-  Promociones (teclado) | edit | <edit> | 411.2x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 324.8x48.0 | OK
   Promociones (teclado) | button | Porcentaje | 104.8x48.0 | OK
   Promociones (teclado) | button | Monto menos por pieza | 194.4x48.0 | OK
   Promociones (teclado) | button | Lleva N, paga M | 140.8x48.0 | OK
-  Promociones (teclado) | edit | <edit> | 411.2x48.0 | OK
-  Promociones (teclado) | button | Productos | 199.2x48.0 | OK
-  Promociones (teclado) | button | Una categoría | 205.6x48.0 | OK
-  Promociones (teclado) | edit | <edit> | 411.2x48.0 | OK
-  Promociones (teclado) | edit | <edit> | 197.6x48.0 | OK
-  Promociones (teclado) | edit | <edit> | 205.6x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 176.8x48.0 | OK
+  Promociones (teclado) | button | Productos | 140.8x48.0 | OK
+  Promociones (teclado) | button | Una categoría | 147.2x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 84.0x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 193.6x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 193.6x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 193.6x48.0 | OK
+  Promociones (teclado) | edit | <edit> | 193.6x48.0 | OK
   Promociones (teclado) | button | Lun | 57.6x48.0 | OK
   Promociones (teclado) | button | Mar | 58.4x48.0 | OK
   Promociones (teclado) | button | Mié | 57.6x48.0 | OK
@@ -826,12 +826,10 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Promociones (teclado) | button | Vie | 56.0x48.0 | OK
   Promociones (teclado) | button | Sáb | 57.6x48.0 | OK
   Promociones (teclado) | button | Dom | 63.2x48.0 | OK
-  Promociones (teclado) | edit | <edit> | 197.6x48.0 | OK
-  Promociones (teclado) | edit | <edit> | 205.6x48.0 | OK
-  Promociones (teclado) | button | Guardar promoción | 404.8x48.0 | OK
-  Promociones (teclado) | list_row | SysListView32#0 (1 filas) | 405.6x43.2 | OK
+  Promociones (teclado) | button | Guardar promoción | 388.8x48.0 | OK
+  Promociones (teclado) | list_row | SysListView32#0 (1 filas) | 389.6x43.2 | OK
 
-=== Combos (total=27, marcados=0) ===
+=== Combos (total=26, marcados=0) ===
   Combos | button | Estándar | 137.6x48.0 | OK
   Combos | button | Punto de Venta | 220.0x56.0 | OK
   Combos | button | Inventario | 220.0x56.0 | OK
@@ -847,20 +845,19 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Combos | button | Combos | 120.0x48.0 | OK
   Combos | button | Nuevo combo | 124.0x48.0 | OK
   Combos | button | Actualizar | 98.4x48.0 | OK
-  Combos | edit | <edit> | 281.6x48.0 | OK
+  Combos | edit | <edit> | 262.4x48.0 | OK
   Combos | button | Ver dados de baja | 179.2x48.0 | OK
-  Combos | edit | <edit> | 238.4x48.0 | OK
-  Combos | edit | <edit> | 164.8x48.0 | OK
-  Combos | edit | <edit> | 411.2x48.0 | OK
-  Combos | switch/combo | comboBox | 199.2x48.0 | OK
-  Combos | edit | <edit> | 205.6x48.0 | OK
-  Combos | switch/combo | comboBox | 268.0x48.0 | OK
-  Combos | edit | <edit> | 136.8x48.0 | OK
-  Combos | button | Agregar parte | 199.2x48.0 | OK
-  Combos | button | Quitar parte | 205.6x48.0 | OK
-  Combos | button | Guardar combo | 404.8x48.0 | OK
+  Combos | edit | <edit> | 228.8x48.0 | OK
+  Combos | edit | <edit> | 158.4x48.0 | OK
+  Combos | edit | <edit> | 130.4x48.0 | OK
+  Combos | switch/combo | comboBox | 256.8x48.0 | OK
+  Combos | switch/combo | comboBox | 256.8x48.0 | OK
+  Combos | edit | <edit> | 132.0x48.0 | OK
+  Combos | button | Agregar parte | 191.2x48.0 | OK
+  Combos | button | Quitar parte | 197.6x48.0 | OK
+  Combos | button | Guardar combo | 388.8x48.0 | OK
 
-=== Combos (teclado) (total=41, marcados=0) ===
+=== Combos (teclado) (total=40, marcados=0) ===
   Combos (teclado) | button | Estándar | 137.6x48.0 | OK
   Combos (teclado) | button | Punto de Venta | 220.0x56.0 | OK
   Combos (teclado) | button | Inventario | 220.0x56.0 | OK
@@ -890,18 +887,17 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Combos (teclado) | button | Combos | 120.0x48.0 | OK
   Combos (teclado) | button | Nuevo combo | 124.0x48.0 | OK
   Combos (teclado) | button | Actualizar | 98.4x48.0 | OK
-  Combos (teclado) | edit | <edit> | 281.6x48.0 | OK
+  Combos (teclado) | edit | <edit> | 262.4x48.0 | OK
   Combos (teclado) | button | Ver dados de baja | 179.2x48.0 | OK
-  Combos (teclado) | edit | <edit> | 238.4x48.0 | OK
-  Combos (teclado) | edit | <edit> | 164.8x48.0 | OK
-  Combos (teclado) | edit | <edit> | 411.2x48.0 | OK
-  Combos (teclado) | switch/combo | comboBox | 199.2x48.0 | OK
-  Combos (teclado) | edit | <edit> | 205.6x48.0 | OK
-  Combos (teclado) | switch/combo | comboBox | 268.0x48.0 | OK
-  Combos (teclado) | edit | <edit> | 136.8x48.0 | OK
-  Combos (teclado) | button | Agregar parte | 199.2x48.0 | OK
-  Combos (teclado) | button | Quitar parte | 205.6x48.0 | OK
-  Combos (teclado) | button | Guardar combo | 404.8x48.0 | OK
+  Combos (teclado) | edit | <edit> | 228.8x48.0 | OK
+  Combos (teclado) | edit | <edit> | 158.4x48.0 | OK
+  Combos (teclado) | edit | <edit> | 130.4x48.0 | OK
+  Combos (teclado) | switch/combo | comboBox | 256.8x48.0 | OK
+  Combos (teclado) | switch/combo | comboBox | 256.8x48.0 | OK
+  Combos (teclado) | edit | <edit> | 132.0x48.0 | OK
+  Combos (teclado) | button | Agregar parte | 191.2x48.0 | OK
+  Combos (teclado) | button | Quitar parte | 197.6x48.0 | OK
+  Combos (teclado) | button | Guardar combo | 388.8x48.0 | OK
 
 === Dialogo Cobro (total=18, marcados=0) ===
   Dialogo Cobro | switch/combo | comboBox | 380.0x48.0 | OK
