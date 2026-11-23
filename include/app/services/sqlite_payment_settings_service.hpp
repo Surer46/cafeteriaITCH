@@ -15,6 +15,7 @@ public:
 
     contracts::Result<contracts::CardSurchargeConfigDto> get_card_surcharge_config() override;
     contracts::OperationResult set_card_surcharge_config(std::int64_t percent_hundredths, contracts::Money fixed) override;
+    contracts::Result<contracts::Money> preview_card_surcharge(std::int64_t percent_hundredths, contracts::Money fixed, contracts::Money sale_amount) override;
 
 private:
     storage::SqliteDatabase& db_;

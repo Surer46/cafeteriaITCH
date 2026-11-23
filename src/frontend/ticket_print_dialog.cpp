@@ -63,7 +63,7 @@ TicketPrintDialog::TicketPrintDialog(
     wxWindow* parent,
     const contracts::TicketDto& ticket,
     const contracts::PrinterStationConfig& print_config
-) : wxDialog(parent, wxID_ANY, wxT("Venta Registrada — Cafetería ITCH II"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
+) : wxDialog(parent, wxID_ANY, ticket.document_title.empty() ? wxT("Venta Registrada — Cafetería ITCH II") : wxT("Comprobante de Reembolso — Cafetería ITCH II"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE | wxRESIZE_BORDER),
     ticket_(ticket), config_(print_config) {
     SetBackgroundColour(Theme::ColorBackground);
 
@@ -74,7 +74,7 @@ TicketPrintDialog::TicketPrintDialog(
     banner->SetBackgroundColour(Theme::ColorSuccessSoft);
     auto* banner_sizer = new wxBoxSizer(wxVERTICAL);
 
-    auto* lbl_folio = new wxStaticText(banner, wxID_ANY, wxString::Format(wxT("¡Venta confirmada! Folio: %s"), wxString::FromUTF8(ticket_.folio.c_str())));
+    auto* lbl_folio = new wxStaticText(banner, wxID_ANY, wxString::Format(ticket_.document_title.empty() ? wxT("¡Venta confirmada! Folio: %s") : wxT("¡Reembolso registrado! Folio: %s"), wxString::FromUTF8(ticket_.folio.c_str())));
     lbl_folio->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     lbl_folio->SetForegroundColour(Theme::ColorSuccess);
     banner_sizer->Add(lbl_folio, 0, wxALL, FromDIP(14));
@@ -220,7 +220,7 @@ void TicketPrintDialog::on_print(wxCommandEvent&) {
     printDialogData.SetToPage(1);
     printDialogData.SetAllPages(true);
     wxPrinter printer(&printDialogData);
-    TicketPrintout printout(ticket_, wxString::Format(wxT("Ticket %s"), wxString::FromUTF8(ticket_.folio.c_str())), config_.profile);
+    TicketPrintout printout(ticket_, wxString::Format(ticket_.document_title.empty() ? wxT("Ticket %s") : wxT("Comprobante %s"), wxString::FromUTF8(ticket_.folio.c_str())), config_.profile);
 
     bool prompt = true;
 #ifdef CAFETERIA_TEST_HOOKS

@@ -75,6 +75,7 @@ struct TicketLineItemDto {
     // B14: instantánea de la promoción aplicada al cobrar (no cambia si luego se edita la promoción).
     Money discount{Money::zero()};
     std::string promotion_name;
+    bool show_unit_detail{true};   // T17: false oculta la línea «(2 x $5.00)» (comprobante de reembolso)
 };
 
 struct TicketDto {
@@ -94,6 +95,14 @@ struct TicketDto {
     Money card_surcharge{Money::zero()};
     Money refunded_total{Money::zero()};
     std::vector<TicketRefundDto> refunds;
+    // T17: presentación opcional para reutilizar el ticket como comprobante (por ejemplo de un reembolso). Con los
+    // valores por omisión el texto de una venta sale idéntico al de siempre.
+    std::string document_title;                       // título centrado bajo el nombre del negocio
+    std::string total_label{"TOTAL:"};                // etiqueta de la línea del total
+    bool show_subtotal{true};
+    bool show_cash_details{true};                     // «Recibido» y «Cambio» (solo efectivo)
+    std::vector<std::string> extra_lines;             // líneas de texto antes del agradecimiento
+    std::string thanks_text{"Gracias por su preferencia!"};   // vacío = sin agradecimiento
 
     static size_t utf8_column_width(const std::string& str) {
         size_t width = 0;
@@ -223,6 +232,16 @@ struct TicketDto {
             }
         }
         ss << sep_double << "\n";
+        if (!document_title.empty()) {
+            auto title_lines = wrap_text_words(document_title, max_cols);
+            for (const auto& tline : title_lines) {
+                size_t tw = utf8_column_width(tline);
+                size_t pad_total = (tw < max_cols) ? (max_cols - tw) : 0;
+                size_t pad_left = pad_total / 2;
+                ss << std::string(pad_left, ' ') << tline << std::string(pad_total - pad_left, ' ') << "\n";
+            }
+            ss << sep_double << "\n";
+        }
 
         auto append_labeled_field = [&](const std::string& label, const std::string& value) {
             size_t label_w = utf8_column_width(label);
@@ -339,7 +358,7 @@ struct TicketDto {
                 }
             }
 
-            if (item.quantity > 1) {
+            if (item.quantity > 1 && item.show_unit_detail) {
                 std::string up_str = "  (" + std::to_string(item.quantity) + " x " + item.unit_price.to_string() + ")";
                 auto up_lines = wrap_text_words(up_str, max_cols);
                 for (const auto& upl : up_lines) {
@@ -392,26 +411,31 @@ struct TicketDto {
             }
         };
 
-        ss << format_kv_line("Subtotal:", subtotal.to_string());
+        if (show_subtotal) ss << format_kv_line("Subtotal:", subtotal.to_string());
         if (discount.cents() > 0) {
             ss << format_kv_line("Descuento:", discount.to_string());
         }
         if (card_surcharge.cents() > 0) {
             ss << format_kv_line("Cargo por pago con tarjeta:", card_surcharge.to_string());
         }
-        ss << format_kv_line("TOTAL:", total.to_string());
+        ss << format_kv_line(total_label, total.to_string());
         for (const auto& rf : refunds) {
             ss << format_kv_line("Reembolso " + rf.refund_folio + ":", "-" + rf.amount.to_string());
         }
         ss << sep_single << "\n";
         ss << format_kv_line("Metodo de Pago:", to_string(payment_method));
-        if (payment_method == PaymentMethod::Efectivo) {
+        if (payment_method == PaymentMethod::Efectivo && show_cash_details) {
             ss << format_kv_line("Recibido:", cash_received.to_string());
             ss << format_kv_line("Cambio:", change.to_string());
         }
         ss << sep_double << "\n";
 
-        std::string ty = "Gracias por su preferencia!";
+        for (const auto& extra : extra_lines) {
+            for (const auto& el : wrap_text_words(extra, max_cols)) ss << el << "\n";
+        }
+        if (!extra_lines.empty()) ss << sep_single << "\n";
+
+        std::string ty = thanks_text;
         auto ty_lines = wrap_text_words(ty, max_cols);
         for (const auto& tyl : ty_lines) {
             size_t ty_w = utf8_column_width(tyl);

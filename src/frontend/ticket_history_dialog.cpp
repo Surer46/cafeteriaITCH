@@ -1,5 +1,6 @@
 #include "src/frontend/ticket_history_dialog.hpp"
 #include "src/frontend/ticket_print_dialog.hpp"
+#include "src/frontend/refund_dialog.hpp"
 #include "src/frontend/theme.hpp"
 #include "src/frontend/ui_helpers.hpp"
 #include <wx/statline.h>
@@ -52,12 +53,14 @@ void TicketHistoryDialog::setup_ui() {
     if (Theme::is_touch()) {
         ui::apply_touch_row_height(list_tickets_);
     }
-    list_tickets_->InsertColumn(0, wxT("Folio"), wxLIST_FORMAT_LEFT, FromDIP(140));
-    list_tickets_->InsertColumn(1, wxT("Fecha y Hora"), wxLIST_FORMAT_LEFT, FromDIP(160));
-    list_tickets_->InsertColumn(2, wxT("Total"), wxLIST_FORMAT_RIGHT, FromDIP(100));
-    list_tickets_->InsertColumn(3, wxT("Artículos"), wxLIST_FORMAT_RIGHT, FromDIP(80));
-    list_tickets_->InsertColumn(4, wxT("Cajero"), wxLIST_FORMAT_LEFT, FromDIP(130));
-    list_tickets_->InsertColumn(5, wxT("Método de Pago"), wxLIST_FORMAT_LEFT, FromDIP(110));
+    // T17: columna «Reembolsado» después del total (vacía si no hay reembolsos); los anchos suman menos que el diálogo
+    list_tickets_->InsertColumn(0, wxT("Folio"), wxLIST_FORMAT_LEFT, FromDIP(150));
+    list_tickets_->InsertColumn(1, wxT("Fecha y Hora"), wxLIST_FORMAT_LEFT, FromDIP(150));
+    list_tickets_->InsertColumn(2, wxT("Total"), wxLIST_FORMAT_RIGHT, FromDIP(90));
+    list_tickets_->InsertColumn(3, wxT("Reembolsado"), wxLIST_FORMAT_RIGHT, FromDIP(110));
+    list_tickets_->InsertColumn(4, wxT("Artículos"), wxLIST_FORMAT_RIGHT, FromDIP(80));
+    list_tickets_->InsertColumn(5, wxT("Cajero"), wxLIST_FORMAT_LEFT, FromDIP(120));
+    list_tickets_->InsertColumn(6, wxT("Método de Pago"), wxLIST_FORMAT_LEFT, FromDIP(110));
 
     main_sizer->Add(list_tickets_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
 
@@ -74,19 +77,55 @@ void TicketHistoryDialog::setup_ui() {
     Theme::ensure_button_min_size(btn_close_, 110, action_h_logical);
 
     btn_row->Add(btn_reprint_, 0, wxRIGHT, FromDIP(10));
+    // T17: «Reembolsar» solo si la sesión tiene pos.refund; habilitado con un ticket elegido
+    if (services_.account_service && services_.account_service->has_permission("pos.refund")) {
+        btn_refund_ = new wxButton(this, wxID_ANY, wxT("Reembolsar"));
+        Theme::style_button_secondary(btn_refund_, action_h_logical);
+        Theme::ensure_button_min_size(btn_refund_, 140, action_h_logical);
+        btn_row->Add(btn_refund_, 0, wxRIGHT, FromDIP(10));
+    }
     btn_row->AddStretchSpacer(1);
     btn_row->Add(btn_close_, 0);
 
     main_sizer->Add(btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
 
     SetSizer(main_sizer);
-    SetSize(FromDIP(wxSize(740, 520)));
+    SetSize(FromDIP(wxSize(900, 520)));
     Center();
 
     btn_search_->Bind(wxEVT_BUTTON, &TicketHistoryDialog::on_search, this);
     txt_search_folio_->Bind(wxEVT_TEXT_ENTER, &TicketHistoryDialog::on_search, this);
     btn_reprint_->Bind(wxEVT_BUTTON, &TicketHistoryDialog::on_view_reprint, this);
     list_tickets_->Bind(wxEVT_LIST_ITEM_ACTIVATED, &TicketHistoryDialog::on_item_activated, this);
+    if (btn_refund_) {
+        btn_refund_->Bind(wxEVT_BUTTON, &TicketHistoryDialog::on_refund, this);
+        list_tickets_->Bind(wxEVT_LIST_ITEM_SELECTED, [this](wxListEvent& ev) { ev.Skip(); update_buttons(); });
+        list_tickets_->Bind(wxEVT_LIST_ITEM_DESELECTED, [this](wxListEvent& ev) { ev.Skip(); update_buttons(); });
+        update_buttons();
+    }
+}
+
+void TicketHistoryDialog::update_buttons() {
+    if (!btn_refund_) return;
+    btn_refund_->Enable(list_tickets_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED) >= 0);
+}
+
+void TicketHistoryDialog::on_refund(wxCommandEvent&) {
+    long sel = list_tickets_->GetNextItem(-1, wxLIST_NEXT_ALL, wxLIST_STATE_SELECTED);
+    if (sel < 0 || sel >= static_cast<long>(tickets_.size())) return;
+    const std::string folio = tickets_[sel].folio;
+    RefundDialog dlg(this, services_, folio);
+    dlg.ShowModal();
+    if (dlg.was_refunded()) {
+        load_tickets();
+        for (std::size_t i = 0; i < tickets_.size(); ++i) {
+            if (tickets_[i].folio == folio) {
+                list_tickets_->SetItemState(static_cast<long>(i), wxLIST_STATE_SELECTED, wxLIST_STATE_SELECTED);
+                break;
+            }
+        }
+        update_buttons();
+    }
 }
 
 void TicketHistoryDialog::load_tickets() {
@@ -111,9 +150,10 @@ void TicketHistoryDialog::load_tickets() {
         long row = list_tickets_->InsertItem(idx, wxString::FromUTF8(t.folio.c_str()));
         list_tickets_->SetItem(row, 1, wxString::FromUTF8(t.created_at.c_str()));
         list_tickets_->SetItem(row, 2, wxString::FromUTF8(t.total.to_string().c_str()));
-        list_tickets_->SetItem(row, 3, wxString::Format(wxT("%lld"), t.items_count));
-        list_tickets_->SetItem(row, 4, wxString::FromUTF8(t.cashier_name.c_str()));
-        list_tickets_->SetItem(row, 5, wxString::FromUTF8(contracts::to_string(t.payment_method)));
+        list_tickets_->SetItem(row, 3, t.refunded_total.cents() > 0 ? wxString::FromUTF8(t.refunded_total.to_string().c_str()) : wxString());
+        list_tickets_->SetItem(row, 4, wxString::Format(wxT("%lld"), t.items_count));
+        list_tickets_->SetItem(row, 5, wxString::FromUTF8(t.cashier_name.c_str()));
+        list_tickets_->SetItem(row, 6, wxString::FromUTF8(contracts::to_string(t.payment_method)));
         idx++;
     }
 }

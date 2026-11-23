@@ -224,3 +224,12 @@ Los pendientes de frontend de la auditoría 2026-10-03 fueron implementados y ve
 ## Auditoría 2026-10-18
 
 Ver `Auditorias/auditoria-2026-10-18.md` y la sección homónima de `task.md`. I2 parcial en software, hardware y aceptación humana; no avanzar a I3.
+
+## T17 (2026-11-22) — reembolsos y cargo por tarjeta (interfaz de B18)
+
+- **Cobro (`checkout_dialog.*`):** recibe `ISaleService` (sin servicio no se cobra) y muestra el desglose de `preview_checkout` al cambiar el método: productos, descuento, «Cargo por pago con tarjeta (X.XX % + $Y)» solo si es mayor que 0 y el total; con Tarjeta el botón dice «Confirmar Venta — $X». Si la vista previa falla, muestra el mensaje del servicio y no deja confirmar. `pos_panel.cpp` cambia una sola línea (pasa `services_.sale_service`).
+- **Historial (`ticket_history_dialog.*`):** columna «Reembolsado» y botón «Reembolsar» solo con `pos.refund`, habilitado con un ticket elegido.
+- **Reembolso (`refund_dialog.*`, nuevo):** líneas con cantidad (− / + de 48 px en Táctil y teclado numérico), «Ya se preparó» (marcada por omisión) solo en preparados y combos con partes preparadas, motivo, importe y método en vivo desde `preview_refund`, aviso de que el cargo por tarjeta no se devuelve, confirmación Sí/No, clave de idempotencia por apertura del diálogo y comprobante con el diálogo de impresión existente.
+- **Configuración (`backoffice_settings_panel.*`):** tarjeta «Cobro con tarjeta (Mercado Pago)» solo con `config.manage`; el texto se convierte a enteros sin `float` ni `double` y el ejemplo lo calcula el servicio. En pantalla ancha va en la columna izquierda bajo la tarjeta de pantalla y las opciones Estándar / Táctil pasan a ir lado a lado (variante compacta); así la pantalla sigue sin barra vertical en pantalla completa.
+- **Pruebas:** `tests/test_t17_refunds_surcharge.py` (ejecutable real, Estándar y Táctil, Release y Debug) y casos nuevos en `tests/test_b18.cpp` y `tests/test_backup.cpp`.
+

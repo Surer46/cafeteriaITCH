@@ -3,16 +3,32 @@
 #include "src/frontend/ui_helpers.hpp"
 #include <wx/statline.h>
 #include <cctype>
+#include <cstdio>
 
 namespace app::frontend {
+
+namespace {
+
+// 406 -> "4.06" (centésimas de punto porcentual, solo enteros)
+wxString percent_text(std::int64_t hundredths) {
+    char buf[32];
+    std::snprintf(buf, sizeof(buf), "%lld.%02lld", static_cast<long long>(hundredths / 100), static_cast<long long>(hundredths % 100));
+    return wxString::FromUTF8(buf);
+}
+
+wxString money_text(const contracts::Money& m) { return wxString::FromUTF8(m.to_string().c_str()); }
+
+} // namespace
 
 CheckoutDialog::CheckoutDialog(
     wxWindow* parent,
     contracts::Money total,
-    contracts::Money discount
+    contracts::Money discount,
+    std::shared_ptr<contracts::ISaleService> sale_service
 ) : wxDialog(parent, wxID_ANY, wxT("Cobro de Venta — Cafetería ITCH II"), wxDefaultPosition, wxDefaultSize, wxDEFAULT_DIALOG_STYLE),
     total_(total),
     discount_(discount),
+    sale_service_(std::move(sale_service)),
     cash_received_(total) {
     SetBackgroundColour(Theme::ColorBackground);
     const bool touch = Theme::is_touch();
@@ -36,22 +52,35 @@ CheckoutDialog::CheckoutDialog(
     lbl_total_caption->SetForegroundColour(Theme::ColorTextSecondary);
     card_sizer->Add(lbl_total_caption, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(14));
 
-    lbl_total_val_ = new wxStaticText(total_card, wxID_ANY, wxString::FromUTF8(total_.to_string().c_str()));
+    lbl_total_val_ = new wxStaticText(total_card, wxID_ANY, money_text(total_));
     lbl_total_val_->SetFont(Theme::get_font_hero(wxFONTWEIGHT_BOLD));
     lbl_total_val_->SetForegroundColour(Theme::ColorSuccess);
-    if (discount_.cents() > 0) {
-        card_sizer->Add(lbl_total_val_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
-        auto* lbl_discount = new wxStaticText(
-            total_card,
-            wxID_ANY,
-            wxString::Format(wxT("Descuento aplicado: -%s"), wxString::FromUTF8(discount_.to_string().c_str()))
-        );
-        lbl_discount->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-        lbl_discount->SetForegroundColour(Theme::ColorSuccess);
-        card_sizer->Add(lbl_discount, 0, wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(10));
-    } else {
-        card_sizer->Add(lbl_total_val_, 0, wxALL, FromDIP(14));
-    }
+    card_sizer->Add(lbl_total_val_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+
+    // Desglose: productos, descuento y cargo por tarjeta (los dos últimos solo si son mayores que 0)
+    breakdown_sizer_ = new wxFlexGridSizer(2, FromDIP(4), FromDIP(12));
+    breakdown_sizer_->AddGrowableCol(0, 1);
+    auto add_row = [&](wxStaticText*& caption, wxStaticText*& value, const wxString& text, const wxColour& color) {
+        caption = new wxStaticText(total_card, wxID_ANY, text);
+        caption->SetFont(Theme::get_font_body());
+        caption->SetForegroundColour(color);
+        value = new wxStaticText(total_card, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_RIGHT);
+        value->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+        value->SetForegroundColour(color);
+        breakdown_sizer_->Add(caption, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
+        breakdown_sizer_->Add(value, 0, wxALIGN_CENTER_VERTICAL | wxALIGN_RIGHT);
+    };
+    wxStaticText* lbl_products_caption = nullptr;
+    add_row(lbl_products_caption, lbl_products_val_, wxT("Productos"), Theme::ColorTextSecondary);
+    add_row(lbl_discount_caption_, lbl_discount_val_, wxT("Descuento aplicado"), Theme::ColorSuccess);
+    add_row(lbl_surcharge_caption_, lbl_surcharge_val_, wxT("Cargo por pago con tarjeta"), Theme::ColorTextSecondary);
+    card_sizer->Add(breakdown_sizer_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+
+    lbl_preview_error_ = new wxStaticText(total_card, wxID_ANY, wxEmptyString);
+    lbl_preview_error_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_preview_error_->SetForegroundColour(Theme::ColorError);
+    card_sizer->Add(lbl_preview_error_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+    card_sizer->AddSpacer(FromDIP(16));
 
     total_card->SetSizer(card_sizer);
     main_sizer->Add(total_card, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(16));
@@ -149,7 +178,69 @@ CheckoutDialog::CheckoutDialog(
     txt_cash_received_->Bind(wxEVT_TEXT, &CheckoutDialog::on_cash_received_text_changed, this);
     btn_confirm_->Bind(wxEVT_BUTTON, &CheckoutDialog::on_confirm, this);
 
+    refresh_preview();
+}
+
+// Total a cobrar con el método elegido: lo calcula el servicio (la interfaz no calcula dinero).
+void CheckoutDialog::refresh_preview() {
+    preview_ok_ = false;
+    std::string error;
+    if (!sale_service_) {
+        error = "No se puede cobrar: el servicio de ventas no está disponible.";
+    } else {
+        auto r = sale_service_->preview_checkout(selected_method_);
+        if (r.is_success()) {
+            preview_ = r.value();
+            preview_ok_ = true;
+        } else {
+            error = r.error_message();
+        }
+    }
+    if (preview_ok_) {
+        total_ = preview_.charged_total;
+        discount_ = preview_.discount;
+        lbl_total_val_->SetLabel(money_text(total_));
+        lbl_products_val_->SetLabel(money_text(preview_.products_total));
+        lbl_discount_val_->SetLabel(wxT("-") + money_text(preview_.discount));
+        lbl_surcharge_caption_->SetLabel(wxString::Format(wxT("Cargo por pago con tarjeta (%s %% + %s)"),
+                                                          percent_text(preview_.percent_hundredths), money_text(preview_.fixed)));
+        lbl_surcharge_val_->SetLabel(money_text(preview_.card_surcharge));
+        lbl_preview_error_->SetLabel(wxEmptyString);
+    } else {
+        lbl_preview_error_->SetLabel(wxString::FromUTF8(error.c_str()));
+    }
+    const bool show_discount = preview_ok_ && preview_.discount.cents() > 0;
+    const bool show_surcharge = preview_ok_ && preview_.card_surcharge.cents() > 0;
+    lbl_discount_caption_->Show(show_discount);
+    lbl_discount_val_->Show(show_discount);
+    lbl_surcharge_caption_->Show(show_surcharge);
+    lbl_surcharge_val_->Show(show_surcharge);
+    lbl_preview_error_->Show(!preview_ok_);
+    // Un texto largo se parte en varias líneas dentro de la tarjeta (nada se corta)
+    const int wrap_w = FromDIP(touch_wrap_width_);
+    lbl_preview_error_->Wrap(wrap_w);
+    lbl_surcharge_caption_->Wrap(wrap_w - FromDIP(110));
     update_cash_calculations();
+    update_confirm_label();
+    relayout();
+}
+
+void CheckoutDialog::update_confirm_label() {
+    if (!btn_confirm_) return;
+    if (preview_ok_ && selected_method_ == contracts::PaymentMethod::Tarjeta) {
+        btn_confirm_->SetLabel(wxString::Format(wxT("Confirmar Venta — %s"), money_text(total_)));
+    } else {
+        btn_confirm_->SetLabel(wxT("Confirmar Venta"));
+    }
+    if (!preview_ok_) btn_confirm_->Enable(false);
+}
+
+void CheckoutDialog::relayout() {
+    if (!GetSizer()) return;
+    Layout();
+    GetSizer()->SetSizeHints(this);
+    Fit();
+    Layout();
 }
 
 void CheckoutDialog::on_payment_method_changed(wxCommandEvent&) {
@@ -167,8 +258,8 @@ void CheckoutDialog::on_payment_method_changed(wxCommandEvent&) {
     if (keypad_) {
         keypad_->Show(sel == 0);
     }
-    Layout();
-    update_cash_calculations();
+    if (sel == 0 && preview_ok_) txt_cash_received_->ChangeValue(money_text(preview_.products_total));
+    refresh_preview();
 }
 
 void CheckoutDialog::on_cash_received_text_changed(wxCommandEvent&) {
@@ -181,7 +272,7 @@ void CheckoutDialog::update_cash_calculations() {
         change_ = contracts::Money::zero();
         cash_is_valid_ = true;
         if (btn_confirm_) {
-            btn_confirm_->Enable(true);
+            btn_confirm_->Enable(preview_ok_);
         }
         return;
     }
@@ -220,7 +311,7 @@ void CheckoutDialog::update_cash_calculations() {
         lbl_change_val_->SetLabel(wxString::FromUTF8(change_.to_string().c_str()));
         lbl_change_val_->SetForegroundColour(Theme::ColorSuccess);
         if (btn_confirm_) {
-            btn_confirm_->Enable(true);
+            btn_confirm_->Enable(preview_ok_);
         }
     } else {
         cash_is_valid_ = false;
@@ -234,6 +325,7 @@ void CheckoutDialog::update_cash_calculations() {
 }
 
 void CheckoutDialog::on_confirm(wxCommandEvent&) {
+    if (!preview_ok_) return;   // sin vista previa del servicio no se cobra
     if (selected_method_ == contracts::PaymentMethod::Efectivo) {
         update_cash_calculations();
         if (!cash_is_valid_ || cash_received_ < total_) {

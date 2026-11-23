@@ -337,7 +337,6 @@ contracts::Result<std::vector<contracts::PermissionDto>> MockAccountService::lis
         {"pos.notes", "Añadir indicaciones a un producto, por ejemplo: sin azúcar.", "pos", "Escribir notas en un pedido", "Punto de Venta", 30},
         {"pos.reprint", "Volver a imprimir el ticket de una venta ya cobrada.", "pos", "Reimprimir tickets", "Punto de Venta", 40},
         {"pos.cancel_order", "Vaciar el pedido en curso antes de cobrarlo.", "pos", "Cancelar un pedido sin cobrar", "Punto de Venta", 50},
-        {"pos.void_sale", "Cancelar una venta que ya se cobró. Queda registrado quién lo hizo y por qué.", "pos", "Anular una venta cobrada", "Punto de Venta", 60},
         {"pos.refund", "Devolver el dinero de piezas ya vendidas. Queda registrado quién lo hizo y por qué.", "pos", "Hacer reembolsos", "Punto de Venta", 65},
         {"inventory.view", "Consultar cuánto hay de cada producto e ingrediente.", "inventory", "Ver existencias", "Inventario", 110},
         {"inventory.manage_products", "Crear, cambiar o dar de baja productos, sus precios y sus recetas.", "inventory", "Administrar productos y recetas", "Inventario", 120},
@@ -1096,6 +1095,19 @@ contracts::Result<contracts::CheckoutPreviewDto> MockSaleService::preview_checko
     return contracts::Result<contracts::CheckoutPreviewDto>::ok(dto);
 }
 
+contracts::Result<contracts::Money> MockPaymentSettingsService::preview_card_surcharge(
+    std::int64_t percent_hundredths, contracts::Money fixed, contracts::Money sale_amount) {
+    using R = contracts::Result<contracts::Money>;
+    if (percent_hundredths < 0 || percent_hundredths > domain::kMaxCardSurchargeHundredths)
+        return R::fail(contracts::ErrorCode::InvalidInput, "El porcentaje del cargo por tarjeta debe estar entre 0 % y 20.00 %.");
+    if (fixed.cents() < 0 || fixed.cents() > domain::kMaxCardSurchargeFixedCents)
+        return R::fail(contracts::ErrorCode::InvalidInput, "El monto fijo del cargo por tarjeta debe estar entre $0.00 y $100.00.");
+    std::int64_t out = 0;
+    if (!domain::card_surcharge_cents(sale_amount.cents(), percent_hundredths, fixed.cents(), out))
+        return R::fail(contracts::ErrorCode::InvalidInput, "El importe de la venta de ejemplo no es válido.");
+    return R::ok(contracts::Money::from_cents(out));
+}
+
 contracts::Result<contracts::CardSurchargeConfigDto> MockPaymentSettingsService::get_card_surcharge_config() {
     return contracts::Result<contracts::CardSurchargeConfigDto>::ok(config_);
 }
@@ -1118,12 +1130,12 @@ MockRefundService::MockRefundService() {
     sale_.cashier_name = "Cajero de Prueba";
     sale_.payment_method = contracts::PaymentMethod::Efectivo;
     contracts::SaleLineDetailDto a;
-    a.sale_item_id = "line-mock-1"; a.product_id = "prod-3"; a.product_name = "Chilaquiles Rojos"; a.is_prepared = true;
+    a.sale_item_id = "line-mock-1"; a.product_id = "prod-3"; a.product_name = "Chilaquiles Rojos"; a.is_prepared = true; a.has_prepared_parts = true;
     a.quantity_sold = 2; a.quantity_refundable = 2;
     a.unit_price = contracts::Money::from_major_minor(55, 0); a.subtotal = contracts::Money::from_major_minor(110, 0);
     a.net_paid = a.subtotal;
     contracts::SaleLineDetailDto b;
-    b.sale_item_id = "line-mock-2"; b.product_id = "prod-4"; b.product_name = "Café Americano"; b.is_prepared = true;
+    b.sale_item_id = "line-mock-2"; b.product_id = "prod-4"; b.product_name = "Café Americano"; b.is_prepared = true; b.has_prepared_parts = true;
     b.quantity_sold = 1; b.quantity_refundable = 1;
     b.unit_price = contracts::Money::from_major_minor(25, 0); b.subtotal = b.unit_price; b.net_paid = b.subtotal;
     sale_.lines = {a, b};
@@ -1140,11 +1152,32 @@ contracts::Result<contracts::SaleDetailDto> MockRefundService::get_sale_for_refu
 }
 
 contracts::Result<contracts::RefundDto> MockRefundService::refund_sale(const contracts::RefundRequestDto& request) {
+    return run(request, false, nullptr);
+}
+
+contracts::Result<contracts::RefundPreviewDto> MockRefundService::preview_refund(const contracts::RefundRequestDto& request) {
+    using PR = contracts::Result<contracts::RefundPreviewDto>;
+    std::string reason_error;
+    auto r = run(request, true, &reason_error);
+    if (!r.is_success()) return PR::fail(r.error_code(), r.error_message());
+    contracts::RefundPreviewDto p;
+    p.amount = r.value().amount;
+    p.lines = r.value().lines;
+    p.payment_method = r.value().payment_method;
+    p.returns_cash = r.value().payment_method == contracts::PaymentMethod::Efectivo;
+    p.reason_error = reason_error;
+    return PR::ok(std::move(p));
+}
+
+contracts::Result<contracts::RefundDto> MockRefundService::run(const contracts::RefundRequestDto& request, bool dry_run, std::string* reason_error) {
     using R = contracts::Result<contracts::RefundDto>;
     if (request.folio != sale_.folio) return R::fail(contracts::ErrorCode::NotFound, "No se encontró la venta con el folio " + request.folio + ".");
-    if (request.reason.size() < 3 || request.reason.size() > 200) return R::fail(contracts::ErrorCode::InvalidInput, "Escribe el motivo del reembolso (de 3 a 200 caracteres).");
+    if (request.reason.size() < 3 || request.reason.size() > 200) {
+        if (!dry_run) return R::fail(contracts::ErrorCode::InvalidInput, "Escribe el motivo del reembolso (de 3 a 200 caracteres).");
+        if (reason_error) *reason_error = "Escribe el motivo del reembolso (de 3 a 200 caracteres).";
+    }
     if (request.lines.empty()) return R::fail(contracts::ErrorCode::InvalidInput, "Elige al menos una pieza para reembolsar.");
-    if (!request.idempotency_key.empty()) {
+    if (!dry_run && !request.idempotency_key.empty()) {
         for (const auto& r : refunds_) if (r.reason == request.reason && r.refund_id == "refund-key-" + request.idempotency_key) return R::ok(r);
     }
     contracts::RefundDto dto;
@@ -1155,10 +1188,11 @@ contracts::Result<contracts::RefundDto> MockRefundService::refund_sale(const con
     dto.user_name = "Dueño de Prueba";
     dto.payment_method = sale_.payment_method;
     dto.reason = request.reason;
+    auto work_lines = sale_.lines;   // la vista previa no cambia nada
     std::int64_t total = 0;
     for (const auto& rl : request.lines) {
         contracts::SaleLineDetailDto* line = nullptr;
-        for (auto& l : sale_.lines) if (l.sale_item_id == rl.sale_item_id) line = &l;
+        for (auto& l : work_lines) if (l.sale_item_id == rl.sale_item_id) line = &l;
         if (!line) return R::fail(contracts::ErrorCode::InvalidInput, "Una de las líneas elegidas no pertenece a la venta " + sale_.folio + ".");
         if (rl.quantity <= 0 || rl.quantity > line->quantity_refundable)
             return R::fail(contracts::ErrorCode::InvalidInput, "No se pueden reembolsar " + std::to_string(rl.quantity) + " pieza(s) de " + line->product_name + ": solo quedan " + std::to_string(line->quantity_refundable) + " por reembolsar.");
@@ -1172,6 +1206,8 @@ contracts::Result<contracts::RefundDto> MockRefundService::refund_sale(const con
         dto.lines.push_back(contracts::RefundLineDto{rl.sale_item_id, line->product_name, rl.quantity, contracts::Money::from_cents(amount), rl.already_prepared});
     }
     dto.amount = contracts::Money::from_cents(total);
+    if (dry_run) { dto.refund_id.clear(); return R::ok(dto); }
+    sale_.lines = work_lines;
     sale_.refunded_total = sale_.refunded_total + dto.amount;
     refunds_.push_back(dto);
     return R::ok(dto);

@@ -235,6 +235,7 @@ class MockPaymentSettingsService : public contracts::IPaymentSettingsService {
 public:
     contracts::Result<contracts::CardSurchargeConfigDto> get_card_surcharge_config() override;
     contracts::OperationResult set_card_surcharge_config(std::int64_t percent_hundredths, contracts::Money fixed) override;
+    contracts::Result<contracts::Money> preview_card_surcharge(std::int64_t percent_hundredths, contracts::Money fixed, contracts::Money sale_amount) override;
 
 private:
     contracts::CardSurchargeConfigDto config_;
@@ -247,10 +248,12 @@ public:
     MockRefundService();
     contracts::Result<contracts::SaleDetailDto> get_sale_for_refund(const std::string& folio) override;
     contracts::Result<contracts::RefundDto> refund_sale(const contracts::RefundRequestDto& request) override;
+    contracts::Result<contracts::RefundPreviewDto> preview_refund(const contracts::RefundRequestDto& request) override;
     contracts::Result<std::vector<contracts::RefundDto>> list_refunds(const std::string& sale_folio) override;
     contracts::Result<contracts::RefundDto> get_refund(const std::string& refund_id) override;
 
 private:
+    contracts::Result<contracts::RefundDto> run(const contracts::RefundRequestDto& request, bool dry_run, std::string* reason_error);
     contracts::SaleDetailDto sale_;
     std::vector<contracts::RefundDto> refunds_;
 };

@@ -1036,8 +1036,67 @@ void test_v21_backup_restores_and_migrates(const fs::path& base, const fs::path&
     TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('refunds', 'refund_items');") == 2, "Existen las tablas de reembolsos");
     TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-owner' AND permission_id = 'pos.refund';") == 1, "El Dueño restaurado recibe pos.refund");
     TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-cashier' AND permission_id = 'pos.refund';") == 0, "El Cajero no");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM permissions WHERE id = 'pos.void_sale';") == 0 &&
+               scalar(env.db, "SELECT COUNT(*) FROM role_permissions WHERE permission_id = 'pos.void_sale';") == 0, "T17: pos.void_sale queda fuera (migración 023)");
     env.login_owner("dueno_v21");
     TEST_CHECK(env.account->has_permission("pos.refund") && env.account->has_permission("backup.restore"), "El Dueño restaurado tiene sus permisos");
+    env.cleanup();
+}
+
+// T17: la migración 023 quita pos.void_sale de todos los roles (también de los personalizados) sin fallar por claves
+// foráneas y sin tocar los demás permisos; restaurar un respaldo del esquema 22 lo deja fuera.
+void test_v22_backup_and_void_sale_removed(const fs::path& base, const fs::path& mig) {
+    std::cout << "[TEST] T17: la migración 023 quita pos.void_sale de todos los roles; un respaldo del esquema 22 lo deja fuera..." << std::endl;
+    auto build_v22 = [&](SqliteDatabase& odb, const fs::path& file) {
+        TEST_CHECK(odb.open(file).is_success(), "Debe abrir base v22");
+        apply_migrations_up_to(odb, mig, 22);
+        const std::string hash = app::crypto::PasswordHasher::hash_password(kOwnerPwd);
+        TEST_CHECK(odb.execute("INSERT INTO users (id, username, display_name, email, password_hash, role_id, is_active, created_at) "
+                               "VALUES ('user-dueno_v22', 'dueno_v22', 'Dueño V22', 'v22@cafeteria-itch.edu.mx', '" + hash +
+                               "', 'role-owner', 1, '2026-11-20 08:00:00');").is_success(), "Alta de Dueño v22 por SQL");
+        TEST_CHECK(odb.execute("INSERT INTO roles (id, name, description, is_system) VALUES ('role-custom-t17', 'Encargado T17', 'Rol propio', 0);").is_success(), "Rol personalizado");
+        TEST_CHECK(odb.execute("INSERT INTO role_permissions (role_id, permission_id) VALUES ('role-custom-t17', 'pos.sell'), "
+                               "('role-custom-t17', 'pos.void_sale'), ('role-custom-t17', 'shift.operate');").is_success(), "Permisos del rol personalizado");
+        TEST_CHECK(scalar(odb, "SELECT COUNT(*) FROM permissions WHERE id = 'pos.void_sale';") == 1, "Antes de la 023 el permiso existe");
+    };
+    // (a) la migración directa sobre una base que ya tiene el rol personalizado
+    {
+        fs::path dir = base / "t14";
+        fs::create_directories(dir);
+        SqliteDatabase odb;
+        build_v22(odb, dir / "v22.db");
+        MigrationRunner runner(odb);
+        const auto before_versions = scalar(odb, "SELECT COUNT(*) FROM schema_migrations;");
+        auto m = runner.run_pending_migrations_from_dir(mig);
+        TEST_CHECK(m.is_success(), "La 023 no falla por claves foráneas: " + m.error_message());
+        TEST_CHECK(scalar(odb, "SELECT COUNT(*) FROM schema_migrations;") == before_versions + 1, "Queda registrada en schema_migrations");
+        TEST_CHECK(scalar(odb, "SELECT COUNT(*) FROM permissions WHERE id = 'pos.void_sale';") == 0 &&
+                   scalar(odb, "SELECT COUNT(*) FROM role_permissions WHERE permission_id = 'pos.void_sale';") == 0, "Fuera del catálogo y de todos los roles");
+        TEST_CHECK(scalar(odb, "SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-custom-t17' AND permission_id IN ('pos.sell', 'shift.operate');") == 2,
+                   "El rol personalizado conserva sus demás permisos");
+        TEST_CHECK(scalar(odb, "SELECT COUNT(*) FROM roles WHERE id = 'role-custom-t17';") == 1, "El rol sigue existiendo");
+        auto again = runner.run_pending_migrations_from_dir(mig);
+        TEST_CHECK(again.is_success() && scalar(odb, "SELECT COUNT(*) FROM schema_migrations;") == before_versions + 1, "Repetible: la segunda pasada no hace nada");
+        odb.close();
+    }
+    // (b) restaurar un respaldo del esquema 22
+    Env env(base / "t15", mig);
+    env.login_owner();
+    const auto latest = scalar(env.db, "SELECT MAX(version) FROM schema_migrations;");
+    fs::path old_file = env.root / fs::u8path(u8"antiguo v22.db");
+    {
+        SqliteDatabase odb;
+        build_v22(odb, env.root / "origen_v22.db");
+        TEST_CHECK(odb.backup_to(old_file).is_success(), "Debe exportar respaldo v22");
+    }
+    auto info = SqliteDatabase::inspect_file(old_file);
+    TEST_CHECK(info.is_success() && info.value().schema_version == 22, "El archivo antiguo es de versión 22");
+    auto res = env.backup->restore_from_backup(old_file.u8string());
+    TEST_CHECK(res.is_success(), "Restaurar v22: " + res.error_message());
+    TEST_CHECK(scalar(env.db, "SELECT MAX(version) FROM schema_migrations;") == latest, "Queda en la versión actual");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM permissions WHERE id = 'pos.void_sale';") == 0 &&
+               scalar(env.db, "SELECT COUNT(*) FROM role_permissions WHERE permission_id = 'pos.void_sale';") == 0, "El permiso queda fuera tras restaurar");
+    TEST_CHECK(scalar(env.db, "SELECT COUNT(*) FROM role_permissions WHERE role_id = 'role-custom-t17';") == 2, "El rol conserva sus otros dos permisos");
     env.cleanup();
 }
 
@@ -1068,6 +1127,7 @@ int main() {
     test_restored_event_shows_actor_that_no_longer_exists(base, mig);
     test_migration_021_backfill_and_repeatable(base, mig);
     test_v21_backup_restores_and_migrates(base, mig);
+    test_v22_backup_and_void_sale_removed(base, mig);
 
     std::error_code ec;
     fs::remove_all(base, ec);

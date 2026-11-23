@@ -21,6 +21,8 @@ private:
     void load_tickets();
     void on_search(wxCommandEvent& evt);
     void on_view_reprint(wxCommandEvent& evt);
+    void on_refund(wxCommandEvent& evt);
+    void update_buttons();
     void on_item_activated(wxListEvent& evt);
 
     services::ServiceRegistry services_;
@@ -30,6 +32,7 @@ private:
     wxButton* btn_search_{nullptr};
     wxListCtrl* list_tickets_{nullptr};
     wxButton* btn_reprint_{nullptr};
+    wxButton* btn_refund_{nullptr};
     wxButton* btn_close_{nullptr};
 };
 
