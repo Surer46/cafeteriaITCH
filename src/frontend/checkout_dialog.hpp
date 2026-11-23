@@ -8,6 +8,7 @@
 #include "app/contracts/sale_service.hpp"
 #include "app/contracts/money.hpp"
 #include "src/frontend/numeric_keypad.hpp"
+#include "src/frontend/theme.hpp"
 
 namespace app::frontend {
 
@@ -35,6 +36,7 @@ private:
     void update_cash_calculations();
     void refresh_preview();
     void update_confirm_label();
+    void update_pay_info();
     void relayout();
 
     contracts::Money total_;   // lo que se cobra con el método elegido (vista previa del servicio)
@@ -62,6 +64,13 @@ private:
     wxBoxSizer* cash_details_sizer_{nullptr};
     wxButton* btn_confirm_{nullptr};
     ui::NumericKeypad* keypad_{nullptr};
+    // T17b (Táctil): con Tarjeta o Transferencia el teclado no se usa; en su lugar la misma columna muestra el aviso del
+    // cobro por Mercado Pago, así el diálogo no cambia de tamaño al cambiar de método ni queda una franja vacía.
+    CardPanel* pay_info_card_{nullptr};
+    wxStaticText* lbl_pay_info_title_{nullptr};
+    wxStaticText* lbl_pay_info_text_{nullptr};
+    wxBoxSizer* right_col_{nullptr};
+    int pay_info_wrap_px_{300};
 };
 
 } // namespace app::frontend
