@@ -297,7 +297,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Dialogo Nuevo Usuario | button | Cancelar | 110.4x48.0 | OK
   Dialogo Nuevo Usuario | button | Guardar Usuario | 160.0x48.0 | OK
 
-=== Roles y permisos (total=36, marcados=0) ===
+=== Roles y permisos (total=35, marcados=0) ===
   Roles y permisos | button | Estándar | 137.6x48.0 | OK
   Roles y permisos | button | Punto de Venta | 220.0x56.0 | OK
   Roles y permisos | button | Inventario | 220.0x56.0 | OK
@@ -315,7 +315,6 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Roles y permisos | switch/combo | Escribir notas en un pedido | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Reimprimir tickets | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Cancelar un pedido sin cobrar | 60.0x48.0 | OK
-  Roles y permisos | switch/combo | Anular una venta cobrada | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Hacer reembolsos | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Ver existencias | 60.0x48.0 | OK
   Roles y permisos | switch/combo | Administrar productos y recetas | 60.0x48.0 | OK
@@ -336,7 +335,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Roles y permisos | button | Guardar | 134.4x48.0 | OK
   Roles y permisos | list_row | SysListView32#0 (2 filas) | 338.4x43.2 | OK
 
-=== Configuración (total=16, marcados=0) ===
+=== Configuración (total=19, marcados=0) ===
   Configuración | button | Estándar | 137.6x48.0 | OK
   Configuración | button | Punto de Venta | 220.0x56.0 | OK
   Configuración | button | Inventario | 220.0x56.0 | OK
@@ -353,6 +352,9 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Configuración | switch/combo | comboBox | 439.2x48.0 | OK
   Configuración | switch/combo | comboBox | 439.2x48.0 | OK
   Configuración | button | Guardar Configuración | 237.6x48.0 | OK
+  Configuración | edit | <edit> | 130.4x48.0 | OK
+  Configuración | edit | <edit> | 130.4x48.0 | OK
+  Configuración | button | Guardar | 120.0x48.0 | OK
   Configuración | popup_option | Configuracion:Impresora (rows=4) | h_opt=44.0 (popup=176.0) | OK
   Configuración | popup_option | Configuracion:PerfilPapel (rows=2) | h_opt=44.0 (popup=88.0) | OK
 
@@ -928,4 +930,4 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Dialogo Historial | button | Buscar | 121.6x48.0 | OK
   Dialogo Historial | button | Ver / Reimprimir Ticket | 242.4x48.0 | OK
   Dialogo Historial | button | Cerrar | 110.4x48.0 | OK
-  Dialogo Historial | list_row | SysListView32#0 (1 filas) | 720.8x43.2 | OK
+  Dialogo Historial | list_row | SysListView32#0 (1 filas) | 812.0x43.2 | OK

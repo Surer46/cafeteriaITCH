@@ -169,6 +169,7 @@ otas-pc.md`. `ctest` vuelve a estar disponible, pero **no correr `UpdateTest` ha
 
 ## Reanudar agentes
 
+- **T17 aceptado e integrado (2026-11-23, `507c6b3`)**: interfaz de reembolsos y cargo por tarjeta; migración 023 quita `pos.void_sale`. Primer bloque de frontend de Claude Code Terminal, aceptado a la primera. Menores para T17b: cobro con tarjeta en Táctil con la mitad derecha vacía y diálogo de reembolso de 636 lógicos de alto.
 - **T16c aceptado (2026-11-22)**: Venta, Productos y recetas, Promociones y Combos terminadas en la prueba de pantalla completa. Queda para T16e (bloque corto final de I7): Nombre y «Aplica a» recortados en Promociones Táctil, historial de cortes con barra vertical, corte y Bitácora con texto cortado en Táctil 960x600.
 - **T16b3 aceptado (2026-11-22)**: Roles con márgenes de 16 lógicos en las tarjetas y aire en filas y encabezados (observación del usuario). Decisión del usuario: en Táctil los mínimos de densidad bajan a 7 interruptores en pantalla completa y 2 filas a 1200x720; Estándar sigue en 10. Siguiente: T16c (Neon en High, plan primero).
 - **T16b2 aceptado (2026-11-22)**: Roles vuelve a mostrar dos columnas en Táctil a pantalla completa (11/23) y las pruebas leen el total de permisos de SQLite. Siguiente: T16c (Neon en High, plan primero). Después de T16c falta un bloque corto para las tres excepciones que T16c no cubre (historial de cortes con barra vertical, corte y Bitácora con texto cortado en Táctil a 960x600).
