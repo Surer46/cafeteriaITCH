@@ -81,6 +81,13 @@ from gui_dpi import (
 
 user32.GetDlgCtrlID.argtypes = [wintypes.HWND]
 user32.GetDlgCtrlID.restype = ctypes.c_int
+user32.ClientToScreen.argtypes = [wintypes.HWND, ctypes.POINTER(wintypes.POINT)]
+user32.ClientToScreen.restype = wintypes.BOOL
+
+WS_VSCROLL = 0x00200000
+WM_VSCROLL = 0x0115
+SB_TOP = 6
+SB_BOTTOM = 7
 
 CB_SETCURSEL = 0x014E
 CB_GETCOUNT = 0x0146
@@ -449,16 +456,40 @@ def assert_geometry(hwnd_main, touch_mode, width, height):
                     f"Texto no centrado en {name_lbl} ({width}x{height}): ink_mid={ink_mid:.1f}, box_mid={box_mid:.1f}"
                 )
 
-    # No recorte de texto en botones/etiquetas visibles ni solapamientos entre controles hermanos
+    # No recorte de texto en botones/etiquetas visibles ni solapamientos entre controles visibles
+    # (recortando cada control al área cliente visible de sus ventanas padre hasta el panel).
+    def get_client_screen_rect(hwnd):
+        rc = wintypes.RECT()
+        user32.GetClientRect(hwnd, ctypes.byref(rc))
+        pt = wintypes.POINT(0, 0)
+        user32.ClientToScreen(hwnd, ctypes.byref(pt))
+        return (pt.x, pt.y, pt.x + (rc.right - rc.left), pt.y + (rc.bottom - rc.top))
+
+    def visible_rect_in_panel(hwnd):
+        l, t, r, b = get_rect(hwnd)
+        cur = user32.GetParent(hwnd)
+        while cur:
+            cl, ct, cr, cb = get_client_screen_rect(cur)
+            l = max(l, cl)
+            t = max(t, ct)
+            r = min(r, cr)
+            b = min(b, cb)
+            if cur == panel:
+                break
+            cur = user32.GetParent(cur)
+        return (l, t, r, b)
+
     edge_tol = max_px(2, scale)
     leaves = []
     for (h, cls, txt) in ctrl["visible"]:
-        r = get_rect(h)
-        if r[0] < p_rect[0] - edge_tol or r[1] < p_rect[1] - edge_tol or r[2] > p_rect[2] + edge_tol or r[3] > p_rect[3] + edge_tol:
+        vr = visible_rect_in_panel(h)
+        if vr[2] <= vr[0] or vr[3] <= vr[1]:
+            continue
+        if vr[0] < p_rect[0] - edge_tol or vr[1] < p_rect[1] - edge_tol or vr[2] > p_rect[2] + edge_tol or vr[3] > p_rect[3] + edge_tol:
             continue
         cl = cls.lower()
         if cl in ("static", "button", "edit", "combobox", "syslistview32"):
-            leaves.append((h, cl, txt, r))
+            leaves.append((h, cl, txt, vr))
             if cl in ("static", "button") and txt and "\n" not in txt:
                 tw, _ = measure_text_extent(h, txt)
                 cw, _ = get_client_size(h)
@@ -473,6 +504,38 @@ def assert_geometry(hwnd_main, touch_mode, width, height):
             ix = max(0, min(r1[2], r2[2]) - max(r1[0], r2[0]))
             iy = max(0, min(r1[3], r2[3]) - max(r1[1], r2[1]))
             assert ix * iy == 0, f"Solapamiento detectado: ({c1}, '{t1}', {r1}) vs ({c2}, '{t2}', {r2})"
+
+    # Si el formulario derecho (wxScrolledWindow) tiene barra vertical, comprobar que al desplazarse
+    # hasta abajo el último control del formulario queda entero en el viewport y Guardar sigue intacto.
+    form_scroll = None
+    cur_anc = user32.GetParent(wrap_name)
+    while cur_anc and cur_anc != panel:
+        if get_class(cur_anc).lower() == "wxwindownr" and (user32.GetWindowLongW(cur_anc, GWL_STYLE) & WS_VSCROLL):
+            form_scroll = cur_anc
+            break
+        cur_anc = user32.GetParent(cur_anc)
+    if form_scroll is not None:
+        send_msg(form_scroll, WM_VSCROLL, SB_BOTTOM, 0)
+        time.sleep(0.2)
+        sv = get_client_screen_rect(form_scroll)
+        scroll_kids = [
+            (h, get_class(h).lower(), get_text(h), get_rect(h))
+            for (h, _c, _t) in enum_children(form_scroll)
+            if user32.IsWindowVisible(h) and get_class(h).lower() in ("static", "edit", "combobox", "button")
+        ]
+        assert scroll_kids, "wxScrolledWindow del formulario no contiene controles visibles"
+        last_ctrl = max(scroll_kids, key=lambda x: x[3][3])
+        lr = last_ctrl[3]
+        assert lr[1] >= sv[1] - edge_tol and lr[3] <= sv[3] + edge_tol, (
+            f"Último control del formulario no queda entero al desplazar hasta abajo: {last_ctrl} vs viewport={sv}"
+        )
+        sr_after = get_rect(ctrl["btn_save"])
+        assert user32.IsWindowVisible(ctrl["btn_save"]), "Guardar dejó de ser visible tras desplazar el formulario"
+        assert sr_after[2] <= p_rect[2] and sr_after[3] <= p_rect[3], (
+            f"Guardar se salió del panel tras desplazar el formulario: save={sr_after}, panel={p_rect}"
+        )
+        send_msg(form_scroll, WM_VSCROLL, SB_TOP, 0)
+        time.sleep(0.15)
 
     return {
         "list_cw": list_cw if user32.IsWindowVisible(list_hwnd) else None,

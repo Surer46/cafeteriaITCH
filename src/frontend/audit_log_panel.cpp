@@ -6,11 +6,67 @@
 
 namespace app::frontend {
 
+namespace {
+
+constexpr const char* kSubtitleUtf8 = "Registro cronológico inmutable de operaciones del sistema";
+
+void wrap_static_text_deterministic(wxStaticText* lbl, const wxString& raw, int wrap_w) {
+    if (!lbl) return;
+    const int safe_w = std::max(lbl->FromDIP(120), wrap_w);
+    wxClientDC dc(lbl);
+    dc.SetFont(lbl->GetFont());
+    wxString wrapped;
+    wxString cur_line;
+    int line_count = 0;
+    size_t pos = 0;
+    while (pos < raw.length()) {
+        size_t next = raw.find(wxT(' '), pos);
+        wxString word = (next == wxString::npos) ? raw.Mid(pos) : raw.Mid(pos, next - pos);
+        wxString cand = cur_line.IsEmpty() ? word : (cur_line + wxT(" ") + word);
+        if (!cur_line.IsEmpty() && dc.GetTextExtent(cand).GetWidth() > safe_w) {
+            if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+            wrapped += cur_line;
+            ++line_count;
+            cur_line = word;
+        } else {
+            cur_line = cand;
+        }
+        if (next == wxString::npos) break;
+        pos = next + 1;
+    }
+    if (!cur_line.IsEmpty()) {
+        if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+        wrapped += cur_line;
+        ++line_count;
+    }
+    line_count = std::max(1, line_count);
+    const int line_h = dc.GetTextExtent(wxT("Ág")).GetHeight();
+    const wxSize ext = dc.GetMultiLineTextExtent(wrapped);
+    const int min_h = std::max(ext.GetHeight(), line_count * line_h) + lbl->FromDIP(2);
+
+    lbl->SetMinSize(wxDefaultSize);
+    lbl->SetLabel(wrapped);
+    lbl->InvalidateBestSize();
+    lbl->SetMinSize(wxSize(-1, min_h));
+}
+
+} // namespace
+
 AuditLogPanel::AuditLogPanel(wxWindow* parent, std::shared_ptr<contracts::IAccountService> account_service)
     : wxPanel(parent, wxID_ANY),
       account_service_(std::move(account_service)) {
     setup_ui();
     load_events();
+}
+
+AuditLogPanel::~AuditLogPanel() {
+    destroying_ = true;
+    Unbind(wxEVT_SIZE, &AuditLogPanel::on_size, this);
+    if (list_events_) {
+        list_events_->Unbind(wxEVT_LIST_ITEM_SELECTED, &AuditLogPanel::on_item_selected, this);
+        list_events_->Unbind(wxEVT_LIST_ITEM_DESELECTED, &AuditLogPanel::on_item_deselected, this);
+    }
+    DestroyChildren();
 }
 
 void AuditLogPanel::setup_ui() {
@@ -21,20 +77,19 @@ void AuditLogPanel::setup_ui() {
     const int ctrl_h_logical = Theme::is_touch() ? 48 : 34;
     const int ctrl_h = FromDIP(ctrl_h_logical);
 
-    // 1. Barra superior
-    auto* top_bar = new wxBoxSizer(wxHORIZONTAL);
-    auto* title = new wxStaticText(this, wxID_ANY, wxT("Bitácora de Auditoría y Eventos"));
-    title->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
-    title->SetForegroundColour(Theme::ColorBrandDeep);
-    top_bar->Add(title, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(16));
+    // 1. Barra superior (se apila automáticamente si el ancho no alcanza para título + subtítulo)
+    top_bar_ = new wxBoxSizer(wxHORIZONTAL);
+    lbl_title_ = new wxStaticText(this, wxID_ANY, wxT("Bitácora de Auditoría y Eventos"));
+    lbl_title_->SetFont(Theme::get_font_title(wxFONTWEIGHT_BOLD));
+    lbl_title_->SetForegroundColour(Theme::ColorBrandDeep);
+    top_bar_->Add(lbl_title_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(16));
 
-    auto* subtitle = new wxStaticText(this, wxID_ANY, wxT("Registro cronológico inmutable de operaciones del sistema"));
-    subtitle->SetFont(Theme::get_font_small());
-    subtitle->SetForegroundColour(Theme::ColorTextSecondary);
-    top_bar->Add(subtitle, 0, wxALIGN_CENTER_VERTICAL);
+    lbl_subtitle_ = new wxStaticText(this, wxID_ANY, wxString::FromUTF8(kSubtitleUtf8));
+    lbl_subtitle_->SetFont(Theme::get_font_small());
+    lbl_subtitle_->SetForegroundColour(Theme::ColorTextSecondary);
+    top_bar_->Add(lbl_subtitle_, 0, wxALIGN_CENTER_VERTICAL);
 
-    top_bar->AddStretchSpacer(1);
-    root_sizer->Add(top_bar, 0, wxEXPAND | wxALL, FromDIP(12));
+    root_sizer->Add(top_bar_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     // 2. Banner de aviso/error
     pnl_warning_ = new wxPanel(this, wxID_ANY);
@@ -46,11 +101,12 @@ void AuditLogPanel::setup_ui() {
     warn_sizer->Add(lbl_warning_, 1, wxALL, FromDIP(10));
     pnl_warning_->SetSizer(warn_sizer);
     pnl_warning_->Show(false);
-    root_sizer->Add(pnl_warning_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+    root_sizer->Add(pnl_warning_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
-    // 3. Tarjeta contenedora principal
+    // 3. Tarjeta contenedora principal (relleno interior 16 lógicas en los 4 lados)
     main_card_ = new CardPanel(this, wxID_ANY);
     main_card_->set_card_background(Theme::ColorSurface);
+    auto* card_outer = new wxBoxSizer(wxVERTICAL);
     auto* card_sizer = new wxBoxSizer(wxVERTICAL);
 
     // 3.1 Sección de Filtros
@@ -110,8 +166,8 @@ void AuditLogPanel::setup_ui() {
     txt_date_to_->SetHint(wxT("YYYY-MM-DD"));
     row2_sizer->Add(to_field, 0, wxALIGN_CENTER_VERTICAL);
 
-    filters_box->Add(row2_sizer, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
-    card_sizer->Add(filters_box, 0, wxEXPAND | wxALL, FromDIP(12));
+    filters_box->Add(row2_sizer, 0, wxEXPAND);
+    card_sizer->Add(filters_box, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
 
     // 3.2 Lista de eventos
     list_events_ = new wxListView(
@@ -130,17 +186,17 @@ void AuditLogPanel::setup_ui() {
     // Recalcular al cambiar el tamaño de la lista o al aparecer/desaparecer la barra vertical.
     list_events_->Bind(wxEVT_SIZE, [this](wxSizeEvent& e) {
         e.Skip();
-        auto_size_columns();
+        if (!destroying_) auto_size_columns();
     });
     list_events_->Bind(wxEVT_LIST_ITEM_SELECTED, &AuditLogPanel::on_item_selected, this);
     list_events_->Bind(wxEVT_LIST_ITEM_DESELECTED, &AuditLogPanel::on_item_deselected, this);
-    card_sizer->Add(list_events_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+    card_sizer->Add(list_events_, 1, wxEXPAND | wxBOTTOM, FromDIP(12));
 
     // 3.3 Visualizador de detalle completo
     auto* lbl_detail_hdr = new wxStaticText(main_card_, wxID_ANY, wxT("Detalle completo del evento seleccionado:"));
     lbl_detail_hdr->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_detail_hdr->SetForegroundColour(Theme::ColorTextSecondary);
-    card_sizer->Add(lbl_detail_hdr, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(4));
+    card_sizer->Add(lbl_detail_hdr, 0, wxBOTTOM, FromDIP(6));
 
     int detail_h = FromDIP(Theme::is_touch() ? 64 : 48);
     txt_detail_ = new wxTextCtrl(
@@ -151,7 +207,7 @@ void AuditLogPanel::setup_ui() {
     );
     txt_detail_->SetFont(Theme::get_font_body());
     txt_detail_->SetBackgroundColour(Theme::ColorSurfaceSubtle);
-    card_sizer->Add(txt_detail_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+    card_sizer->Add(txt_detail_, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
 
     // 3.4 Barra de paginación inferior
     auto* page_sizer = new wxBoxSizer(wxHORIZONTAL);
@@ -180,10 +236,11 @@ void AuditLogPanel::setup_ui() {
     lbl_count_->SetForegroundColour(Theme::ColorTextSecondary);
     page_sizer->Add(lbl_count_, 0, wxALIGN_CENTER_VERTICAL);
 
-    card_sizer->Add(page_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+    card_sizer->Add(page_sizer, 0, wxEXPAND);
 
-    main_card_->SetSizer(card_sizer);
-    root_sizer->Add(main_card_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+    card_outer->Add(card_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    main_card_->SetSizer(card_outer);
+    root_sizer->Add(main_card_, 1, wxEXPAND);
 
     SetSizer(root_sizer);
     Bind(wxEVT_SIZE, &AuditLogPanel::on_size, this);
@@ -191,8 +248,10 @@ void AuditLogPanel::setup_ui() {
 
 void AuditLogPanel::load_events() {
     if (!account_service_) {
+        last_warning_text_ = "Servicio de cuentas no disponible.";
         pnl_warning_->Show(true);
-        lbl_warning_->SetLabel(wxT("Servicio de cuentas no disponible."));
+        lbl_warning_->SetLabel(wxString::FromUTF8(last_warning_text_));
+        update_responsive_header();
         Layout();
         return;
     }
@@ -251,10 +310,8 @@ void AuditLogPanel::load_events() {
 
     auto res = account_service_->list_audit_events(filter);
     if (!res.is_success()) {
-        lbl_warning_->SetLabel(wxString::Format(
-            wxT("Error: %s"),
-            wxString::FromUTF8(res.error_message().c_str())
-        ));
+        last_warning_text_ = "Error: " + res.error_message();
+        lbl_warning_->SetLabel(wxString::FromUTF8(last_warning_text_));
         pnl_warning_->Show(true);
 
         list_events_->DeleteAllItems();
@@ -264,10 +321,12 @@ void AuditLogPanel::load_events() {
         lbl_page_->SetLabel(wxT("Página 1"));
         lbl_count_->SetLabel(wxT("Total: 0 eventos"));
         txt_detail_->SetValue(wxT("Acceso restringido o servicio no disponible."));
+        update_responsive_header();
         Layout();
         return;
     }
 
+    last_warning_text_.clear();
     pnl_warning_->Show(false);
     current_events_ = res.value();
 
@@ -315,9 +374,54 @@ void AuditLogPanel::load_events() {
     txt_detail_->SetValue(wxT("Seleccione un evento de la lista para ver el detalle completo."));
 
     auto_size_columns();
+    update_responsive_header();
     Layout();
     // La barra vertical puede aparecer tras insertar filas: recalcular al asentarse el layout.
-    CallAfter([this]() { auto_size_columns(); });
+    CallAfter([this]() {
+        if (destroying_ || IsBeingDeleted()) return;
+        auto_size_columns();
+        update_responsive_header();
+        Layout();
+    });
+}
+
+void AuditLogPanel::update_responsive_header() {
+    if (destroying_ || !top_bar_ || !lbl_title_ || !lbl_subtitle_) return;
+    const int avail_w = GetClientSize().GetWidth();
+    if (avail_w <= 0) return;
+
+    wxClientDC dc_t(lbl_title_);
+    dc_t.SetFont(lbl_title_->GetFont());
+    const int title_w = dc_t.GetTextExtent(lbl_title_->GetLabel()).GetWidth();
+
+    wxClientDC dc_s(lbl_subtitle_);
+    dc_s.SetFont(lbl_subtitle_->GetFont());
+    const int sub_w = dc_s.GetTextExtent(wxString::FromUTF8(kSubtitleUtf8)).GetWidth();
+
+    const bool want_stacked = avail_w < (title_w + FromDIP(16) + sub_w + FromDIP(4));
+    if (want_stacked != top_bar_stacked_) {
+        top_bar_stacked_ = want_stacked;
+        top_bar_->SetOrientation(want_stacked ? wxVERTICAL : wxHORIZONTAL);
+        if (auto* it_t = top_bar_->GetItem(lbl_title_)) {
+            it_t->SetFlag(want_stacked ? wxEXPAND : (wxALIGN_CENTER_VERTICAL | wxRIGHT));
+            it_t->SetBorder(want_stacked ? 0 : FromDIP(16));
+        }
+        if (auto* it_s = top_bar_->GetItem(lbl_subtitle_)) {
+            it_s->SetFlag(want_stacked ? (wxEXPAND | wxTOP) : wxALIGN_CENTER_VERTICAL);
+            it_s->SetBorder(want_stacked ? FromDIP(2) : 0);
+        }
+    }
+    if (want_stacked) {
+        wrap_static_text_deterministic(lbl_subtitle_, wxString::FromUTF8(kSubtitleUtf8), avail_w - FromDIP(4));
+    } else {
+        lbl_subtitle_->SetMinSize(wxDefaultSize);
+        lbl_subtitle_->SetLabel(wxString::FromUTF8(kSubtitleUtf8));
+        lbl_subtitle_->InvalidateBestSize();
+    }
+    if (pnl_warning_ && pnl_warning_->IsShown() && lbl_warning_ && !last_warning_text_.empty()) {
+        wrap_static_text_deterministic(lbl_warning_, wxString::FromUTF8(last_warning_text_), avail_w - FromDIP(24));
+        pnl_warning_->Layout();
+    }
 }
 
 void AuditLogPanel::auto_size_columns() {
@@ -377,9 +481,10 @@ void AuditLogPanel::on_item_deselected(wxListEvent&) {
 
 void AuditLogPanel::on_size(wxSizeEvent& event) {
     event.Skip();
-    if (in_size_event_) return;
+    if (destroying_ || in_size_event_) return;
     in_size_event_ = true;
 
+    update_responsive_header();
     auto_size_columns();
     Layout();
 

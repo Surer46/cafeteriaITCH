@@ -220,19 +220,19 @@ void InventoryRestockPanel::build_ui() {
         cb_ingredient_->SetFont(Theme::get_font_body());
         cb_ingredient_->SetMinSize(wxSize(-1, FromDIP(field_h_logical)));
         cb_ingredient_->Bind(wxEVT_COMBOBOX, &InventoryRestockPanel::on_ingredient_changed, this);
-        form_sizer->Add(cb_ingredient_, 0, wxEXPAND | wxTOP, FromDIP(3));
+        form_sizer->Add(cb_ingredient_, 0, wxEXPAND | wxTOP, FromDIP(6));
     } else {
         ch_ingredient_ = new wxChoice(form_card_, wxID_ANY);
         ch_ingredient_->SetFont(Theme::get_font_body());
         ch_ingredient_->SetMinSize(wxSize(-1, FromDIP(field_h_logical)));
         ch_ingredient_->Bind(wxEVT_CHOICE, &InventoryRestockPanel::on_ingredient_changed, this);
-        form_sizer->Add(ch_ingredient_, 0, wxEXPAND | wxTOP, FromDIP(3));
+        form_sizer->Add(ch_ingredient_, 0, wxEXPAND | wxTOP, FromDIP(6));
     }
 
     auto* lbl_qty = new wxStaticText(form_card_, wxID_ANY, wxT("Cantidad y unidad compradas:"));
     lbl_qty->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_qty->SetForegroundColour(Theme::ColorText);
-    form_sizer->Add(lbl_qty, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 10));
+    form_sizer->Add(lbl_qty, 0, wxEXPAND | wxTOP, FromDIP(touch ? 8 : 10));
 
     auto* qty_row = new wxBoxSizer(wxHORIZONTAL);
     wxWindow* qty_box = ui::make_text_field(
@@ -253,22 +253,22 @@ void InventoryRestockPanel::build_ui() {
         ch_unit_->SetMinSize(wxSize(FromDIP(96), FromDIP(field_h_logical)));
         qty_row->Add(ch_unit_, 0, wxALIGN_CENTER_VERTICAL);
     }
-    form_sizer->Add(qty_row, 0, wxEXPAND | wxTOP, FromDIP(3));
+    form_sizer->Add(qty_row, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     auto* lbl_cost = new wxStaticText(form_card_, wxID_ANY, wxT("Costo total pagado ($):"));
     lbl_cost->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_cost->SetForegroundColour(Theme::ColorText);
-    form_sizer->Add(lbl_cost, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 10));
+    form_sizer->Add(lbl_cost, 0, wxEXPAND | wxTOP, FromDIP(touch ? 8 : 10));
 
     wxWindow* cost_box = ui::make_text_field(
         form_card_, txt_cost_, field_h_logical, 100, Theme::get_font_body()
     );
-    form_sizer->Add(cost_box, 0, wxEXPAND | wxTOP, FromDIP(3));
+    form_sizer->Add(cost_box, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     auto* lbl_cost_hint = new wxStaticText(form_card_, wxID_ANY, wxT("Ejemplo: 1 kg por 50.00"));
     lbl_cost_hint->SetFont(Theme::get_font_small());
     lbl_cost_hint->SetForegroundColour(Theme::ColorTextSecondary);
-    form_sizer->Add(lbl_cost_hint, 0, wxEXPAND | wxTOP, FromDIP(2));
+    form_sizer->Add(lbl_cost_hint, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     btn_register_ = new wxButton(form_card_, wxID_ANY, wxT("Registrar compra"));
     btn_register_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
@@ -285,12 +285,13 @@ void InventoryRestockPanel::build_ui() {
     form_sizer->AddStretchSpacer(1);
 
     auto* form_outer = new wxBoxSizer(wxVERTICAL);
-    form_outer->Add(form_sizer, 1, wxEXPAND | wxALL, FromDIP(touch ? 10 : 14));
+    form_outer->Add(form_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
     form_card_->SetSizer(form_outer);
     main_body_->Add(form_card_, 0, wxEXPAND | wxRIGHT, FromDIP(8));
 
     // Derecha: Lista de compras recientes
     list_card_ = new CardPanel(this);
+    auto* list_outer = new wxBoxSizer(wxVERTICAL);
     auto* list_sizer = new wxBoxSizer(wxVERTICAL);
 
     pnl_readonly_notice_ = new wxPanel(list_card_, wxID_ANY);
@@ -302,7 +303,7 @@ void InventoryRestockPanel::build_ui() {
     ro_sizer->Add(lbl_ro, 1, wxALL, FromDIP(8));
     pnl_readonly_notice_->SetSizer(ro_sizer);
     pnl_readonly_notice_->Hide();
-    list_sizer->Add(pnl_readonly_notice_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    list_sizer->Add(pnl_readonly_notice_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     auto* list_header = new wxBoxSizer(wxHORIZONTAL);
     auto* lbl_list_title = new wxStaticText(list_card_, wxID_ANY, wxT("Compras recientes"));
@@ -316,7 +317,7 @@ void InventoryRestockPanel::build_ui() {
     Theme::ensure_button_min_size(btn_refresh_, 115, btn_h_logical);
     btn_refresh_->Bind(wxEVT_BUTTON, &InventoryRestockPanel::on_refresh, this);
     list_header->Add(btn_refresh_, 0, wxALIGN_CENTER_VERTICAL);
-    list_sizer->Add(list_header, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(touch ? 10 : 12));
+    list_sizer->Add(list_header, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
 
     lbl_empty_state_ = new wxStaticText(
         list_card_, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL
@@ -324,7 +325,7 @@ void InventoryRestockPanel::build_ui() {
     lbl_empty_state_->SetFont(Theme::get_font_body());
     lbl_empty_state_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_empty_state_->Hide();
-    list_sizer->Add(lbl_empty_state_, 1, wxEXPAND | wxALL, FromDIP(16));
+    list_sizer->Add(lbl_empty_state_, 1, wxEXPAND | wxTOP, FromDIP(8));
 
     list_ = new wxListView(list_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL);
     list_->SetFont(Theme::get_font_body());
@@ -338,9 +339,10 @@ void InventoryRestockPanel::build_ui() {
     if (touch) {
         ui::apply_touch_row_height(list_);
     }
-    list_sizer->Add(list_, 1, wxEXPAND | wxALL, FromDIP(touch ? 8 : 10));
+    list_sizer->Add(list_, 1, wxEXPAND);
 
-    list_card_->SetSizer(list_sizer);
+    list_outer->Add(list_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    list_card_->SetSizer(list_outer);
     main_body_->Add(list_card_, 1, wxEXPAND);
 
     root->Add(main_body_, 1, wxEXPAND);

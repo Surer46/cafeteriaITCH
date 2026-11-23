@@ -179,9 +179,10 @@ void ReportsPanel::build_ui() {
     pnl_no_permission_->Hide();
     root->Add(pnl_no_permission_, 1, wxEXPAND);
 
-    // Vista principal autorizada
+    // Vista principal autorizada (relleno interior 16 lógicas en los 4 lados)
     main_card_ = new CardPanel(this);
     main_card_->set_card_background(Theme::ColorSurface);
+    auto* card_outer = new wxBoxSizer(wxVERTICAL);
     auto* card_s = new wxBoxSizer(wxVERTICAL);
 
     // Fila 1: Título + selector de reporte + acciones Consultar / Exportar a CSV
@@ -227,7 +228,7 @@ void ReportsPanel::build_ui() {
     btn_export_->Bind(wxEVT_BUTTON, &ReportsPanel::on_export_clicked, this);
     top_row->Add(btn_export_, 0, wxALIGN_CENTER_VERTICAL | wxBOTTOM, FromDIP(8));
 
-    card_s->Add(top_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+    card_s->Add(top_row, 0, wxEXPAND);
 
     // Fila 2: Presets y rango Desde / Hasta
     auto* range_row = new wxWrapSizer(wxHORIZONTAL, wxREMOVE_LEADING_SPACES);
@@ -262,7 +263,7 @@ void ReportsPanel::build_ui() {
     );
     range_row->Add(to_box, 0, wxALIGN_CENTER_VERTICAL | wxBOTTOM, FromDIP(6));
 
-    card_s->Add(range_row, 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(12));
+    card_s->Add(range_row, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
 
     // Banners de error / discrepancia / truncamiento / exportación
     auto make_banner = [&](wxPanel*& pnl, wxStaticText*& lbl, const wxColour& bg, const wxColour& fg) {
@@ -275,7 +276,7 @@ void ReportsPanel::build_ui() {
         bs->Add(lbl, 1, wxALL, FromDIP(8));
         pnl->SetSizer(bs);
         pnl->Hide();
-        card_s->Add(pnl, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(6));
+        card_s->Add(pnl, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
     };
     make_banner(pnl_error_, lbl_error_, Theme::ColorErrorSoft, Theme::ColorError);
     make_banner(pnl_mismatch_, lbl_mismatch_, Theme::ColorErrorSoft, Theme::ColorError);
@@ -290,7 +291,7 @@ void ReportsPanel::build_ui() {
     lbl_empty_->SetFont(Theme::get_font_body());
     lbl_empty_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_empty_->Hide();
-    card_s->Add(lbl_empty_, 1, wxEXPAND | wxALL, FromDIP(16));
+    card_s->Add(lbl_empty_, 1, wxEXPAND | wxTOP, FromDIP(8));
 
     list_ = new wxListView(
         main_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL
@@ -302,15 +303,16 @@ void ReportsPanel::build_ui() {
         ui::apply_touch_row_height(list_);
     }
     list_->Bind(wxEVT_LIST_ITEM_SELECTED, &ReportsPanel::on_row_selected, this);
-    card_s->Add(list_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    card_s->Add(list_, 1, wxEXPAND);
 
     lbl_detail_ = new wxStaticText(main_card_, wxID_ANY, wxEmptyString);
     lbl_detail_->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
     lbl_detail_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_detail_->Hide();
-    card_s->Add(lbl_detail_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(8));
+    card_s->Add(lbl_detail_, 0, wxEXPAND | wxTOP, FromDIP(8));
 
-    main_card_->SetSizer(card_s);
+    card_outer->Add(card_s, 1, wxEXPAND | wxALL, FromDIP(16));
+    main_card_->SetSizer(card_outer);
     root->Add(main_card_, 1, wxEXPAND);
 
     SetSizer(root);

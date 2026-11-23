@@ -145,8 +145,9 @@ void InventoryStockPanel::build_ui() {
     pnl_no_permission_->Hide();
     root->Add(pnl_no_permission_, 1, wxEXPAND);
 
-    // Tarjeta principal
+    // Tarjeta principal (relleno interior 16 lógicas en los 4 lados)
     main_card_ = new CardPanel(this);
+    auto* card_outer = new wxBoxSizer(wxVERTICAL);
     auto* card_sizer = new wxBoxSizer(wxVERTICAL);
 
     auto* top_row = new wxBoxSizer(wxHORIZONTAL);
@@ -168,7 +169,7 @@ void InventoryStockPanel::build_ui() {
     ensure_btn_fits(btn_refresh_, 105, btn_h_logical);
     btn_refresh_->Bind(wxEVT_BUTTON, &InventoryStockPanel::on_refresh, this);
     top_row->Add(btn_refresh_, 0, wxALIGN_CENTER_VERTICAL);
-    card_sizer->Add(top_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+    card_sizer->Add(top_row, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
 
     // Fila de búsqueda y filtros
     auto* filter_row = new wxBoxSizer(wxHORIZONTAL);
@@ -210,7 +211,7 @@ void InventoryStockPanel::build_ui() {
     ensure_btn_fits(btn_low_only_, 180, btn_h_logical);
     btn_low_only_->Bind(wxEVT_BUTTON, &InventoryStockPanel::on_toggle_low_only, this);
     filter_row->Add(btn_low_only_, 0, wxALIGN_CENTER_VERTICAL);
-    card_sizer->Add(filter_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    card_sizer->Add(filter_row, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
 
     lbl_empty_ = new wxStaticText(
         main_card_, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL
@@ -218,7 +219,7 @@ void InventoryStockPanel::build_ui() {
     lbl_empty_->SetFont(Theme::get_font_body());
     lbl_empty_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_empty_->Hide();
-    card_sizer->Add(lbl_empty_, 1, wxEXPAND | wxALL, FromDIP(16));
+    card_sizer->Add(lbl_empty_, 1, wxEXPAND | wxTOP, FromDIP(8));
 
     list_ = new wxListView(
         main_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL
@@ -236,15 +237,16 @@ void InventoryStockPanel::build_ui() {
     }
     list_->Bind(wxEVT_LIST_ITEM_SELECTED, &InventoryStockPanel::on_row_selected, this);
     list_->Bind(wxEVT_LIST_ITEM_DESELECTED, &InventoryStockPanel::on_row_deselected, this);
-    card_sizer->Add(list_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    card_sizer->Add(list_, 1, wxEXPAND);
 
     lbl_detail_ = new wxStaticText(main_card_, wxID_ANY, wxEmptyString);
     lbl_detail_->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
     lbl_detail_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_detail_->Hide();
-    card_sizer->Add(lbl_detail_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(8));
+    card_sizer->Add(lbl_detail_, 0, wxEXPAND | wxTOP, FromDIP(8));
 
-    main_card_->SetSizer(card_sizer);
+    card_outer->Add(card_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    main_card_->SetSizer(card_outer);
     root->Add(main_card_, 1, wxEXPAND);
 
     SetSizer(root);

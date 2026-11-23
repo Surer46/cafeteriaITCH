@@ -11,6 +11,7 @@
 #include <vector>
 
 #include <wx/listctrl.h>
+#include <wx/scrolwin.h>
 #include <wx/wx.h>
 
 namespace app::frontend {
@@ -33,6 +34,7 @@ public:
         wxWindow* parent,
         std::shared_ptr<contracts::IInventoryService> inventory_service,
         std::shared_ptr<contracts::IAccountService> account_service);
+    ~InventoryIngredientsPanel() override;
 
     void refresh_data(const std::string& keep_selection_id = "");
 
@@ -44,6 +46,7 @@ private:
     void update_unit_ui();
     void update_empty_state();
     void update_list_column_widths();
+    void update_right_scroll();
     void set_feedback(const std::string& message, bool is_error);
 
     void on_new_ingredient(wxCommandEvent& event);
@@ -67,6 +70,7 @@ private:
     bool can_manage_products_{false};
     bool can_manage_thresholds_{false};
     bool sizing_columns_{false};
+    bool destroying_{false};
 
     wxButton* btn_new_{nullptr};
     wxButton* btn_refresh_{nullptr};
@@ -78,19 +82,24 @@ private:
     wxListView* list_{nullptr};
 
     CardPanel* right_card_{nullptr};
+    wxScrolledWindow* right_scroll_{nullptr};
     wxStaticText* lbl_form_title_{nullptr};
     wxTextCtrl* txt_name_{nullptr};
     wxChoice* ch_dimension_{nullptr};
     wxPanel* pnl_dimension_ro_{nullptr};
     wxStaticText* lbl_dimension_ro_{nullptr};
     wxTextCtrl* txt_threshold_{nullptr};
+    wxStaticText* lbl_thresh_{nullptr};
     wxStaticText* lbl_threshold_unit_{nullptr};
     wxStaticText* lbl_threshold_hint_{nullptr};
+    wxBoxSizer* stock_row_{nullptr};
+    wxStaticText* lbl_stock_caption_{nullptr};
     wxStaticText* lbl_stock_value_{nullptr};
     wxStaticText* lbl_stock_hint_{nullptr};
     wxButton* btn_save_{nullptr};
     wxStaticText* lbl_feedback_{nullptr};
     ui::NumericKeypad* keypad_{nullptr};
+    bool stock_row_stacked_{false};
 
     std::string last_list_error_;
     std::string last_feedback_;

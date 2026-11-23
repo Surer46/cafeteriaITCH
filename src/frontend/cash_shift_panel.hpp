@@ -48,6 +48,8 @@ private:
     );
     void fit_list_columns(wxListView* list, const std::vector<int>& weights);
     void render_last_closed_summary();
+    void layout_open_wrap_texts();
+    void layout_history_detail();
 
     void apply_history_preset(int preset_id);
     void load_history();
@@ -131,9 +133,20 @@ private:
     wxStaticText* lbl_co_expected_{nullptr};
     wxTextCtrl* txt_final_cash_{nullptr};
     wxStaticText* lbl_diff_preview_{nullptr};
+    wxStaticText* lbl_rsn_{nullptr};
     wxTextCtrl* txt_close_reason_{nullptr};
     wxStaticText* lbl_close_feedback_{nullptr};
     wxButton* btn_close_shift_{nullptr};
+
+    std::string last_open_header_txt_;
+    std::string last_open_mismatch_txt_;
+    std::string last_co_sales_txt_;
+    std::string last_co_methods_txt_;
+    std::string last_move_fb_txt_;
+    std::string last_close_fb_txt_;
+    std::string last_closed_body_txt_;
+    std::string last_hist_detail_txt_;
+    std::string last_hist_mismatch_txt_;
 
     // --- Vista Cortes anteriores ---
     wxPanel* pnl_history_{nullptr};

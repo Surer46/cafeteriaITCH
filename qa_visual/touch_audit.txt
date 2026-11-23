@@ -135,14 +135,14 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos (abierto) | button | Turno actual | 120.0x48.0 | OK
   Caja y turnos (abierto) | button | Cortes anteriores | 150.4x48.0 | OK
   Caja y turnos (abierto) | button | Actualizar | 104.8x48.0 | OK
-  Caja y turnos (abierto) | button | Entrada de efectivo | 198.4x48.0 | OK
-  Caja y turnos (abierto) | button | Salida de efectivo | 204.8x48.0 | OK
-  Caja y turnos (abierto) | edit | <edit> | 128.8x48.0 | OK
-  Caja y turnos (abierto) | edit | <edit> | 272.8x48.0 | OK
+  Caja y turnos (abierto) | button | Entrada de efectivo | 196.0x48.0 | OK
+  Caja y turnos (abierto) | button | Salida de efectivo | 201.6x48.0 | OK
+  Caja y turnos (abierto) | edit | <edit> | 126.4x48.0 | OK
+  Caja y turnos (abierto) | edit | <edit> | 269.6x48.0 | OK
   Caja y turnos (abierto) | button | Registrar movimiento | 179.2x48.0 | OK
-  Caja y turnos (abierto) | edit | <edit> | 461.6x48.0 | OK
-  Caja y turnos (abierto) | edit | <edit> | 461.6x48.0 | OK
-  Caja y turnos (abierto) | button | Cerrar Turno de Caja | 461.6x48.0 | OK
+  Caja y turnos (abierto) | edit | <edit> | 456.0x48.0 | OK
+  Caja y turnos (abierto) | edit | <edit> | 456.0x48.0 | OK
+  Caja y turnos (abierto) | button | Cerrar Turno de Caja | 456.0x48.0 | OK
 
 === Caja y turnos (abierto, teclado) (total=33, marcados=0) ===
   Caja y turnos (abierto, teclado) | button | Estándar | 137.6x48.0 | OK
@@ -170,14 +170,14 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Caja y turnos (abierto, teclado) | button | Turno actual | 120.0x48.0 | OK
   Caja y turnos (abierto, teclado) | button | Cortes anteriores | 150.4x48.0 | OK
   Caja y turnos (abierto, teclado) | button | Actualizar | 104.8x48.0 | OK
-  Caja y turnos (abierto, teclado) | button | Entrada de efectivo | 198.4x48.0 | OK
-  Caja y turnos (abierto, teclado) | button | Salida de efectivo | 204.8x48.0 | OK
-  Caja y turnos (abierto, teclado) | edit | <edit> | 128.8x48.0 | OK
-  Caja y turnos (abierto, teclado) | edit | <edit> | 272.8x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Entrada de efectivo | 196.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Salida de efectivo | 201.6x48.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 126.4x48.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 269.6x48.0 | OK
   Caja y turnos (abierto, teclado) | button | Registrar movimiento | 179.2x48.0 | OK
-  Caja y turnos (abierto, teclado) | edit | <edit> | 461.6x48.0 | OK
-  Caja y turnos (abierto, teclado) | edit | <edit> | 461.6x48.0 | OK
-  Caja y turnos (abierto, teclado) | button | Cerrar Turno de Caja | 461.6x48.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 456.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | edit | <edit> | 456.0x48.0 | OK
+  Caja y turnos (abierto, teclado) | button | Cerrar Turno de Caja | 456.0x48.0 | OK
 
 === Corte (teclado) (total=33, marcados=0) ===
   Corte (teclado) | button | Estándar | 137.6x48.0 | OK
@@ -205,14 +205,14 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Corte (teclado) | button | Turno actual | 120.0x48.0 | OK
   Corte (teclado) | button | Cortes anteriores | 150.4x48.0 | OK
   Corte (teclado) | button | Actualizar | 104.8x48.0 | OK
-  Corte (teclado) | button | Entrada de efectivo | 198.4x48.0 | OK
-  Corte (teclado) | button | Salida de efectivo | 204.8x48.0 | OK
-  Corte (teclado) | edit | <edit> | 128.8x48.0 | OK
-  Corte (teclado) | edit | <edit> | 272.8x48.0 | OK
+  Corte (teclado) | button | Entrada de efectivo | 196.0x48.0 | OK
+  Corte (teclado) | button | Salida de efectivo | 201.6x48.0 | OK
+  Corte (teclado) | edit | <edit> | 126.4x48.0 | OK
+  Corte (teclado) | edit | <edit> | 269.6x48.0 | OK
   Corte (teclado) | button | Registrar movimiento | 179.2x48.0 | OK
-  Corte (teclado) | edit | <edit> | 461.6x48.0 | OK
-  Corte (teclado) | edit | <edit> | 461.6x48.0 | OK
-  Corte (teclado) | button | Cerrar Turno de Caja | 461.6x48.0 | OK
+  Corte (teclado) | edit | <edit> | 456.0x48.0 | OK
+  Corte (teclado) | edit | <edit> | 456.0x48.0 | OK
+  Corte (teclado) | button | Cerrar Turno de Caja | 456.0x48.0 | OK
 
 === Historial de cortes (total=16, marcados=0) ===
   Historial de cortes | button | Estándar | 137.6x48.0 | OK
@@ -246,7 +246,7 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Bitácora | button | Buscar | 126.4x48.0 | OK
   Bitácora | edit | <edit> | 120.0x48.0 | OK
   Bitácora | edit | <edit> | 120.0x48.0 | OK
-  Bitácora | list_row | SysListView32#0 (4 filas) | 864.8x43.2 | OK
+  Bitácora | list_row | SysListView32#0 (4 filas) | 897.6x43.2 | OK
   Bitácora | popup_option | Bitacora:TipoEvento (rows=5) | h_opt=44.0 (popup=220.0) | OK
 
 === Reportes (total=18, marcados=0) ===
@@ -438,10 +438,10 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Ingredientes | button | Barra | 64.0x48.0 | OK
   Ingredientes | button | Nuevo ingrediente | 166.4x48.0 | OK
   Ingredientes | button | Actualizar | 108.0x48.0 | OK
-  Ingredientes | edit | <edit> | 233.6x48.0 | OK
-  Ingredientes | edit | <edit> | 239.2x48.0 | OK
+  Ingredientes | edit | <edit> | 207.2x48.0 | OK
+  Ingredientes | edit | <edit> | 216.8x48.0 | OK
   Ingredientes | button | Guardar | 120.0x48.0 | OK
-  Ingredientes | list_row | SysListView32#0 (1 filas) | 601.6x43.2 | OK
+  Ingredientes | list_row | SysListView32#0 (1 filas) | 576.0x43.2 | OK
 
 === Ingredientes (nuevo) (total=17, marcados=0) ===
   Ingredientes (nuevo) | button | Estándar | 137.6x48.0 | OK
@@ -457,11 +457,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Ingredientes (nuevo) | button | Barra | 64.0x48.0 | OK
   Ingredientes (nuevo) | button | Nuevo ingrediente | 166.4x48.0 | OK
   Ingredientes (nuevo) | button | Actualizar | 108.0x48.0 | OK
-  Ingredientes (nuevo) | edit | <edit> | 233.6x48.0 | OK
-  Ingredientes (nuevo) | combobox | <combobox> | 233.6x48.0 | OK
-  Ingredientes (nuevo) | edit | <edit> | 239.2x48.0 | OK
+  Ingredientes (nuevo) | edit | <edit> | 207.2x48.0 | OK
+  Ingredientes (nuevo) | combobox | <combobox> | 207.2x48.0 | OK
+  Ingredientes (nuevo) | edit | <edit> | 216.8x48.0 | OK
   Ingredientes (nuevo) | button | Guardar | 120.0x48.0 | OK
-  Ingredientes (nuevo) | list_row | SysListView32#0 (1 filas) | 601.6x43.2 | OK
+  Ingredientes (nuevo) | list_row | SysListView32#0 (1 filas) | 576.0x43.2 | OK
 
 === Ingredientes (nuevo, teclado) (total=30, marcados=0) ===
   Ingredientes (nuevo, teclado) | button | Estándar | 137.6x48.0 | OK
@@ -490,11 +490,11 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Ingredientes (nuevo, teclado) | button | Listo | 88.0x136.0 | OK
   Ingredientes (nuevo, teclado) | button | Nuevo ingrediente | 166.4x48.0 | OK
   Ingredientes (nuevo, teclado) | button | Actualizar | 108.0x48.0 | OK
-  Ingredientes (nuevo, teclado) | edit | <edit> | 233.6x48.0 | OK
-  Ingredientes (nuevo, teclado) | combobox | <combobox> | 233.6x48.0 | OK
-  Ingredientes (nuevo, teclado) | edit | <edit> | 239.2x48.0 | OK
+  Ingredientes (nuevo, teclado) | edit | <edit> | 207.2x48.0 | OK
+  Ingredientes (nuevo, teclado) | combobox | <combobox> | 207.2x48.0 | OK
+  Ingredientes (nuevo, teclado) | edit | <edit> | 216.8x48.0 | OK
   Ingredientes (nuevo, teclado) | button | Guardar | 120.0x48.0 | OK
-  Ingredientes (nuevo, teclado) | list_row | SysListView32#0 (1 filas) | 601.6x43.2 | OK
+  Ingredientes (nuevo, teclado) | list_row | SysListView32#0 (1 filas) | 576.0x43.2 | OK
 
 === Reabastecimiento (total=17, marcados=0) ===
   Reabastecimiento | button | Estándar | 137.6x48.0 | OK
@@ -508,13 +508,13 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Reabastecimiento | button | Ingredientes | 104.0x48.0 | OK
   Reabastecimiento | button | Promociones y combos | 180.0x48.0 | OK
   Reabastecimiento | button | Barra | 64.0x48.0 | OK
-  Reabastecimiento | switch/combo | comboBox | 264.0x48.0 | OK
-  Reabastecimiento | edit | <edit> | 149.6x48.0 | OK
+  Reabastecimiento | switch/combo | comboBox | 252.8x48.0 | OK
+  Reabastecimiento | edit | <edit> | 138.4x48.0 | OK
   Reabastecimiento | switch/combo | comboBox | 108.0x48.0 | OK
-  Reabastecimiento | edit | <edit> | 264.0x48.0 | OK
+  Reabastecimiento | edit | <edit> | 252.8x48.0 | OK
   Reabastecimiento | button | Registrar compra | 180.0x48.0 | OK
   Reabastecimiento | button | Actualizar | 115.2x48.0 | OK
-  Reabastecimiento | list_row | SysListView32#0 (1 filas) | 617.6x43.2 | OK
+  Reabastecimiento | list_row | SysListView32#0 (1 filas) | 601.6x43.2 | OK
 
 === Reabastecimiento (teclado) (total=30, marcados=0) ===
   Reabastecimiento (teclado) | button | Estándar | 137.6x48.0 | OK
@@ -541,13 +541,13 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Reabastecimiento (teclado) | button | Borrar | 88.0x64.0 | OK
   Reabastecimiento (teclado) | button | Limpiar | 88.0x64.0 | OK
   Reabastecimiento (teclado) | button | Listo | 88.0x136.0 | OK
-  Reabastecimiento (teclado) | switch/combo | comboBox | 264.0x48.0 | OK
-  Reabastecimiento (teclado) | edit | <edit> | 149.6x48.0 | OK
+  Reabastecimiento (teclado) | switch/combo | comboBox | 252.8x48.0 | OK
+  Reabastecimiento (teclado) | edit | <edit> | 138.4x48.0 | OK
   Reabastecimiento (teclado) | switch/combo | comboBox | 108.0x48.0 | OK
-  Reabastecimiento (teclado) | edit | <edit> | 264.0x48.0 | OK
+  Reabastecimiento (teclado) | edit | <edit> | 252.8x48.0 | OK
   Reabastecimiento (teclado) | button | Registrar compra | 180.0x48.0 | OK
   Reabastecimiento (teclado) | button | Actualizar | 115.2x48.0 | OK
-  Reabastecimiento (teclado) | list_row | SysListView32#0 (1 filas) | 617.6x43.2 | OK
+  Reabastecimiento (teclado) | list_row | SysListView32#0 (1 filas) | 601.6x43.2 | OK
 
 === Barra (total=20, marcados=0) ===
   Barra | button | Estándar | 137.6x48.0 | OK
@@ -561,16 +561,16 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Barra | button | Ingredientes | 104.0x48.0 | OK
   Barra | button | Promociones y combos | 180.0x48.0 | OK
   Barra | button | Barra | 64.0x48.0 | OK
-  Barra | edit | <edit> | 403.2x48.0 | OK
+  Barra | edit | <edit> | 387.2x48.0 | OK
   Barra | button | Actualizar | 110.4x48.0 | OK
-  Barra | button | Merma | 128.0x48.0 | OK
-  Barra | button | Ajuste | 134.4x48.0 | OK
-  Barra | switch/combo | comboBox | 268.8x48.0 | OK
-  Barra | edit | <edit> | 154.4x48.0 | OK
+  Barra | button | Merma | 120.0x48.0 | OK
+  Barra | button | Ajuste | 126.4x48.0 | OK
+  Barra | switch/combo | comboBox | 252.8x48.0 | OK
+  Barra | edit | <edit> | 138.4x48.0 | OK
   Barra | switch/combo | comboBox | 108.0x48.0 | OK
-  Barra | edit | <edit> | 268.8x48.0 | OK
-  Barra | button | Registrar merma | 268.8x48.0 | OK
-  Barra | list_row | SysListView32#0 (2 filas) | 620.8x43.2 | OK
+  Barra | edit | <edit> | 252.8x48.0 | OK
+  Barra | button | Registrar merma | 252.8x48.0 | OK
+  Barra | list_row | SysListView32#0 (2 filas) | 601.6x43.2 | OK
 
 === Barra (ajuste) (total=22, marcados=0) ===
   Barra (ajuste) | button | Estándar | 137.6x48.0 | OK
@@ -584,18 +584,18 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Barra (ajuste) | button | Ingredientes | 104.0x48.0 | OK
   Barra (ajuste) | button | Promociones y combos | 180.0x48.0 | OK
   Barra (ajuste) | button | Barra | 64.0x48.0 | OK
-  Barra (ajuste) | edit | <edit> | 403.2x48.0 | OK
+  Barra (ajuste) | edit | <edit> | 387.2x48.0 | OK
   Barra (ajuste) | button | Actualizar | 110.4x48.0 | OK
-  Barra (ajuste) | button | Merma | 128.0x48.0 | OK
-  Barra (ajuste) | button | Ajuste | 134.4x48.0 | OK
-  Barra (ajuste) | button | Sumar | 128.0x48.0 | OK
-  Barra (ajuste) | button | Restar | 134.4x48.0 | OK
-  Barra (ajuste) | switch/combo | comboBox | 268.8x48.0 | OK
-  Barra (ajuste) | edit | <edit> | 154.4x48.0 | OK
+  Barra (ajuste) | button | Merma | 120.0x48.0 | OK
+  Barra (ajuste) | button | Ajuste | 126.4x48.0 | OK
+  Barra (ajuste) | button | Sumar | 120.0x48.0 | OK
+  Barra (ajuste) | button | Restar | 126.4x48.0 | OK
+  Barra (ajuste) | switch/combo | comboBox | 252.8x48.0 | OK
+  Barra (ajuste) | edit | <edit> | 138.4x48.0 | OK
   Barra (ajuste) | switch/combo | comboBox | 108.0x48.0 | OK
-  Barra (ajuste) | edit | <edit> | 268.8x48.0 | OK
-  Barra (ajuste) | button | Registrar ajuste | 268.8x48.0 | OK
-  Barra (ajuste) | list_row | SysListView32#0 (2 filas) | 620.8x43.2 | OK
+  Barra (ajuste) | edit | <edit> | 252.8x48.0 | OK
+  Barra (ajuste) | button | Registrar ajuste | 252.8x48.0 | OK
+  Barra (ajuste) | list_row | SysListView32#0 (2 filas) | 601.6x43.2 | OK
 
 === Barra (teclado) (total=35, marcados=0) ===
   Barra (teclado) | button | Estándar | 137.6x48.0 | OK
@@ -622,18 +622,18 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Barra (teclado) | button | Borrar | 88.0x64.0 | OK
   Barra (teclado) | button | Limpiar | 88.0x64.0 | OK
   Barra (teclado) | button | Listo | 88.0x136.0 | OK
-  Barra (teclado) | edit | <edit> | 403.2x48.0 | OK
+  Barra (teclado) | edit | <edit> | 387.2x48.0 | OK
   Barra (teclado) | button | Actualizar | 110.4x48.0 | OK
-  Barra (teclado) | button | Merma | 128.0x48.0 | OK
-  Barra (teclado) | button | Ajuste | 134.4x48.0 | OK
-  Barra (teclado) | button | Sumar | 128.0x48.0 | OK
-  Barra (teclado) | button | Restar | 134.4x48.0 | OK
-  Barra (teclado) | switch/combo | comboBox | 268.8x48.0 | OK
-  Barra (teclado) | edit | <edit> | 154.4x48.0 | OK
+  Barra (teclado) | button | Merma | 120.0x48.0 | OK
+  Barra (teclado) | button | Ajuste | 126.4x48.0 | OK
+  Barra (teclado) | button | Sumar | 120.0x48.0 | OK
+  Barra (teclado) | button | Restar | 126.4x48.0 | OK
+  Barra (teclado) | switch/combo | comboBox | 252.8x48.0 | OK
+  Barra (teclado) | edit | <edit> | 138.4x48.0 | OK
   Barra (teclado) | switch/combo | comboBox | 108.0x48.0 | OK
-  Barra (teclado) | edit | <edit> | 268.8x48.0 | OK
-  Barra (teclado) | button | Registrar ajuste | 268.8x48.0 | OK
-  Barra (teclado) | list_row | SysListView32#0 (2 filas) | 620.8x43.2 | OK
+  Barra (teclado) | edit | <edit> | 252.8x48.0 | OK
+  Barra (teclado) | button | Registrar ajuste | 252.8x48.0 | OK
+  Barra (teclado) | list_row | SysListView32#0 (2 filas) | 601.6x43.2 | OK
 
 === Productos y recetas (total=32, marcados=0) ===
   Productos y recetas | button | Estándar | 137.6x48.0 | OK
@@ -732,10 +732,10 @@ DPI=120 escala=1.25 (1200x720 logicos, perfil Tactil)
   Existencias | button | Promociones y combos | 180.0x48.0 | OK
   Existencias | button | Barra | 64.0x48.0 | OK
   Existencias | button | Actualizar | 104.8x48.0 | OK
-  Existencias | edit | <edit> | 465.6x48.0 | OK
-  Existencias | switch/combo | comboBox | 228.8x48.0 | OK
+  Existencias | edit | <edit> | 458.4x48.0 | OK
+  Existencias | switch/combo | comboBox | 224.8x48.0 | OK
   Existencias | button | Solo con poco o agotado | 200.8x48.0 | OK
-  Existencias | list_row | SysListView32#0 (3 filas) | 905.6x43.2 | OK
+  Existencias | list_row | SysListView32#0 (3 filas) | 894.4x43.2 | OK
 
 === Promociones (total=37, marcados=0) ===
   Promociones | button | Estándar | 137.6x48.0 | OK

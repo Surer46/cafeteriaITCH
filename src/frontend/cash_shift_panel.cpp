@@ -93,6 +93,64 @@ void ensure_btn_fits(wxButton* btn, int min_w_logical, int min_h_logical) {
     btn->SetSize(wxSize(needed_w, min_h));
 }
 
+constexpr const char* kCloseReasonLabelUtf8 = "Motivo de diferencia (obligatorio si no cuadra):";
+constexpr const char* kSnapshotNoticeUtf8 = "Corte anterior a la conciliación: importes calculados al consultar";
+constexpr const char* kClosedPromptUtf8 = "No hay ningún turno abierto en la caja actual. Debe abrir un turno con un fondo inicial para registrar cobros en el punto de venta.";
+
+void wrap_static_text_deterministic(wxStaticText* lbl, const wxString& raw, int wrap_w) {
+    if (!lbl) return;
+    const int safe_w = std::max(lbl->FromDIP(120), wrap_w);
+    wxClientDC dc(lbl);
+    dc.SetFont(lbl->GetFont());
+    wxString wrapped;
+    int line_count = 0;
+
+    size_t para_start = 0;
+    while (para_start <= raw.length()) {
+        size_t nl = raw.find(wxT('\n'), para_start);
+        wxString para = (nl == wxString::npos) ? raw.Mid(para_start) : raw.Mid(para_start, nl - para_start);
+        if (para.IsEmpty()) {
+            if (line_count > 0) wrapped += wxT("\n");
+            ++line_count;
+        } else {
+            wxString cur_line;
+            size_t pos = 0;
+            while (pos < para.length()) {
+                size_t next = para.find(wxT(' '), pos);
+                wxString word = (next == wxString::npos) ? para.Mid(pos) : para.Mid(pos, next - pos);
+                wxString cand = cur_line.IsEmpty() ? word : (cur_line + wxT(" ") + word);
+                if (!cur_line.IsEmpty() && dc.GetTextExtent(cand).GetWidth() > safe_w) {
+                    if (line_count > 0) wrapped += wxT("\n");
+                    wrapped += cur_line;
+                    ++line_count;
+                    cur_line = word;
+                } else {
+                    cur_line = cand;
+                }
+                if (next == wxString::npos) break;
+                pos = next + 1;
+            }
+            if (!cur_line.IsEmpty()) {
+                if (line_count > 0) wrapped += wxT("\n");
+                wrapped += cur_line;
+                ++line_count;
+            }
+        }
+        if (nl == wxString::npos) break;
+        para_start = nl + 1;
+    }
+
+    line_count = std::max(1, line_count);
+    const int line_h = dc.GetTextExtent(wxT("Ág")).GetHeight();
+    const wxSize ext = dc.GetMultiLineTextExtent(wrapped);
+    const int min_h = std::max(ext.GetHeight(), line_count * line_h) + lbl->FromDIP(2);
+
+    lbl->SetMinSize(wxDefaultSize);
+    lbl->SetLabel(wrapped);
+    lbl->InvalidateBestSize();
+    lbl->SetMinSize(wxSize(-1, min_h));
+}
+
 std::string iso_date(const wxDateTime& dt) {
     return std::string(dt.FormatISODate().ToUTF8());
 }
@@ -152,13 +210,13 @@ void CashShiftPanel::setup_ui() {
     ensure_btn_fits(btn_tab_history_, 150, btn_h);
     top_bar->Add(btn_tab_history_, 0, wxALIGN_CENTER_VERTICAL);
     top_bar->AddStretchSpacer(1);
-    root->Add(top_bar, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(10));
+    root->Add(top_bar, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     build_current_view(this);
     build_history_view(this);
 
-    root->Add(pnl_current_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
-    root->Add(pnl_history_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+    root->Add(pnl_current_, 1, wxEXPAND);
+    root->Add(pnl_history_, 1, wxEXPAND);
     pnl_history_->Hide();
 
     SetSizer(root);
@@ -248,25 +306,25 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
 
     status_card_ = new CardPanel(pnl_closed_wrap_);
     status_card_->set_card_background(Theme::ColorSurface);
+    auto* status_outer = new wxBoxSizer(wxVERTICAL);
     auto* card_sizer = new wxBoxSizer(wxVERTICAL);
 
     shift_badge_ = new StatusBadge(status_card_, wxT("Turno Cerrado"), false);
-    card_sizer->Add(shift_badge_, 0, wxALL, FromDIP(14));
+    card_sizer->Add(shift_badge_, 0, wxBOTTOM, FromDIP(12));
 
     lbl_details_ = new wxStaticText(status_card_, wxID_ANY, wxEmptyString);
     lbl_details_->SetFont(Theme::get_font_body());
     lbl_details_->SetForegroundColour(Theme::ColorTextSecondary);
-    card_sizer->Add(lbl_details_, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(12));
+    card_sizer->Add(lbl_details_, 0, wxEXPAND | wxBOTTOM, FromDIP(12));
 
-    card_sizer->Add(new wxStaticLine(status_card_, wxID_ANY), 0, wxEXPAND | wxLEFT | wxRIGHT, FromDIP(14));
-    card_sizer->AddSpacer(FromDIP(10));
+    card_sizer->Add(new wxStaticLine(status_card_, wxID_ANY), 0, wxEXPAND | wxBOTTOM, FromDIP(10));
 
     auto* lbl_open_prompt = new wxStaticText(
         status_card_, wxID_ANY, wxT("Ingrese el fondo inicial en efectivo para iniciar el turno:")
     );
     lbl_open_prompt->SetFont(Theme::get_font_body(wxFONTWEIGHT_MEDIUM));
     lbl_open_prompt->SetForegroundColour(Theme::ColorText);
-    card_sizer->Add(lbl_open_prompt, 0, wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
+    card_sizer->Add(lbl_open_prompt, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
 
     auto* open_row = new wxBoxSizer(touch ? wxVERTICAL : wxHORIZONTAL);
     auto* initial_field = ui::make_text_field(
@@ -287,18 +345,20 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
         open_row->Add(initial_field, 0, wxRIGHT | wxALIGN_CENTER_VERTICAL, FromDIP(10));
         open_row->Add(btn_open_shift_, 0, wxALIGN_CENTER_VERTICAL);
     }
-    card_sizer->Add(open_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(14));
-    status_card_->SetSizer(card_sizer);
+    card_sizer->Add(open_row, 0, wxEXPAND);
+    status_outer->Add(card_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    status_card_->SetSizer(status_outer);
     closed_wrap_sizer->Add(status_card_, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
 
     // Resumen del último corte recién cerrado
     last_closed_card_ = new CardPanel(pnl_closed_wrap_);
     last_closed_card_->set_card_background(Theme::ColorSurface);
+    auto* lc_outer = new wxBoxSizer(wxVERTICAL);
     auto* lc_sizer = new wxBoxSizer(wxVERTICAL);
     lbl_last_closed_title_ = new wxStaticText(last_closed_card_, wxID_ANY, wxT("Resumen del corte guardado"));
     lbl_last_closed_title_->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     lbl_last_closed_title_->SetForegroundColour(Theme::ColorBrandDeep);
-    lc_sizer->Add(lbl_last_closed_title_, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(12));
+    lc_sizer->Add(lbl_last_closed_title_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     pnl_last_mismatch_ = new wxPanel(last_closed_card_, wxID_ANY);
     pnl_last_mismatch_->SetBackgroundColour(Theme::ColorErrorSoft);
@@ -309,13 +369,14 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     lm_s->Add(lbl_last_mismatch_, 1, wxALL, FromDIP(8));
     pnl_last_mismatch_->SetSizer(lm_s);
     pnl_last_mismatch_->Hide();
-    lc_sizer->Add(pnl_last_mismatch_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    lc_sizer->Add(pnl_last_mismatch_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     lbl_last_closed_body_ = new wxStaticText(last_closed_card_, wxID_ANY, wxEmptyString);
     lbl_last_closed_body_->SetFont(Theme::get_font_body());
     lbl_last_closed_body_->SetForegroundColour(Theme::ColorText);
-    lc_sizer->Add(lbl_last_closed_body_, 1, wxEXPAND | wxALL, FromDIP(12));
-    last_closed_card_->SetSizer(lc_sizer);
+    lc_sizer->Add(lbl_last_closed_body_, 1, wxEXPAND);
+    lc_outer->Add(lc_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    last_closed_card_->SetSizer(lc_outer);
     last_closed_card_->Hide();
     closed_wrap_sizer->Add(last_closed_card_, 0, wxEXPAND);
 
@@ -331,6 +392,7 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
 
     open_header_card_ = new CardPanel(pnl_open_wrap_);
     open_header_card_->set_card_background(Theme::ColorSurface);
+    auto* oh_pad = new wxBoxSizer(wxVERTICAL);
     auto* oh_outer = new wxBoxSizer(wxVERTICAL);
     auto* oh_row = new wxBoxSizer(wxHORIZONTAL);
 
@@ -348,7 +410,7 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     ensure_btn_fits(btn_preview_refresh_, 105, btn_h);
     btn_preview_refresh_->Bind(wxEVT_BUTTON, &CashShiftPanel::on_refresh_preview, this);
     oh_row->Add(btn_preview_refresh_, 0, wxALIGN_CENTER_VERTICAL);
-    oh_outer->Add(oh_row, 0, wxEXPAND | wxALL, FromDIP(10));
+    oh_outer->Add(oh_row, 0, wxEXPAND);
 
     pnl_open_mismatch_ = new wxPanel(open_header_card_, wxID_ANY);
     pnl_open_mismatch_->SetBackgroundColour(Theme::ColorErrorSoft);
@@ -359,9 +421,10 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     om_s->Add(lbl_open_mismatch_, 1, wxALL, FromDIP(8));
     pnl_open_mismatch_->SetSizer(om_s);
     pnl_open_mismatch_->Hide();
-    oh_outer->Add(pnl_open_mismatch_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(10));
+    oh_outer->Add(pnl_open_mismatch_, 0, wxEXPAND | wxTOP, FromDIP(8));
 
-    open_header_card_->SetSizer(oh_outer);
+    oh_pad->Add(oh_outer, 1, wxEXPAND | wxALL, FromDIP(16));
+    open_header_card_->SetSizer(oh_pad);
     open_wrap_sizer->Add(open_header_card_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     auto* split = new wxBoxSizer(wxHORIZONTAL);
@@ -370,12 +433,13 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     movements_card_ = new CardPanel(pnl_open_wrap_);
     movements_card_->set_card_background(Theme::ColorSurface);
     movements_card_->SetMinSize(FromDIP(wxSize(touch ? 340 : 330, -1)));
+    auto* mv_pad = new wxBoxSizer(wxVERTICAL);
     auto* mv_sizer = new wxBoxSizer(wxVERTICAL);
 
     auto* mv_title = new wxStaticText(movements_card_, wxID_ANY, wxT("Entradas y salidas de efectivo"));
     mv_title->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     mv_title->SetForegroundColour(Theme::ColorBrandDeep);
-    mv_sizer->Add(mv_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(10));
+    mv_sizer->Add(mv_title, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     auto* kind_row = new wxBoxSizer(wxHORIZONTAL);
     btn_move_inflow_ = new wxButton(movements_card_, wxID_ANY, wxT("Entrada de efectivo"));
@@ -389,7 +453,7 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     btn_move_outflow_->Bind(wxEVT_BUTTON, &CashShiftPanel::on_move_kind_outflow, this);
     ensure_btn_fits(btn_move_outflow_, 120, btn_h);
     kind_row->Add(btn_move_outflow_, 1);
-    mv_sizer->Add(kind_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
+    mv_sizer->Add(kind_row, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     auto* mv_fields = new wxBoxSizer(wxHORIZONTAL);
     auto* col_amt = new wxBoxSizer(wxVERTICAL);
@@ -400,7 +464,7 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
         movements_card_, txt_move_amount_, field_h, 95, Theme::get_font_body()
     );
     txt_move_amount_->SetHint(wxT("Ej. 100.00"));
-    col_amt->Add(mamt_box, 0, wxEXPAND | wxTOP, FromDIP(2));
+    col_amt->Add(mamt_box, 0, wxEXPAND | wxTOP, FromDIP(6));
     mv_fields->Add(col_amt, 1, wxEXPAND | wxRIGHT, FromDIP(8));
 
     auto* col_desc = new wxBoxSizer(wxVERTICAL);
@@ -411,9 +475,9 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
         movements_card_, txt_move_desc_, field_h, 130, Theme::get_font_body()
     );
     txt_move_desc_->SetHint(wxT("Motivo (3 a 200 caracteres)"));
-    col_desc->Add(mdesc_box, 0, wxEXPAND | wxTOP, FromDIP(2));
+    col_desc->Add(mdesc_box, 0, wxEXPAND | wxTOP, FromDIP(6));
     mv_fields->Add(col_desc, 2, wxEXPAND);
-    mv_sizer->Add(mv_fields, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
+    mv_sizer->Add(mv_fields, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     auto* mv_btn_row = new wxBoxSizer(wxHORIZONTAL);
     btn_move_save_ = new wxButton(movements_card_, wxID_ANY, wxT("Registrar movimiento"));
@@ -422,12 +486,12 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     ensure_btn_fits(btn_move_save_, 165, btn_h);
     btn_move_save_->Bind(wxEVT_BUTTON, &CashShiftPanel::on_register_movement, this);
     mv_btn_row->Add(btn_move_save_, 0, wxALIGN_CENTER_VERTICAL);
-    mv_sizer->Add(mv_btn_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
+    mv_sizer->Add(mv_btn_row, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     lbl_move_feedback_ = new wxStaticText(movements_card_, wxID_ANY, wxEmptyString);
     lbl_move_feedback_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_move_feedback_->Hide();
-    mv_sizer->Add(lbl_move_feedback_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(6));
+    mv_sizer->Add(lbl_move_feedback_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     lbl_move_empty_ = new wxStaticText(
         movements_card_, wxID_ANY, wxT("Sin movimientos de efectivo en este turno."),
@@ -436,7 +500,7 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     lbl_move_empty_->SetFont(Theme::get_font_body());
     lbl_move_empty_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_move_empty_->Hide();
-    mv_sizer->Add(lbl_move_empty_, 1, wxEXPAND | wxALL, FromDIP(12));
+    mv_sizer->Add(lbl_move_empty_, 1, wxEXPAND | wxTOP, FromDIP(6));
 
     movements_list_ = new wxListView(
         movements_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL
@@ -452,9 +516,10 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     if (touch) {
         ui::apply_touch_row_height(movements_list_);
     }
-    mv_sizer->Add(movements_list_, 1, wxEXPAND | wxALL, FromDIP(10));
+    mv_sizer->Add(movements_list_, 1, wxEXPAND);
 
-    movements_card_->SetSizer(mv_sizer);
+    mv_pad->Add(mv_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    movements_card_->SetSizer(mv_pad);
     split->Add(movements_card_, 10, wxEXPAND | wxRIGHT, FromDIP(8));
 
     // --- Derecha: Corte de turno con arqueo ---
@@ -490,7 +555,7 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     lbl_co_expected_ = new wxStaticText(closeout_scroll_, wxID_ANY, wxEmptyString);
     lbl_co_expected_->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     lbl_co_expected_->SetForegroundColour(Theme::ColorBrandDeep);
-    co_s->Add(lbl_co_expected_, 0, wxEXPAND | wxTOP | wxBOTTOM, FromDIP(6));
+    co_s->Add(lbl_co_expected_, 0, wxEXPAND | wxTOP | wxBOTTOM, FromDIP(8));
 
     co_s->Add(new wxStaticLine(closeout_scroll_, wxID_ANY), 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
@@ -504,27 +569,27 @@ void CashShiftPanel::build_current_view(wxWindow* parent) {
     txt_final_cash_->ChangeValue(wxEmptyString);
     txt_final_cash_->SetHint(wxT("Ej. 500.00"));
     txt_final_cash_->Bind(wxEVT_TEXT, &CashShiftPanel::on_final_cash_changed, this);
-    co_s->Add(final_box, 0, wxEXPAND | wxTOP, FromDIP(3));
+    co_s->Add(final_box, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     lbl_diff_preview_ = new wxStaticText(closeout_scroll_, wxID_ANY, wxEmptyString);
     lbl_diff_preview_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_diff_preview_->Hide();
     co_s->Add(lbl_diff_preview_, 0, wxEXPAND | wxTOP | wxBOTTOM, FromDIP(6));
 
-    auto* lbl_rsn = new wxStaticText(
-        closeout_scroll_, wxID_ANY, wxT("Motivo de diferencia (obligatorio si no cuadra):")
+    lbl_rsn_ = new wxStaticText(
+        closeout_scroll_, wxID_ANY, wxString::FromUTF8(kCloseReasonLabelUtf8)
     );
-    lbl_rsn->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
-    lbl_rsn->SetForegroundColour(Theme::ColorText);
-    co_s->Add(lbl_rsn, 0, wxEXPAND);
+    lbl_rsn_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
+    lbl_rsn_->SetForegroundColour(Theme::ColorText);
+    co_s->Add(lbl_rsn_, 0, wxEXPAND | wxTOP, FromDIP(8));
     wxWindow* reason_box = ui::make_text_field(
         closeout_scroll_, txt_close_reason_, field_h, 140, Theme::get_font_body()
     );
     txt_close_reason_->SetHint(wxT("Obligatorio si sobra o falta (3 a 200 caracteres)"));
-    co_s->Add(reason_box, 0, wxEXPAND | wxTOP, FromDIP(2));
+    co_s->Add(reason_box, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     closeout_scroll_->SetSizer(co_s);
-    const int co_pad = FromDIP(touch ? 8 : 12);
+    const int co_pad = FromDIP(16);
     co_outer->Add(closeout_scroll_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, co_pad);
 
     // Pie fijo de closeout_card_ para que el botón de cierre siempre sea visible en Táctil
@@ -562,6 +627,7 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
     // Filtros de rango
     hist_filter_card_ = new CardPanel(pnl_history_);
     hist_filter_card_->set_card_background(Theme::ColorSurface);
+    auto* hf_pad = new wxBoxSizer(wxVERTICAL);
     auto* hf_outer = new wxBoxSizer(wxVERTICAL);
 
     auto* preset_row = new wxBoxSizer(wxHORIZONTAL);
@@ -594,7 +660,7 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
     ensure_btn_fits(btn_hist_search_, 95, btn_h);
     btn_hist_search_->Bind(wxEVT_BUTTON, &CashShiftPanel::on_hist_search, this);
     preset_row->Add(btn_hist_search_, 0, wxALIGN_CENTER_VERTICAL);
-    hf_outer->Add(preset_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
+    hf_outer->Add(preset_row, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     auto* range_row = new wxBoxSizer(wxHORIZONTAL);
     auto* lbl_from = new wxStaticText(hist_filter_card_, wxID_ANY, wxT("Desde:"));
@@ -614,7 +680,7 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
         hist_filter_card_, txt_hist_to_, field_h, 112, Theme::get_font_body()
     );
     range_row->Add(hto_box, 0, wxALIGN_CENTER_VERTICAL);
-    hf_outer->Add(range_row, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(6));
+    hf_outer->Add(range_row, 0, wxEXPAND);
 
     pnl_hist_banner_ = new wxPanel(hist_filter_card_, wxID_ANY);
     pnl_hist_banner_->SetBackgroundColour(Theme::ColorErrorSoft);
@@ -625,9 +691,10 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
     hb_s->Add(lbl_hist_banner_, 1, wxALL, FromDIP(6));
     pnl_hist_banner_->SetSizer(hb_s);
     pnl_hist_banner_->Hide();
-    hf_outer->Add(pnl_hist_banner_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(8));
+    hf_outer->Add(pnl_hist_banner_, 0, wxEXPAND | wxTOP, FromDIP(8));
 
-    hist_filter_card_->SetSizer(hf_outer);
+    hf_pad->Add(hf_outer, 1, wxEXPAND | wxALL, FromDIP(16));
+    hist_filter_card_->SetSizer(hf_pad);
     hs->Add(hist_filter_card_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     // Lista superior de cortes cerrados
@@ -642,7 +709,7 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
     lbl_hist_empty_->SetFont(Theme::get_font_body());
     lbl_hist_empty_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_hist_empty_->Hide();
-    hl_s->Add(lbl_hist_empty_, 1, wxEXPAND | wxALL, FromDIP(12));
+    hl_s->Add(lbl_hist_empty_, 1, wxEXPAND | wxALL, FromDIP(16));
 
     history_list_ = new wxListView(
         hist_list_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL
@@ -662,14 +729,15 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
         ui::apply_touch_row_height(history_list_);
     }
     history_list_->Bind(wxEVT_LIST_ITEM_SELECTED, &CashShiftPanel::on_hist_row_selected, this);
-    hl_s->Add(history_list_, 1, wxEXPAND | wxALL, FromDIP(6));
+    hl_s->Add(history_list_, 1, wxEXPAND | wxALL, FromDIP(16));
 
     hist_list_card_->SetSizer(hl_s);
-    hs->Add(hist_list_card_, 4, wxEXPAND | wxBOTTOM, FromDIP(6));
+    hs->Add(hist_list_card_, 4, wxEXPAND | wxBOTTOM, FromDIP(8));
 
-    // Detalle inferior de corte seleccionado: resumen desplazable arriba, lista de movimientos abajo a ancho completo y fuera del scroll
+    // Detalle inferior de corte seleccionado: altura del resumen calculada dinámicamente (sin cota fija de 98)
     hist_detail_card_ = new CardPanel(pnl_history_);
     hist_detail_card_->set_card_background(Theme::ColorSurface);
+    auto* hd_pad = new wxBoxSizer(wxVERTICAL);
     auto* hd_outer = new wxBoxSizer(wxVERTICAL);
     hist_detail_scroll_ = new wxScrolledWindow(
         hist_detail_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL
@@ -677,28 +745,27 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
     hist_detail_scroll_->SetBackgroundColour(Theme::ColorSurface);
     hist_detail_scroll_->ShowScrollbars(wxSHOW_SB_NEVER, wxSHOW_SB_DEFAULT);
     hist_detail_scroll_->SetScrollRate(0, FromDIP(14));
-    hist_detail_scroll_->SetMinSize(FromDIP(wxSize(-1, touch ? 74 : 74)));
-    hist_detail_scroll_->SetMaxSize(FromDIP(wxSize(-1, touch ? 98 : 98)));
+    hist_detail_scroll_->SetMinSize(FromDIP(wxSize(-1, 74)));
     auto* hd_s = new wxBoxSizer(wxVERTICAL);
 
     auto* lbl_hd_title = new wxStaticText(hist_detail_scroll_, wxID_ANY, wxT("Detalle del corte"));
     lbl_hd_title->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     lbl_hd_title->SetForegroundColour(Theme::ColorBrandDeep);
-    hd_s->Add(lbl_hd_title, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+    hd_s->Add(lbl_hd_title, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     pnl_hist_snapshot_ = new wxPanel(hist_detail_scroll_, wxID_ANY);
     pnl_hist_snapshot_->SetBackgroundColour(wxColour(254, 243, 199));
     auto* hs_s = new wxBoxSizer(wxHORIZONTAL);
     lbl_hist_snapshot_ = new wxStaticText(
         pnl_hist_snapshot_, wxID_ANY,
-        wxT("Corte anterior a la conciliación: importes calculados al consultar")
+        wxString::FromUTF8(kSnapshotNoticeUtf8)
     );
     lbl_hist_snapshot_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_hist_snapshot_->SetForegroundColour(wxColour(180, 83, 9));
     hs_s->Add(lbl_hist_snapshot_, 1, wxALL, FromDIP(6));
     pnl_hist_snapshot_->SetSizer(hs_s);
     pnl_hist_snapshot_->Hide();
-    hd_s->Add(pnl_hist_snapshot_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+    hd_s->Add(pnl_hist_snapshot_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     pnl_hist_mismatch_ = new wxPanel(hist_detail_scroll_, wxID_ANY);
     pnl_hist_mismatch_->SetBackgroundColour(Theme::ColorErrorSoft);
@@ -709,7 +776,7 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
     hm_s->Add(lbl_hist_mismatch_, 1, wxALL, FromDIP(6));
     pnl_hist_mismatch_->SetSizer(hm_s);
     pnl_hist_mismatch_->Hide();
-    hd_s->Add(pnl_hist_mismatch_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+    hd_s->Add(pnl_hist_mismatch_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     lbl_hist_detail_ = new wxStaticText(
         hist_detail_scroll_, wxID_ANY, wxT("Selecciona un corte para ver su detalle y movimientos.")
@@ -718,13 +785,13 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
     lbl_hist_detail_->SetForegroundColour(Theme::ColorText);
     hd_s->Add(lbl_hist_detail_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
     hist_detail_scroll_->SetSizer(hd_s);
-    hd_outer->Add(hist_detail_scroll_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(8));
+    hd_outer->Add(hist_detail_scroll_, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
 
     auto* hd_moves_col = new wxBoxSizer(wxVERTICAL);
     auto* lbl_hm_title = new wxStaticText(hist_detail_card_, wxID_ANY, wxT("Movimientos del corte"));
     lbl_hm_title->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_hm_title->SetForegroundColour(Theme::ColorBrandDeep);
-    hd_moves_col->Add(lbl_hm_title, 0, wxEXPAND | wxBOTTOM, FromDIP(2));
+    hd_moves_col->Add(lbl_hm_title, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     lbl_hist_moves_empty_ = new wxStaticText(
         hist_detail_card_, wxID_ANY, wxT("Sin movimientos de efectivo en este corte.")
@@ -750,9 +817,10 @@ void CashShiftPanel::build_history_view(wxWindow* parent) {
     }
     hist_movements_list_->Hide();
     hd_moves_col->Add(hist_movements_list_, 1, wxEXPAND);
-    hd_outer->Add(hd_moves_col, 2, wxEXPAND | wxALL, FromDIP(8));
+    hd_outer->Add(hd_moves_col, 1, wxEXPAND);
 
-    hist_detail_card_->SetSizer(hd_outer);
+    hd_pad->Add(hd_outer, 1, wxEXPAND | wxALL, FromDIP(16));
+    hist_detail_card_->SetSizer(hd_pad);
     hs->Add(hist_detail_card_, 8, wxEXPAND);
 
     pnl_history_->SetSizer(hs);
@@ -777,12 +845,12 @@ void CashShiftPanel::switch_tab(ActiveTab tab) {
         load_history();
         CallAfter([this]() {
             if (destroying_ || IsBeingDeleted() || active_tab_ != ActiveTab::History) return;
+            layout_history_detail();
             hist_list_card_->Layout();
             hist_detail_card_->Layout();
             pnl_history_->Layout();
             fit_list_columns(history_list_, {3, 2, 2, 2, 2, 2, 3});
             fit_list_columns(hist_movements_list_, {1, 1, 2, 4});
-            if (hist_detail_scroll_) hist_detail_scroll_->FitInside();
         });
     }
     Layout();
@@ -908,16 +976,137 @@ void CashShiftPanel::refresh_status() {
         pnl_open_wrap_->Hide();
         pnl_closed_wrap_->Show();
         shift_badge_->set_status(wxT("Turno Cerrado"), false);
-        lbl_details_->SetLabel(
-            wxT("No hay ningún turno abierto en la caja actual. Debe abrir un turno con un fondo inicial para registrar cobros en el punto de venta.")
-        );
-        lbl_details_->Wrap(std::max(FromDIP(260), pnl_current_->GetClientSize().GetWidth() - FromDIP(60)));
+        const int wrap_w = std::max(FromDIP(240), pnl_current_->GetClientSize().GetWidth() - FromDIP(40));
+        wrap_static_text_deterministic(lbl_details_, wxString::FromUTF8(kClosedPromptUtf8), wrap_w);
         render_last_closed_summary();
         status_card_->Layout();
         pnl_closed_wrap_->Layout();
     }
     pnl_current_->Layout();
     Layout();
+}
+
+void CashShiftPanel::layout_open_wrap_texts() {
+    if (destroying_) return;
+    if (pnl_closed_wrap_ && pnl_closed_wrap_->IsShown()) {
+        const int cw = std::max(FromDIP(240), pnl_current_->GetClientSize().GetWidth() - FromDIP(40));
+        if (lbl_details_) {
+            wrap_static_text_deterministic(lbl_details_, wxString::FromUTF8(kClosedPromptUtf8), cw);
+        }
+        if (last_closed_card_ && last_closed_card_->IsShown() && lbl_last_closed_body_ && !last_closed_body_txt_.empty()) {
+            wrap_static_text_deterministic(lbl_last_closed_body_, wxString::FromUTF8(last_closed_body_txt_), cw);
+            last_closed_card_->Layout();
+        }
+        if (status_card_) status_card_->Layout();
+        pnl_closed_wrap_->Layout();
+        return;
+    }
+
+    if (!pnl_open_wrap_ || !pnl_open_wrap_->IsShown()) return;
+    if (open_header_card_ && lbl_open_details_ && !last_open_header_txt_.empty()) {
+        const int h_w = open_header_card_->GetClientSize().GetWidth();
+        const int badge_w = open_badge_ ? open_badge_->GetBestSize().GetWidth() : FromDIP(110);
+        const int btn_w = btn_preview_refresh_ ? btn_preview_refresh_->GetBestSize().GetWidth() : FromDIP(110);
+        const int avail_hdr = std::max(FromDIP(180), h_w - FromDIP(32) - badge_w - btn_w - FromDIP(24));
+        wrap_static_text_deterministic(lbl_open_details_, wxString::FromUTF8(last_open_header_txt_), avail_hdr);
+    }
+    if (pnl_open_mismatch_ && pnl_open_mismatch_->IsShown() && lbl_open_mismatch_ && !last_open_mismatch_txt_.empty()) {
+        const int mw = std::max(FromDIP(200), open_header_card_->GetClientSize().GetWidth() - FromDIP(52));
+        wrap_static_text_deterministic(lbl_open_mismatch_, wxString::FromUTF8(last_open_mismatch_txt_), mw);
+        pnl_open_mismatch_->Layout();
+    }
+    if (open_header_card_) open_header_card_->Layout();
+
+    if (movements_card_ && lbl_move_feedback_ && lbl_move_feedback_->IsShown() && !last_move_fb_txt_.empty()) {
+        const int mv_w = std::max(FromDIP(180), movements_card_->GetClientSize().GetWidth() - FromDIP(36));
+        wrap_static_text_deterministic(lbl_move_feedback_, wxString::FromUTF8(last_move_fb_txt_), mv_w);
+        movements_card_->Layout();
+    }
+
+    if (closeout_scroll_) {
+        auto wrap_co = [&](int sc_w) {
+            const int w = std::max(FromDIP(180), sc_w - FromDIP(12));
+            if (lbl_co_sales_ && !last_co_sales_txt_.empty()) {
+                wrap_static_text_deterministic(lbl_co_sales_, wxString::FromUTF8(last_co_sales_txt_), w);
+            }
+            if (lbl_co_methods_ && !last_co_methods_txt_.empty()) {
+                wrap_static_text_deterministic(lbl_co_methods_, wxString::FromUTF8(last_co_methods_txt_), w);
+            }
+            if (lbl_rsn_) {
+                wrap_static_text_deterministic(lbl_rsn_, wxString::FromUTF8(kCloseReasonLabelUtf8), w);
+            }
+            closeout_scroll_->Layout();
+            closeout_scroll_->FitInside();
+        };
+        const int sw1 = closeout_scroll_->GetClientSize().GetWidth();
+        if (sw1 > 0) {
+            wrap_co(sw1);
+            const int sw2 = closeout_scroll_->GetClientSize().GetWidth();
+            if (sw2 > 0 && sw2 != sw1) {
+                wrap_co(sw2);
+            }
+        }
+    }
+    if (closeout_card_ && lbl_close_feedback_ && lbl_close_feedback_->IsShown() && !last_close_fb_txt_.empty()) {
+        const int cw = std::max(FromDIP(180), closeout_card_->GetClientSize().GetWidth() - FromDIP(36));
+        wrap_static_text_deterministic(lbl_close_feedback_, wxString::FromUTF8(last_close_fb_txt_), cw);
+    }
+    if (closeout_card_) closeout_card_->Layout();
+    pnl_open_wrap_->Layout();
+}
+
+void CashShiftPanel::layout_history_detail() {
+    if (destroying_ || !hist_detail_card_ || !hist_detail_scroll_) return;
+    const bool touch = Theme::is_touch();
+    const int card_w = hist_detail_card_->GetClientSize().GetWidth();
+    const int card_h = hist_detail_card_->GetClientSize().GetHeight();
+    if (card_w <= 0) return;
+
+    auto run_wrap = [&](int sw) {
+        const int w = std::max(FromDIP(180), sw - FromDIP(12));
+        if (pnl_hist_snapshot_ && pnl_hist_snapshot_->IsShown() && lbl_hist_snapshot_) {
+            wrap_static_text_deterministic(lbl_hist_snapshot_, wxString::FromUTF8(kSnapshotNoticeUtf8), w - FromDIP(16));
+            pnl_hist_snapshot_->Layout();
+        }
+        if (pnl_hist_mismatch_ && pnl_hist_mismatch_->IsShown() && lbl_hist_mismatch_ && !last_hist_mismatch_txt_.empty()) {
+            wrap_static_text_deterministic(lbl_hist_mismatch_, wxString::FromUTF8(last_hist_mismatch_txt_), w - FromDIP(16));
+            pnl_hist_mismatch_->Layout();
+        }
+        if (lbl_hist_detail_) {
+            const wxString raw = last_hist_detail_txt_.empty()
+                ? wxT("Selecciona un corte para ver su detalle y movimientos.")
+                : wxString::FromUTF8(last_hist_detail_txt_);
+            wrap_static_text_deterministic(lbl_hist_detail_, raw, w);
+        }
+        hist_detail_scroll_->Layout();
+    };
+
+    const int inner_w = std::max(FromDIP(180), card_w - FromDIP(32));
+    run_wrap(inner_w);
+
+    const int need_h = hist_detail_scroll_->GetSizer()
+        ? (hist_detail_scroll_->GetSizer()->GetMinSize().GetHeight() + FromDIP(4))
+        : FromDIP(98);
+
+    // Reservar siempre el alto mínimo de la sección "Movimientos del corte" + relleno de tarjeta (16*2) + gap (10)
+    const int min_moves_block_h = FromDIP(touch ? 94 : 96) + FromDIP(28);
+    const int avail_for_scroll = (card_h > 0)
+        ? std::max(FromDIP(52), card_h - FromDIP(32) - FromDIP(10) - min_moves_block_h)
+        : need_h;
+    const int target_h = std::min(need_h, avail_for_scroll);
+
+    hist_detail_scroll_->SetMinSize(wxSize(-1, target_h));
+    hist_detail_scroll_->SetMaxSize(wxSize(-1, target_h));
+    hist_detail_card_->Layout();
+
+    // Si apareció barra vertical (en 1200x720 o 960x600), re-envolver con el client width real ya descontada la barra
+    const int actual_sw = hist_detail_scroll_->GetClientSize().GetWidth();
+    if (actual_sw > 0 && actual_sw < inner_w - FromDIP(4)) {
+        run_wrap(actual_sw);
+    }
+    hist_detail_scroll_->FitInside();
+    hist_detail_scroll_->Layout();
+    hist_detail_card_->Layout();
 }
 
 void CashShiftPanel::refresh_open_preview() {
@@ -960,24 +1149,21 @@ void CashShiftPanel::refresh_open_preview() {
         " · Tarjeta " + open_preview_.card_sales.to_string() +
         " · Transferencia " + open_preview_.transfer_sales.to_string();
 
-    lbl_open_details_->SetLabel(wxString::FromUTF8(header_txt));
-    const int hdr_cw = open_header_card_->GetClientSize().GetWidth();
-    const int wrap_w = std::max(FromDIP(240), hdr_cw > 0 ? hdr_cw - FromDIP(260) : FromDIP(620));
-    lbl_open_details_->Wrap(wrap_w);
+    last_open_header_txt_ = header_txt;
+    last_co_sales_txt_ = sales_txt;
+    last_co_methods_txt_ = methods_txt;
 
     if (open_preview_.payments_mismatch_cents != 0) {
-        lbl_open_mismatch_->SetLabel(wxString::FromUTF8(format_mismatch_warning(open_preview_.payments_mismatch_cents)));
-        lbl_open_mismatch_->Wrap(std::max(FromDIP(240), pnl_open_wrap_->GetClientSize().GetWidth() - FromDIP(60)));
+        last_open_mismatch_txt_ = format_mismatch_warning(open_preview_.payments_mismatch_cents);
         pnl_open_mismatch_->Show();
     } else {
+        last_open_mismatch_txt_.clear();
         pnl_open_mismatch_->Hide();
     }
 
     lbl_co_initial_->SetLabel(
         wxString::FromUTF8("Fondo inicial: " + open_preview_.initial_cash.to_string())
     );
-    lbl_co_sales_->SetLabel(wxString::FromUTF8(sales_txt));
-    lbl_co_methods_->SetLabel(wxString::FromUTF8(methods_txt));
     lbl_co_flows_->SetLabel(wxString::FromUTF8(
         "Entradas: " + open_preview_.cash_inflows.to_string() +
         " · Salidas: " + open_preview_.cash_outflows.to_string()
@@ -985,11 +1171,6 @@ void CashShiftPanel::refresh_open_preview() {
     lbl_co_expected_->SetLabel(
         wxString::FromUTF8("Efectivo esperado: " + open_preview_.expected_cash.to_string())
     );
-
-    const int sc_cw = closeout_scroll_->GetClientSize().GetWidth();
-    const int co_wrap = std::max(FromDIP(220), sc_cw > 0 ? sc_cw - FromDIP(20) : FromDIP(340));
-    lbl_co_sales_->Wrap(co_wrap);
-    lbl_co_methods_->Wrap(co_wrap);
 
     populate_movements_list(
         movements_list_,
@@ -999,31 +1180,12 @@ void CashShiftPanel::refresh_open_preview() {
     );
     update_live_difference();
 
-    closeout_scroll_->FitInside();
-    open_header_card_->Layout();
-    movements_card_->Layout();
-    closeout_card_->Layout();
-    pnl_open_wrap_->Layout();
+    layout_open_wrap_texts();
     fit_list_columns(movements_list_, {1, 1, 2, 4});
 
-    CallAfter([this, header_txt, sales_txt, methods_txt]() {
+    CallAfter([this]() {
         if (destroying_ || IsBeingDeleted() || !has_open_preview_) return;
-        const int h_w = open_header_card_->GetClientSize().GetWidth();
-        if (h_w > FromDIP(300)) {
-            lbl_open_details_->SetLabel(wxString::FromUTF8(header_txt));
-            lbl_open_details_->Wrap(std::max(FromDIP(240), h_w - FromDIP(260)));
-        }
-        const int s_w = closeout_scroll_->GetClientSize().GetWidth();
-        if (s_w > FromDIP(200)) {
-            lbl_co_sales_->SetLabel(wxString::FromUTF8(sales_txt));
-            lbl_co_sales_->Wrap(s_w - FromDIP(20));
-            lbl_co_methods_->SetLabel(wxString::FromUTF8(methods_txt));
-            lbl_co_methods_->Wrap(s_w - FromDIP(20));
-        }
-        closeout_scroll_->FitInside();
-        open_header_card_->Layout();
-        closeout_card_->Layout();
-        pnl_open_wrap_->Layout();
+        layout_open_wrap_texts();
         fit_list_columns(movements_list_, {1, 1, 2, 4});
     });
 }
@@ -1031,6 +1193,7 @@ void CashShiftPanel::refresh_open_preview() {
 void CashShiftPanel::render_last_closed_summary() {
     if (!last_closed_card_) return;
     if (!last_closed_summary_.has_value()) {
+        last_closed_body_txt_.clear();
         last_closed_card_->Hide();
         return;
     }
@@ -1041,8 +1204,9 @@ void CashShiftPanel::render_last_closed_summary() {
     } else {
         pnl_last_mismatch_->Hide();
     }
-    lbl_last_closed_body_->SetLabel(wxString::FromUTF8(format_closeout_summary_text(dto, true)));
-    lbl_last_closed_body_->Wrap(std::max(FromDIP(260), pnl_current_->GetClientSize().GetWidth() - FromDIP(60)));
+    last_closed_body_txt_ = format_closeout_summary_text(dto, true);
+    const int wrap_w = std::max(FromDIP(240), pnl_current_->GetClientSize().GetWidth() - FromDIP(40));
+    wrap_static_text_deterministic(lbl_last_closed_body_, wxString::FromUTF8(last_closed_body_txt_), wrap_w);
     last_closed_card_->Show();
     last_closed_card_->Layout();
 }
@@ -1186,9 +1350,10 @@ void CashShiftPanel::on_register_movement(wxCommandEvent&) {
     const std::string desc = std::string(txt_move_desc_->GetValue().Trim().Trim(false).ToUTF8());
     auto res = services_.shift_service->record_cash_movement(move_kind_, amt_res.value(), desc);
     if (!res.is_success()) {
+        last_move_fb_txt_ = res.error_message();
         lbl_move_feedback_->SetForegroundColour(Theme::ColorError);
-        lbl_move_feedback_->SetLabel(wxString::FromUTF8(res.error_message()));
-        lbl_move_feedback_->Wrap(std::max(FromDIP(200), movements_card_->GetClientSize().GetWidth() - FromDIP(24)));
+        const int mv_w = std::max(FromDIP(180), movements_card_->GetClientSize().GetWidth() - FromDIP(36));
+        wrap_static_text_deterministic(lbl_move_feedback_, wxString::FromUTF8(last_move_fb_txt_), mv_w);
         lbl_move_feedback_->Show();
         movements_card_->Layout();
         return;
@@ -1196,10 +1361,10 @@ void CashShiftPanel::on_register_movement(wxCommandEvent&) {
 
     txt_move_amount_->ChangeValue(wxEmptyString);
     txt_move_desc_->ChangeValue(wxEmptyString);
+    last_move_fb_txt_ = movement_kind_plain(res.value().kind) + " registrada: " + res.value().amount.to_string();
     lbl_move_feedback_->SetForegroundColour(Theme::ColorSuccess);
-    lbl_move_feedback_->SetLabel(wxString::FromUTF8(
-        movement_kind_plain(res.value().kind) + " registrada: " + res.value().amount.to_string()
-    ));
+    const int mv_w = std::max(FromDIP(180), movements_card_->GetClientSize().GetWidth() - FromDIP(36));
+    wrap_static_text_deterministic(lbl_move_feedback_, wxString::FromUTF8(last_move_fb_txt_), mv_w);
     lbl_move_feedback_->Show();
     refresh_open_preview();
 }
@@ -1242,8 +1407,9 @@ void CashShiftPanel::on_close_shift_clicked(wxCommandEvent&) {
 
     auto res = services_.shift_service->close_shift_with_count(shift_id, final_cash, reason);
     if (!res.is_success()) {
-        lbl_close_feedback_->SetLabel(wxString::FromUTF8(res.error_message()));
-        lbl_close_feedback_->Wrap(std::max(FromDIP(200), closeout_card_->GetClientSize().GetWidth() - FromDIP(24)));
+        last_close_fb_txt_ = res.error_message();
+        const int cw = std::max(FromDIP(180), closeout_card_->GetClientSize().GetWidth() - FromDIP(36));
+        wrap_static_text_deterministic(lbl_close_feedback_, wxString::FromUTF8(last_close_fb_txt_), cw);
         lbl_close_feedback_->Show();
         closeout_card_->Layout();
         pnl_open_wrap_->Layout();
@@ -1256,6 +1422,7 @@ void CashShiftPanel::on_close_shift_clicked(wxCommandEvent&) {
         return;
     }
 
+    last_close_fb_txt_.clear();
     lbl_close_feedback_->Hide();
     last_closed_summary_ = res.value();
     if (txt_final_cash_) txt_final_cash_->ChangeValue(wxEmptyString);
@@ -1308,6 +1475,8 @@ void CashShiftPanel::load_history() {
     history_list_->DeleteAllItems();
     pnl_hist_snapshot_->Hide();
     pnl_hist_mismatch_->Hide();
+    last_hist_mismatch_txt_.clear();
+    last_hist_detail_txt_.clear();
     lbl_hist_detail_->SetLabel(wxT("Selecciona un corte para ver su detalle y movimientos."));
     populate_movements_list(hist_movements_list_, lbl_hist_moves_empty_, {}, wxT("Sin movimientos de efectivo en este corte."));
 
@@ -1381,11 +1550,11 @@ void CashShiftPanel::load_history_detail(const std::string& shift_id) {
     if (!res.is_success()) {
         pnl_hist_snapshot_->Hide();
         pnl_hist_mismatch_->Hide();
-        lbl_hist_detail_->SetLabel(wxString::FromUTF8(res.error_message()));
+        last_hist_mismatch_txt_.clear();
+        last_hist_detail_txt_ = res.error_message();
         lbl_hist_detail_->SetForegroundColour(Theme::ColorError);
         populate_movements_list(hist_movements_list_, lbl_hist_moves_empty_, {}, wxT(""));
-        hist_detail_scroll_->FitInside();
-        hist_detail_card_->Layout();
+        layout_history_detail();
         return;
     }
 
@@ -1398,30 +1567,26 @@ void CashShiftPanel::load_history_detail(const std::string& shift_id) {
     }
 
     if (dto.payments_mismatch_cents != 0) {
-        lbl_hist_mismatch_->SetLabel(wxString::FromUTF8(format_mismatch_warning(dto.payments_mismatch_cents)));
+        last_hist_mismatch_txt_ = format_mismatch_warning(dto.payments_mismatch_cents);
         pnl_hist_mismatch_->Show();
     } else {
+        last_hist_mismatch_txt_.clear();
         pnl_hist_mismatch_->Hide();
     }
 
-    lbl_hist_detail_->SetLabel(wxString::FromUTF8(format_closeout_summary_text(dto, true)));
-    hist_detail_card_->Layout();
-    const int scroll_w = hist_detail_scroll_->GetClientSize().GetWidth();
-    lbl_hist_detail_->Wrap(std::max(FromDIP(200), scroll_w > 0 ? scroll_w - FromDIP(12) : FromDIP(260)));
+    last_hist_detail_txt_ = format_closeout_summary_text(dto, true);
     populate_movements_list(
         hist_movements_list_,
         lbl_hist_moves_empty_,
         dto.movements,
         wxT("Sin movimientos de efectivo en este corte.")
     );
-    hist_detail_card_->Layout();
-    hist_detail_scroll_->FitInside();
+    layout_history_detail();
     fit_list_columns(hist_movements_list_, {1, 1, 2, 4});
     CallAfter([this]() {
         if (destroying_ || IsBeingDeleted() || active_tab_ != ActiveTab::History) return;
-        hist_detail_card_->Layout();
+        layout_history_detail();
         fit_list_columns(hist_movements_list_, {1, 1, 2, 4});
-        if (hist_detail_scroll_) hist_detail_scroll_->FitInside();
     });
 }
 
@@ -1455,15 +1620,13 @@ void CashShiftPanel::on_size(wxSizeEvent& evt) {
     evt.Skip();
     CallAfter([this]() {
         if (destroying_ || IsBeingDeleted() || sizing_) return;
-        if (active_tab_ == ActiveTab::Current && pnl_open_wrap_ && pnl_open_wrap_->IsShown()) {
-            fit_list_columns(movements_list_, {1, 1, 2, 4});
-            if (closeout_scroll_) closeout_scroll_->FitInside();
-        } else if (active_tab_ == ActiveTab::History && pnl_history_ && pnl_history_->IsShown()) {
-            if (lbl_hist_detail_ && hist_detail_scroll_) {
-                const int sw = hist_detail_scroll_->GetClientSize().GetWidth();
-                if (sw > 0) lbl_hist_detail_->Wrap(std::max(FromDIP(200), sw - FromDIP(12)));
-                hist_detail_scroll_->FitInside();
+        if (active_tab_ == ActiveTab::Current) {
+            layout_open_wrap_texts();
+            if (pnl_open_wrap_ && pnl_open_wrap_->IsShown()) {
+                fit_list_columns(movements_list_, {1, 1, 2, 4});
             }
+        } else if (active_tab_ == ActiveTab::History && pnl_history_ && pnl_history_->IsShown()) {
+            layout_history_detail();
             if (hist_list_card_) hist_list_card_->Layout();
             if (hist_detail_card_) hist_detail_card_->Layout();
             fit_list_columns(history_list_, {3, 2, 2, 2, 2, 2, 3});

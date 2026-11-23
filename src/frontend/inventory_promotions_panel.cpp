@@ -62,6 +62,135 @@ void wrap_static_text_deterministic(wxStaticText* lbl, const wxString& raw, int 
     lbl->SetMinSize(wxSize(-1, min_h));
 }
 
+void distribute_promo_list_columns(
+    wxListCtrl* list,
+    const std::vector<ui::ColumnSpec>& specs) {
+    // Prioridad de columnas en promo_list_ (T16e):
+    //   Compactas: Vigencia (3), Prioridad (4), Estado (5)
+    //   Prioritaria: Nombre (0) — en pantalla completa debe verse entero antes que Descuento/Aplica a
+    //   Secundarias flexibles: Descuento (1) y Aplica a (2), cediendo hasta hdr_floor si hace falta
+    if (!list || specs.size() != 6) return;
+    const int client_w = list->GetClientSize().GetWidth();
+    if (client_w <= 0) return;
+
+    int budget = client_w;
+    if (!ui::has_vertical_scrollbar(list)) {
+        const int item_count = list->GetItemCount();
+        if (item_count > 0) {
+            wxRect r0;
+            int row_h = list->FromDIP(Theme::is_touch() ? 42 : 24);
+            if (list->GetItemRect(0, r0, wxLIST_RECT_BOUNDS) && r0.GetHeight() > 0) {
+                row_h = r0.GetHeight();
+            }
+            const int avail_h = list->GetClientSize().GetHeight() - ui::header_height(list);
+            if (avail_h > 0 && item_count * row_h > avail_h) {
+                budget -= wxSystemSettings::GetMetric(wxSYS_VSCROLL_X, list);
+            }
+        }
+    }
+    budget = std::max(0, budget - list->FromDIP(2));
+    if (budget <= 0) return;
+
+    constexpr std::size_t n = 6;
+    std::vector<int> hdr_floor(n, 0);
+    std::vector<int> want(n, 0);
+    std::vector<int> w(n, 0);
+
+    const int hdr_pad_px = list->FromDIP(10);
+    for (std::size_t i = 0; i < n; ++i) {
+        hdr_floor[i] = ui::header_text_width(list, specs[i].header) + hdr_pad_px;
+        const int pad_px = list->FromDIP(specs[i].content_pad);
+        const int extra_px = list->FromDIP(specs[i].extra_px);
+        want[i] = std::max(hdr_floor[i], specs[i].content_px + pad_px + extra_px);
+        w[i] = want[i];
+    }
+
+    // 1. Compactas (3, 4, 5)
+    int sum_compact = w[3] + w[4] + w[5];
+    const int min_flex_all = hdr_floor[0] + hdr_floor[1] + hdr_floor[2];
+    int rem = budget - sum_compact;
+    if (rem < min_flex_all) {
+        int deficit = min_flex_all - rem;
+        for (std::size_t i = 3; i < 6 && deficit > 0; ++i) {
+            const int sp = std::max(0, w[i] - hdr_floor[i]);
+            const int cut = std::min(sp, deficit);
+            w[i] -= cut;
+            sum_compact -= cut;
+            deficit -= cut;
+        }
+        rem = budget - sum_compact;
+    }
+
+    // 2. Reparto entre Nombre (0), Descuento (1) y Aplica a (2)
+    if (rem >= want[0] + want[1] + want[2]) {
+        const int extra = rem - want[0] - want[1] - want[2];
+        const int extra_name = (extra * 45) / 100;
+        const int extra_app = (extra * 35) / 100;
+        w[0] = want[0] + extra_name;
+        w[2] = want[2] + extra_app;
+        w[1] = want[1] + (extra - extra_name - extra_app);
+    } else if (rem <= min_flex_all) {
+        w[0] = hdr_floor[0];
+        w[1] = hdr_floor[1];
+        w[2] = std::max(list->FromDIP(40), rem - w[0] - w[1]);
+    } else {
+        // Prioridad: primero Nombre hasta want[0], reservando al menos hdr_floor[1] + hdr_floor[2]
+        const int max_for_name = std::max(hdr_floor[0], rem - hdr_floor[1] - hdr_floor[2]);
+        w[0] = std::min(want[0], max_for_name);
+        int rem_12 = rem - w[0];
+        w[1] = hdr_floor[1];
+        w[2] = hdr_floor[2];
+        int avail_12 = std::max(0, rem_12 - w[1] - w[2]);
+        const int need_1 = std::max(0, want[1] - w[1]);
+        const int need_2 = std::max(0, want[2] - w[2]);
+        const int total_need = need_1 + need_2;
+        if (avail_12 > 0 && total_need > 0) {
+            const int add_1 = std::min(need_1, (avail_12 * need_1) / total_need);
+            const int add_2 = std::min(need_2, avail_12 - add_1);
+            w[1] += add_1;
+            w[2] += add_2;
+            avail_12 -= (add_1 + add_2);
+            if (avail_12 > 0) {
+                const int more_1 = std::min(need_1 - add_1, avail_12);
+                w[1] += more_1;
+                avail_12 -= more_1;
+            }
+            if (avail_12 > 0) {
+                const int more_2 = std::min(need_2 - add_2, avail_12);
+                w[2] += more_2;
+                avail_12 -= more_2;
+            }
+            if (avail_12 > 0) {
+                w[0] += avail_12;
+            }
+        } else if (avail_12 > 0) {
+            w[0] += avail_12;
+        }
+    }
+
+    int sum_all = 0;
+    for (std::size_t i = 0; i < n; ++i) sum_all += w[i];
+    if (sum_all > budget) {
+        int excess = sum_all - budget;
+        const std::size_t order[6] = {2, 1, 0, 5, 4, 3};
+        for (std::size_t idx : order) {
+            if (excess <= 0) break;
+            const int floor_i = std::max(list->FromDIP(40), hdr_floor[idx]);
+            const int can_cut = std::max(0, w[idx] - floor_i);
+            const int cut = std::min(can_cut, excess);
+            w[idx] -= cut;
+            excess -= cut;
+        }
+        if (excess > 0) {
+            w[2] = std::max(list->FromDIP(40), w[2] - excess);
+        }
+    }
+
+    for (std::size_t i = 0; i < n; ++i) {
+        list->SetColumnWidth(static_cast<int>(i), w[i]);
+    }
+}
+
 void distribute_two_flex_columns(
     wxListCtrl* list,
     const std::vector<ui::ColumnSpec>& specs,
@@ -799,7 +928,7 @@ void InventoryPromotionsPanel::build_promotions_tab(wxWindow* parent) {
     sp_s->Add(lbl_sp_hint_, 0, wxEXPAND | wxBOTTOM, FromDIP(6));
 
     promo_products_list_ = new wxListView(
-        pnl_scope_product_, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(-1, touch ? 116 : 108)),
+        pnl_scope_product_, wxID_ANY, wxDefaultPosition, FromDIP(wxSize(-1, touch ? 112 : 108)),
         wxLC_REPORT | wxLC_SINGLE_SEL
     );
     promo_products_list_->SetFont(Theme::get_font_body());
@@ -807,7 +936,7 @@ void InventoryPromotionsPanel::build_promotions_tab(wxWindow* parent) {
     promo_products_list_->SetForegroundColour(Theme::ColorText);
     promo_products_list_->InsertColumn(0, wxT("Incluido"));
     promo_products_list_->InsertColumn(1, wxT("Producto"));
-    promo_products_list_->SetMinSize(FromDIP(wxSize(-1, touch ? 116 : 108)));
+    promo_products_list_->SetMinSize(FromDIP(wxSize(-1, touch ? 112 : 108)));
     if (touch) {
         ui::apply_touch_row_height(promo_products_list_);
     }
@@ -1494,12 +1623,12 @@ void InventoryPromotionsPanel::update_promo_list_columns() {
     const int touch_col0_extra = Theme::is_touch() ? 7 : 0;
     std::vector<ui::ColumnSpec> specs;
     specs.push_back({wxT("Nombre"), max_name, 0, pad, touch_col0_extra});
-    specs.push_back({wxT("Descuento"), max_desc, max_desc, pad, 0});
+    specs.push_back({wxT("Descuento"), max_desc, 0, pad, 0});
     specs.push_back({wxT("Aplica a"), max_app, 0, pad, 0});
     specs.push_back({wxT("Vigencia"), max_val, max_val, pad, 0});
     specs.push_back({wxT("Prioridad"), max_prio, max_prio, pad, 0});
     specs.push_back({wxT("Estado"), max_st, max_st, pad, 0});
-    distribute_two_flex_columns(promo_list_, specs, 0, 2, 50, false);
+    distribute_promo_list_columns(promo_list_, specs);
     sizing_columns_ = false;
 }
 
@@ -1586,8 +1715,8 @@ void InventoryPromotionsPanel::apply_responsive_layout() {
     if (want_wide != wide_split_active_) {
         wide_split_active_ = want_wide;
         if (promo_split_ && promo_list_card_ && promo_detail_card_) {
-            if (auto* it_l = promo_split_->GetItem(promo_list_card_)) it_l->SetProportion(want_wide ? 55 : 11);
-            if (auto* it_d = promo_split_->GetItem(promo_detail_card_)) it_d->SetProportion(want_wide ? 45 : 10);
+            if (auto* it_l = promo_split_->GetItem(promo_list_card_)) it_l->SetProportion(want_wide ? 58 : 11);
+            if (auto* it_d = promo_split_->GetItem(promo_detail_card_)) it_d->SetProportion(want_wide ? 42 : 10);
             if (pnl_promos_) pnl_promos_->Layout();
         }
         if (combo_split_ && combo_list_card_ && combo_detail_card_) {
@@ -1868,7 +1997,7 @@ void InventoryPromotionsPanel::update_promo_detail_scroll() {
         }
 
         if (promo_products_list_ && pnl_scope_product_ && pnl_scope_product_->IsShown()) {
-            const int base_h = FromDIP(touch ? 116 : 108);
+            const int base_h = FromDIP(touch ? (last_promo_feedback_.empty() ? 116 : 90) : 108);
             promo_products_list_->SetMinSize(wxSize(-1, base_h));
             pnl_scope_product_->Layout();
             promo_detail_sizer_->Layout();

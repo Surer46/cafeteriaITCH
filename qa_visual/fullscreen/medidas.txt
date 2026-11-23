@@ -1,37 +1,37 @@
 # Medidas pantalla completa — Monitor: 1920x1200 px | DPI=120 (125%, escala=1.25)
 # Columnas: perfil | pantalla | cumple | vscroll | content_px | union_px | union_w% | union_h% | union_area% | max_gap_h_px(pct) | max_gap_v_px(pct) | pil_fg% | pil_bg_h_px | pil_bg_v_px | listas_tablas | texto_cortado
 Estandar | venta                | SI | NO | 1662x1076 | 1612x1018 |  97.0% |  94.6% |  91.8% |   36px( 2.2%) |   35px( 3.3%) |  89.1% |   18px |   16px | LV(725px,23f/1it,cols=100%,OK) | -
-Estandar | existencias          | SI | NO | 1662x1076 | 1608x1031 |  96.8% |  95.8% |  92.7% |   28px( 1.7%) |   30px( 2.8%) |  95.4% |   16px |   16px | LV(885px,31f/16it,cols=100%,OK) | -
-Estandar | reabastecimiento     | SI | NO | 1662x1076 | 1603x1018 |  96.5% |  94.6% |  91.3% |   41px( 2.5%) |   30px( 2.8%) |  94.8% |   16px |   16px | LV(926px,33f/3it,cols=100%,OK) | -
+Estandar | existencias          | SI | NO | 1662x1076 | 1594x1006 |  95.9% |  93.5% |  89.7% |   35px( 2.1%) |   35px( 3.3%) |  95.4% |   16px |   16px | LV(860px,30f/16it,cols=100%,OK) | -
+Estandar | reabastecimiento     | SI | NO | 1662x1076 | 1594x1006 |  95.9% |  93.5% |  89.7% |   50px( 3.0%) |   35px( 3.3%) |  94.8% |   16px |   16px | LV(914px,32f/3it,cols=100%,OK) | -
 Estandar | productos_y_recetas  | SI | NO | 1662x1076 | 1594x1006 |  95.9% |  93.5% |  89.7% |   48px( 2.9%) |   35px( 3.3%) |  78.1% |   16px |   16px | LV(810px,28f/6it,cols=100%,OK); LV(351px,12f/3it,cols=100%,OK) | -
-Estandar | ingredientes         | SI | NO | 1662x1076 | 1632x1041 |  98.2% |  96.7% |  95.0% |   26px( 1.6%) |   20px( 1.9%) |  90.1% |   16px |   16px | LV(949px,33f/8it,cols=100%,OK) | -
-Estandar | promociones          | SI | NO | 1662x1076 | 1614x1026 |  97.1% |  95.4% |  92.6% |   48px( 2.9%) |   35px( 3.3%) |  78.3% |   16px |   16px | LV(774px,27f/4it,cols=100%,CLIP[Nombre(272>140),Aplica a(305>151)]); LV(343px,12f/6it,cols=100%,OK) | -
+Estandar | ingredientes         | SI | NO | 1662x1076 | 1632x1026 |  98.2% |  95.4% |  93.6% |   48px( 2.9%) |   35px( 3.3%) |  90.0% |   16px |   16px | LV(919px,32f/8it,cols=100%,OK) | -
+Estandar | promociones          | SI | NO | 1662x1076 | 1614x1026 |  97.1% |  95.4% |  92.6% |   48px( 2.9%) |   35px( 3.3%) |  79.1% |   16px |   16px | LV(774px,27f/4it,cols=100%,CLIP[Descuento(243>151),Aplica a(305>160)]); LV(343px,12f/6it,cols=100%,OK) | -
 Estandar | combos               | SI | NO | 1662x1076 | 1614x1026 |  97.1% |  95.4% |  92.6% |   48px( 2.9%) |   35px( 3.3%) |  84.8% |   16px |   16px | LV(807px,28f/2it,cols=100%,CLIP[Nombre(289>280),Partes(669>305)]); LV(97px,3f/2it,cols=100%,OK) | -
-Estandar | barra                | SI | NO | 1662x1076 | 1607x1018 |  96.7% |  94.6% |  91.5% |   33px( 2.0%) |   33px( 3.1%) |  94.1% |   16px |   16px | LV(426px,15f/8it,cols=100%,OK) | -
-Estandar | caja_corte           | SI | NO | 1662x1076 | 1593x1007 |  95.8% |  93.6% |  89.7% |   41px( 2.5%) |   41px( 3.8%) |  86.1% |   28px |   30px | LV(599px,21f/2it,cols=100%,OK) | -
-Estandar | caja_historial       | SI | SI | 1662x1076 | 1600x1010 |  96.3% |  93.9% |  90.4% |   34px( 2.0%) |   38px( 3.5%) |  85.8% |   28px |   30px | LV(223px,7f/1it,cols=100%,OK); LV(350px,12f/2it,cols=100%,OK) | -
-Estandar | bitacora             | SI | NO | 1662x1076 | 1587x1001 |  95.5% |  93.0% |  88.8% |   45px( 2.7%) |   45px( 4.2%) |  81.7% |   30px |   38px | LV(620px,22f/3it,cols=100%,OK) | -
-Estandar | reportes             | SI | NO | 1662x1076 | 1608x1031 |  96.8% |  95.8% |  92.7% |   28px( 1.7%) |   30px( 2.8%) |  93.1% |   16px |   16px | LV(880px,31f/2it,cols=100%,OK) | -
+Estandar | barra                | SI | NO | 1662x1076 | 1592x1006 |  95.8% |  93.5% |  89.6% |   48px( 2.9%) |   50px( 4.6%) |  94.1% |   16px |   16px | LV(406px,14f/8it,cols=100%,OK) | -
+Estandar | caja_corte           | SI | NO | 1662x1076 | 1612x1026 |  97.0% |  95.4% |  92.5% |   35px( 2.1%) |   50px( 4.6%) |  90.2% |   16px |   16px | LV(598px,21f/2it,cols=100%,OK) | -
+Estandar | caja_historial       | SI | NO | 1662x1076 | 1612x1026 |  97.0% |  95.4% |  92.5% |   35px( 2.1%) |   59px( 5.5%) |  89.8% |   16px |   16px | - | -
+Estandar | bitacora             | SI | NO | 1662x1076 | 1612x1026 |  97.0% |  95.4% |  92.5% |   35px( 2.1%) |   35px( 3.3%) |  86.6% |   16px |   22px | LV(657px,23f/3it,cols=100%,OK) | -
+Estandar | reportes             | SI | NO | 1662x1076 | 1594x1006 |  95.9% |  93.5% |  89.7% |   35px( 2.1%) |   35px( 3.3%) |  93.2% |   16px |   16px | LV(863px,30f/2it,cols=100%,OK) | -
 Estandar | usuarios             | SI | NO | 1662x1076 | 1598x1010 |  96.1% |  93.9% |  90.3% |   33px( 2.0%) |   33px( 3.1%) |  81.2% |   34px |   34px | LV(850px,30f/3it,cols=100%,OK) | -
-Estandar | roles                | SI | SI | 1662x1076 | 1622x1061 |  97.6% |  98.6% |  96.2% |   25px( 1.5%) |   33px( 3.1%) |  90.2% |   16px |   16px | LV(843px,30f/3it,cols=99%,CLIP[Descripción(376>230)]); SCROLL(773px,11/23toggles) | -
-Estandar | configuracion        | SI | NO | 1662x1076 | 1568x984  |  94.3% |  91.4% |  86.3% |   48px( 2.9%) |   46px( 4.3%) |  86.7% |   28px |   28px | - | -
+Estandar | roles                | SI | SI | 1662x1076 | 1622x1061 |  97.6% |  98.6% |  96.2% |   25px( 1.5%) |   33px( 3.1%) |  90.2% |   16px |   16px | LV(843px,30f/3it,cols=99%,CLIP[Descripción(376>230)]); SCROLL(773px,12/22toggles) | -
+Estandar | configuracion        | SI | NO | 1662x1076 | 1568x984  |  94.3% |  91.4% |  86.3% |   48px( 2.9%) |   46px( 4.3%) |  87.9% |   28px |   28px | - | -
 Estandar | respaldos            | SI | NO | 1662x1076 | 1621x1010 |  97.5% |  93.9% |  91.6% |   23px( 1.4%) |   49px( 4.6%) |  91.6% |   16px |   20px | LV(297px,9f/0it,cols=100%,OK); LV(176px,5f/0it,cols=100%,OK) | -
 Estandar | actualizaciones      | NO | NO | 1662x1076 | 1601x1006 |  96.3% |  93.5% |  90.1% |   46px( 2.8%) |  780px(72.5%) |  94.5% |   16px |   16px | - | -
 Tactil   | venta                | SI | NO | 1615x1044 | 1562x984  |  96.7% |  94.3% |  91.2% |   41px( 2.5%) |   35px( 3.4%) |  88.0% |   20px |   16px | LV(588px,10f/1it,cols=100%,OK) | -
-Tactil   | existencias          | SI | NO | 1615x1044 | 1559x999  |  96.5% |  95.7% |  92.4% |   28px( 1.7%) |   30px( 2.9%) |  95.2% |   16px |   16px | LV(817px,15f/16it,cols=100%,OK) | -
-Tactil   | reabastecimiento     | SI | NO | 1615x1044 | 1564x991  |  96.8% |  94.9% |  91.9% |   33px( 2.0%) |   28px( 2.7%) |  94.6% |   16px |   16px | LV(885px,16f/3it,cols=100%,OK) | -
+Tactil   | existencias          | SI | NO | 1615x1044 | 1545x974  |  95.7% |  93.3% |  89.3% |   35px( 2.2%) |   35px( 3.4%) |  95.2% |   16px |   16px | LV(792px,14f/16it,cols=100%,OK) | -
+Tactil   | reabastecimiento     | SI | NO | 1615x1044 | 1547x974  |  95.8% |  93.3% |  89.4% |   50px( 3.1%) |   35px( 3.4%) |  94.6% |   16px |   16px | LV(865px,16f/3it,cols=100%,OK) | -
 Tactil   | productos_y_recetas  | SI | NO | 1615x1044 | 1547x974  |  95.8% |  93.3% |  89.4% |   48px( 3.0%) |   35px( 3.4%) |  83.6% |   16px |   16px | LV(730px,13f/6it,cols=100%,OK); LV(205px,3f/3it,cols=100%,OK) | -
-Tactil   | ingredientes         | SI | NO | 1615x1044 | 1585x1009 |  98.1% |  96.6% |  94.9% |   17px( 1.1%) |   20px( 1.9%) |  88.5% |   16px |   16px | LV(903px,16f/8it,cols=100%,OK) | -
-Tactil   | promociones          | SI | NO | 1615x1044 | 1567x994  |  97.0% |  95.2% |  92.4% |   48px( 3.0%) |   35px( 3.4%) |  83.8% |   16px |   16px | LV(663px,12f/4it,cols=100%,CLIP[Nombre(302>102),Aplica a(341>104)]); LV(147px,2f/6it,cols=100%,OK) | -
+Tactil   | ingredientes         | SI | NO | 1615x1044 | 1585x994  |  98.1% |  95.2% |  93.4% |   48px( 3.0%) |   35px( 3.4%) |  88.5% |   16px |   16px | LV(873px,16f/8it,cols=100%,OK) | -
+Tactil   | promociones          | SI | NO | 1615x1044 | 1567x994  |  97.0% |  95.2% |  92.4% |   48px( 3.0%) |   35px( 3.4%) |  85.3% |   16px |   16px | LV(686px,12f/4it,cols=100%,CLIP[Descuento(269>115),Aplica a(341>96)]); LV(115px,2f/6it,cols=100%,OK) | -
 Tactil   | combos               | SI | NO | 1615x1044 | 1567x994  |  97.0% |  95.2% |  92.4% |   48px( 3.0%) |   35px( 3.4%) |  82.0% |   16px |   16px | LV(722px,13f/2it,cols=100%,CLIP[Nombre(318>257),Partes(751>280)]); LV(120px,2f/2it,cols=100%,OK) | -
-Tactil   | barra                | SI | NO | 1615x1044 | 1567x989  |  97.0% |  94.7% |  91.9% |   26px( 1.6%) |   30px( 2.9%) |  94.0% |   16px |   16px | LV(401px,7f/8it,cols=100%,OK) | -
-Tactil   | caja_corte           | SI | NO | 1615x1044 | 1549x978  |  95.9% |  93.7% |  89.8% |   38px( 2.4%) |   38px( 3.6%) |  84.4% |   28px |   30px | LV(476px,8f/2it,cols=100%,OK) | -
-Tactil   | caja_historial       | SI | SI | 1615x1044 | 1553x978  |  96.2% |  93.7% |  90.1% |   34px( 2.1%) |   43px( 4.1%) |  84.2% |   28px |   30px | LV(193px,3f/1it,cols=100%,OK); LV(290px,5f/2it,cols=100%,OK) | -
-Tactil   | bitacora             | SI | NO | 1615x1044 | 1540x969  |  95.4% |  92.8% |  88.5% |   45px( 2.8%) |   47px( 4.5%) |  79.2% |   30px |   38px | LV(508px,9f/4it,cols=100%,OK) | -
-Tactil   | reportes             | SI | NO | 1615x1044 | 1561x999  |  96.7% |  95.7% |  92.5% |   28px( 1.7%) |   30px( 2.9%) |  90.5% |   16px |   16px | LV(812px,15f/2it,cols=100%,OK) | -
+Tactil   | barra                | SI | NO | 1615x1044 | 1545x974  |  95.7% |  93.3% |  89.3% |   50px( 3.1%) |   48px( 4.6%) |  94.0% |   16px |   16px | LV(374px,6f/8it,cols=100%,OK) | -
+Tactil   | caja_corte           | SI | NO | 1615x1044 | 1565x994  |  96.9% |  95.2% |  92.3% |   35px( 2.2%) |   50px( 4.8%) |  88.5% |   16px |   16px | LV(475px,8f/2it,cols=100%,OK) | -
+Tactil   | caja_historial       | SI | NO | 1615x1044 | 1565x994  |  96.9% |  95.2% |  92.3% |   35px( 2.2%) |   67px( 6.4%) |  88.1% |   16px |   16px | - | -
+Tactil   | bitacora             | SI | NO | 1615x1044 | 1565x994  |  96.9% |  95.2% |  92.3% |   35px( 2.2%) |   35px( 3.4%) |  84.0% |   16px |   24px | LV(545px,10f/4it,cols=100%,OK) | -
+Tactil   | reportes             | SI | NO | 1615x1044 | 1547x974  |  95.8% |  93.3% |  89.4% |   35px( 2.2%) |   35px( 3.4%) |  90.6% |   16px |   16px | LV(795px,14f/2it,cols=100%,OK) | -
 Tactil   | usuarios             | SI | NO | 1615x1044 | 1551x978  |  96.0% |  93.7% |  90.0% |   33px( 2.0%) |   33px( 3.2%) |  79.1% |   34px |   34px | LV(786px,14f/3it,cols=100%,OK) | -
-Tactil   | roles                | SI | SI | 1615x1044 | 1575x1029 |  97.5% |  98.6% |  96.1% |   25px( 1.5%) |   33px( 3.2%) |  88.8% |   16px |   16px | LV(790px,14f/3it,cols=99%,CLIP[Descripción(424>166)]); SCROLL(680px,7/23toggles) | -
-Tactil   | configuracion        | SI | NO | 1615x1044 | 1521x952  |  94.2% |  91.2% |  85.9% |   48px( 3.0%) |   46px( 4.4%) |  86.4% |   28px |   28px | - | -
+Tactil   | roles                | SI | SI | 1615x1044 | 1575x1029 |  97.5% |  98.6% |  96.1% |   25px( 1.5%) |   33px( 3.2%) |  88.8% |   16px |   16px | LV(790px,14f/3it,cols=99%,CLIP[Descripción(424>166)]); SCROLL(680px,10/22toggles) | -
+Tactil   | configuracion        | SI | NO | 1615x1044 | 1521x952  |  94.2% |  91.2% |  85.9% |   48px( 3.0%) |   54px( 5.2%) |  87.7% |   28px |   28px | - | -
 Tactil   | respaldos            | SI | NO | 1615x1044 | 1574x983  |  97.5% |  94.2% |  91.8% |   23px( 1.4%) |   36px( 3.4%) |  91.9% |   16px |   20px | LV(233px,7f/0it,cols=100%,OK); LV(52px,1f/0it,cols=100%,OK) | -
 Tactil   | actualizaciones      | NO | NO | 1615x1044 | 1554x974  |  96.2% |  93.3% |  89.8% |   46px( 2.8%) |  724px(69.3%) |  94.3% |   16px |   16px | - | -
 
@@ -91,13 +91,13 @@ Tactil   | 960x600  | venta                | hscroll=NO | vscroll=NO | texto_cor
 Tactil   | 960x600  | existencias          | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | reabastecimiento     | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | productos_y_recetas  | hscroll=NO | vscroll=SI | texto_cortado=-
-Tactil   | 960x600  | ingredientes         | hscroll=NO | vscroll=NO | texto_cortado=-
+Tactil   | 960x600  | ingredientes         | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | promociones          | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | combos               | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | barra                | hscroll=NO | vscroll=NO | texto_cortado=-
-Tactil   | 960x600  | caja_corte           | hscroll=NO | vscroll=SI | texto_cortado="Motivo de diferencia (oblig..."(46>24px,2L)
+Tactil   | 960x600  | caja_corte           | hscroll=NO | vscroll=SI | texto_cortado=-
 Tactil   | 960x600  | caja_historial       | hscroll=NO | vscroll=SI | texto_cortado=-
-Tactil   | 960x600  | bitacora             | hscroll=NO | vscroll=NO | texto_cortado="Registro cronológico inmuta..."(46>24px,2L)
+Tactil   | 960x600  | bitacora             | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | reportes             | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | usuarios             | hscroll=NO | vscroll=NO | texto_cortado=-
 Tactil   | 960x600  | roles                | hscroll=NO | vscroll=SI | texto_cortado=-

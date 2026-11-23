@@ -166,8 +166,9 @@ void InventoryBarPanel::build_ui() {
 
     auto* left_col = new wxBoxSizer(wxVERTICAL);
 
-    // Arriba izquierda: Existencias buscables
+    // Arriba izquierda: Existencias buscables (relleno interior 16 lógicas)
     stock_card_ = new CardPanel(this);
+    auto* stock_outer = new wxBoxSizer(wxVERTICAL);
     auto* stock_sizer = new wxBoxSizer(wxVERTICAL);
 
     auto* stock_header = new wxBoxSizer(wxHORIZONTAL);
@@ -189,7 +190,7 @@ void InventoryBarPanel::build_ui() {
     Theme::ensure_button_min_size(btn_refresh_, 110, btn_h_logical);
     btn_refresh_->Bind(wxEVT_BUTTON, &InventoryBarPanel::on_refresh, this);
     stock_header->Add(btn_refresh_, 0, wxALIGN_CENTER_VERTICAL);
-    stock_sizer->Add(stock_header, 0, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(touch ? 8 : 10));
+    stock_sizer->Add(stock_header, 0, wxEXPAND | wxBOTTOM, FromDIP(10));
 
     lbl_stock_empty_ = new wxStaticText(
         stock_card_, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL
@@ -197,7 +198,7 @@ void InventoryBarPanel::build_ui() {
     lbl_stock_empty_->SetFont(Theme::get_font_body());
     lbl_stock_empty_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_stock_empty_->Hide();
-    stock_sizer->Add(lbl_stock_empty_, 1, wxEXPAND | wxALL, FromDIP(12));
+    stock_sizer->Add(lbl_stock_empty_, 1, wxEXPAND | wxTOP, FromDIP(8));
 
     stock_list_ = new wxListView(
         stock_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL
@@ -212,19 +213,21 @@ void InventoryBarPanel::build_ui() {
         ui::apply_touch_row_height(stock_list_);
     }
     stock_list_->Bind(wxEVT_LIST_ITEM_SELECTED, &InventoryBarPanel::on_stock_selected, this);
-    stock_sizer->Add(stock_list_, 1, wxEXPAND | wxALL, FromDIP(touch ? 6 : 8));
+    stock_sizer->Add(stock_list_, 1, wxEXPAND);
 
-    stock_card_->SetSizer(stock_sizer);
+    stock_outer->Add(stock_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    stock_card_->SetSizer(stock_outer);
     left_col->Add(stock_card_, 11, wxEXPAND | wxBOTTOM, FromDIP(touch ? 6 : 8));
 
-    // Abajo izquierda: Movimientos recientes de merma y ajuste
+    // Abajo izquierda: Movimientos recientes de merma y ajuste (relleno interior 16 lógicas)
     mov_card_ = new CardPanel(this);
+    auto* mov_outer = new wxBoxSizer(wxVERTICAL);
     auto* mov_sizer = new wxBoxSizer(wxVERTICAL);
 
     auto* lbl_mov_title = new wxStaticText(mov_card_, wxID_ANY, wxT("Movimientos recientes"));
     lbl_mov_title->SetFont(Theme::get_font_subtitle(wxFONTWEIGHT_BOLD));
     lbl_mov_title->SetForegroundColour(Theme::ColorText);
-    mov_sizer->Add(lbl_mov_title, 0, wxLEFT | wxRIGHT | wxTOP, FromDIP(touch ? 8 : 10));
+    mov_sizer->Add(lbl_mov_title, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     lbl_mov_empty_ = new wxStaticText(
         mov_card_, wxID_ANY, wxEmptyString, wxDefaultPosition, wxDefaultSize, wxALIGN_CENTER_HORIZONTAL
@@ -232,7 +235,7 @@ void InventoryBarPanel::build_ui() {
     lbl_mov_empty_->SetFont(Theme::get_font_body());
     lbl_mov_empty_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_mov_empty_->Hide();
-    mov_sizer->Add(lbl_mov_empty_, 1, wxEXPAND | wxALL, FromDIP(12));
+    mov_sizer->Add(lbl_mov_empty_, 1, wxEXPAND | wxTOP, FromDIP(8));
 
     mov_list_ = new wxListView(
         mov_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxLC_REPORT | wxLC_SINGLE_SEL
@@ -250,17 +253,16 @@ void InventoryBarPanel::build_ui() {
     }
     mov_list_->Bind(wxEVT_LIST_ITEM_SELECTED, &InventoryBarPanel::on_movement_selected, this);
     mov_list_->Bind(wxEVT_LIST_ITEM_DESELECTED, &InventoryBarPanel::on_movement_deselected, this);
-    mov_sizer->Add(mov_list_, 1, wxEXPAND | wxALL, FromDIP(touch ? 6 : 8));
+    mov_sizer->Add(mov_list_, 1, wxEXPAND);
 
     lbl_mov_detail_ = new wxStaticText(mov_card_, wxID_ANY, wxEmptyString);
     lbl_mov_detail_->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
     lbl_mov_detail_->SetForegroundColour(Theme::ColorText);
     lbl_mov_detail_->Hide();
-    mov_sizer->Add(
-        lbl_mov_detail_, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(touch ? 8 : 10)
-    );
+    mov_sizer->Add(lbl_mov_detail_, 0, wxEXPAND | wxTOP, FromDIP(8));
 
-    mov_card_->SetSizer(mov_sizer);
+    mov_outer->Add(mov_sizer, 1, wxEXPAND | wxALL, FromDIP(16));
+    mov_card_->SetSizer(mov_outer);
     left_col->Add(mov_card_, 10, wxEXPAND);
 
     main_body_->Add(left_col, 1, wxEXPAND | wxRIGHT, FromDIP(8));
@@ -279,7 +281,7 @@ void InventoryBarPanel::build_ui() {
     lbl_no_adjust_->SetForegroundColour(Theme::ColorTextSecondary);
     lbl_no_adjust_->Wrap(FromDIP(260));
     lbl_no_adjust_->Hide();
-    action_outer->Add(lbl_no_adjust_, 0, wxEXPAND | wxALL, FromDIP(14));
+    action_outer->Add(lbl_no_adjust_, 0, wxEXPAND | wxALL, FromDIP(16));
 
     form_scroll_ = new wxScrolledWindow(action_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL);
     form_scroll_->SetBackgroundColour(Theme::ColorSurface);
@@ -299,7 +301,7 @@ void InventoryBarPanel::build_ui() {
     btn_mode_adjust_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     btn_mode_adjust_->Bind(wxEVT_BUTTON, &InventoryBarPanel::on_mode_adjustment, this);
     mode_row->Add(btn_mode_adjust_, 1, wxEXPAND);
-    form_sizer_->Add(mode_row, 0, wxEXPAND | wxBOTTOM, FromDIP(touch ? 6 : 8));
+    form_sizer_->Add(mode_row, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     // Dirección en modo Ajuste: Sumar / Restar
     pnl_adjust_dir_ = new wxPanel(form_scroll_, wxID_ANY);
@@ -308,7 +310,7 @@ void InventoryBarPanel::build_ui() {
     auto* lbl_dir = new wxStaticText(pnl_adjust_dir_, wxID_ANY, wxT("Tipo de ajuste:"));
     lbl_dir->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_dir->SetForegroundColour(Theme::ColorTextSecondary);
-    dir_col->Add(lbl_dir, 0, wxBOTTOM, FromDIP(2));
+    dir_col->Add(lbl_dir, 0, wxBOTTOM, FromDIP(6));
 
     auto* dir_row = new wxBoxSizer(wxHORIZONTAL);
     btn_dir_add_ = new wxButton(pnl_adjust_dir_, wxID_ANY, wxT("Sumar"));
@@ -323,7 +325,7 @@ void InventoryBarPanel::build_ui() {
     dir_col->Add(dir_row, 0, wxEXPAND);
     pnl_adjust_dir_->SetSizer(dir_col);
     pnl_adjust_dir_->Hide();
-    form_sizer_->Add(pnl_adjust_dir_, 0, wxEXPAND | wxBOTTOM, FromDIP(touch ? 6 : 8));
+    form_sizer_->Add(pnl_adjust_dir_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
     auto* lbl_ing = new wxStaticText(form_scroll_, wxID_ANY, wxT("Ingrediente:"));
     lbl_ing->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
@@ -337,19 +339,19 @@ void InventoryBarPanel::build_ui() {
         cb_ingredient_->SetFont(Theme::get_font_body());
         cb_ingredient_->SetMinSize(wxSize(-1, FromDIP(field_h_logical)));
         cb_ingredient_->Bind(wxEVT_COMBOBOX, &InventoryBarPanel::on_ingredient_changed, this);
-        form_sizer_->Add(cb_ingredient_, 0, wxEXPAND | wxTOP, FromDIP(2));
+        form_sizer_->Add(cb_ingredient_, 0, wxEXPAND | wxTOP, FromDIP(6));
     } else {
         ch_ingredient_ = new wxChoice(form_scroll_, wxID_ANY);
         ch_ingredient_->SetFont(Theme::get_font_body());
         ch_ingredient_->SetMinSize(wxSize(-1, FromDIP(field_h_logical)));
         ch_ingredient_->Bind(wxEVT_CHOICE, &InventoryBarPanel::on_ingredient_changed, this);
-        form_sizer_->Add(ch_ingredient_, 0, wxEXPAND | wxTOP, FromDIP(2));
+        form_sizer_->Add(ch_ingredient_, 0, wxEXPAND | wxTOP, FromDIP(6));
     }
 
     auto* lbl_qty = new wxStaticText(form_scroll_, wxID_ANY, wxT("Cantidad y unidad:"));
     lbl_qty->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_qty->SetForegroundColour(Theme::ColorText);
-    form_sizer_->Add(lbl_qty, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
+    form_sizer_->Add(lbl_qty, 0, wxEXPAND | wxTOP, FromDIP(8));
 
     auto* qty_row = new wxBoxSizer(wxHORIZONTAL);
     wxWindow* qty_box = ui::make_text_field(
@@ -370,7 +372,7 @@ void InventoryBarPanel::build_ui() {
         ch_unit_->SetMinSize(wxSize(FromDIP(96), FromDIP(field_h_logical)));
         qty_row->Add(ch_unit_, 0, wxALIGN_CENTER_VERTICAL);
     }
-    form_sizer_->Add(qty_row, 0, wxEXPAND | wxTOP, FromDIP(2));
+    form_sizer_->Add(qty_row, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     auto* reason_hdr = new wxBoxSizer(wxHORIZONTAL);
     auto* lbl_reason = new wxStaticText(form_scroll_, wxID_ANY, wxT("Motivo (obligatorio):"));
@@ -382,29 +384,29 @@ void InventoryBarPanel::build_ui() {
     lbl_reason_count_->SetFont(Theme::get_font_small(wxFONTWEIGHT_MEDIUM));
     lbl_reason_count_->SetForegroundColour(Theme::ColorTextSecondary);
     reason_hdr->Add(lbl_reason_count_, 0, wxALIGN_CENTER_VERTICAL);
-    form_sizer_->Add(reason_hdr, 0, wxEXPAND | wxTOP, FromDIP(touch ? 6 : 8));
+    form_sizer_->Add(reason_hdr, 0, wxEXPAND | wxTOP, FromDIP(8));
 
     wxWindow* reason_box = ui::make_text_field(
         form_scroll_, txt_reason_, field_h_logical, 100, Theme::get_font_body()
     );
     txt_reason_->SetMaxLength(200);
     txt_reason_->Bind(wxEVT_TEXT, &InventoryBarPanel::on_reason_changed, this);
-    form_sizer_->Add(reason_box, 0, wxEXPAND | wxTOP, FromDIP(2));
+    form_sizer_->Add(reason_box, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     btn_submit_ = new wxButton(form_scroll_, wxID_ANY, wxT("Registrar merma"));
     btn_submit_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     Theme::style_button_primary(btn_submit_, btn_h_logical);
     Theme::ensure_button_min_size(btn_submit_, 180, btn_h_logical);
     btn_submit_->Bind(wxEVT_BUTTON, &InventoryBarPanel::on_submit, this);
-    form_sizer_->Add(btn_submit_, 0, wxEXPAND | wxTOP, FromDIP(touch ? 8 : 10));
+    form_sizer_->Add(btn_submit_, 0, wxEXPAND | wxTOP, FromDIP(10));
 
     lbl_feedback_ = new wxStaticText(form_scroll_, wxID_ANY, wxEmptyString);
     lbl_feedback_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_feedback_->SetForegroundColour(Theme::ColorText);
-    form_sizer_->Add(lbl_feedback_, 0, wxEXPAND | wxTOP, FromDIP(4));
+    form_sizer_->Add(lbl_feedback_, 0, wxEXPAND | wxTOP, FromDIP(6));
 
     form_scroll_->SetSizer(form_sizer_);
-    action_outer->Add(form_scroll_, 1, wxEXPAND | wxALL, FromDIP(touch ? 8 : 12));
+    action_outer->Add(form_scroll_, 1, wxEXPAND | wxALL, FromDIP(16));
 
     action_card_->SetSizer(action_outer);
     main_body_->Add(action_card_, 0, wxEXPAND);
@@ -825,6 +827,24 @@ void InventoryBarPanel::update_list_column_widths() {
         specs.push_back({wxT("Motivo"), max_reason, 0, pad, 0});
         specs.push_back({wxT("Quién"), cap_actor, 0, pad, 0});
         ui::distribute_list_columns(mov_list_, specs, 3);
+        const int cw = mov_list_->GetClientSize().GetWidth();
+        if (cw > 0) {
+            int sum = 0;
+            for (int c = 0; c < 5; ++c) sum += mov_list_->GetColumnWidth(c);
+            int excess = sum - (cw - 2);
+            const int hdrs[5] = {hdr_date, hdr_ing, hdr_qty, hdr_reason, hdr_actor};
+            const int order[5] = {3, 1, 4, 2, 0};
+            for (int idx : order) {
+                if (excess <= 0) break;
+                const int cur_w = mov_list_->GetColumnWidth(idx);
+                const int floor_w = hdrs[idx] + FromDIP(8);
+                const int cut = std::min(excess, std::max(0, cur_w - floor_w));
+                if (cut > 0) {
+                    mov_list_->SetColumnWidth(idx, cur_w - cut);
+                    excess -= cut;
+                }
+            }
+        }
     }
 
     sizing_columns_ = false;

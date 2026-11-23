@@ -15,12 +15,13 @@ namespace app::frontend {
 class AuditLogPanel : public wxPanel {
 public:
     AuditLogPanel(wxWindow* parent, std::shared_ptr<contracts::IAccountService> account_service);
-    ~AuditLogPanel() override = default;
+    ~AuditLogPanel() override;
 
 private:
     void setup_ui();
     void load_events();
     void auto_size_columns();
+    void update_responsive_header();
     void on_search_clicked(wxCommandEvent& event);
     void on_prev_page(wxCommandEvent& event);
     void on_next_page(wxCommandEvent& event);
@@ -31,6 +32,9 @@ private:
     std::shared_ptr<contracts::IAccountService> account_service_;
 
     // Componentes visuales
+    wxBoxSizer* top_bar_{nullptr};
+    wxStaticText* lbl_title_{nullptr};
+    wxStaticText* lbl_subtitle_{nullptr};
     CardPanel* main_card_{nullptr};
     wxPanel* pnl_warning_{nullptr};
     wxStaticText* lbl_warning_{nullptr};
@@ -56,7 +60,10 @@ private:
     std::size_t current_page_{1};
     static constexpr std::size_t kPageSize{100};
     std::vector<contracts::AuditEventDto> current_events_;
+    std::string last_warning_text_;
+    bool destroying_{false};
     bool in_size_event_{false};
+    bool top_bar_stacked_{false};
 };
 
 } // namespace app::frontend

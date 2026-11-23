@@ -79,6 +79,48 @@ std::string threshold_base_to_input_string(std::int64_t threshold_base, const st
     return std::to_string(threshold_base);
 }
 
+constexpr const char* kStockHintUtf8 = "Se modifica registrando compras o mermas.";
+
+void wrap_static_text_deterministic(wxStaticText* lbl, const wxString& raw, int wrap_w) {
+    if (!lbl) return;
+    const int safe_w = std::max(lbl->FromDIP(110), wrap_w);
+    wxClientDC dc(lbl);
+    dc.SetFont(lbl->GetFont());
+    wxString wrapped;
+    wxString cur_line;
+    int line_count = 0;
+    size_t pos = 0;
+    while (pos < raw.length()) {
+        size_t next = raw.find(wxT(' '), pos);
+        wxString word = (next == wxString::npos) ? raw.Mid(pos) : raw.Mid(pos, next - pos);
+        wxString cand = cur_line.IsEmpty() ? word : (cur_line + wxT(" ") + word);
+        if (!cur_line.IsEmpty() && dc.GetTextExtent(cand).GetWidth() > safe_w) {
+            if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+            wrapped += cur_line;
+            ++line_count;
+            cur_line = word;
+        } else {
+            cur_line = cand;
+        }
+        if (next == wxString::npos) break;
+        pos = next + 1;
+    }
+    if (!cur_line.IsEmpty()) {
+        if (!wrapped.IsEmpty()) wrapped += wxT("\n");
+        wrapped += cur_line;
+        ++line_count;
+    }
+    line_count = std::max(1, line_count);
+    const int line_h = dc.GetTextExtent(wxT("Ág")).GetHeight();
+    const wxSize ext = dc.GetMultiLineTextExtent(wrapped);
+    const int min_h = std::max(ext.GetHeight(), line_count * line_h) + lbl->FromDIP(2);
+
+    lbl->SetMinSize(wxDefaultSize);
+    lbl->SetLabel(wrapped);
+    lbl->InvalidateBestSize();
+    lbl->SetMinSize(wxSize(-1, min_h));
+}
+
 } // namespace
 
 std::string format_ingredient_quantity(std::int64_t amount_base, const std::string& unit_dimension) {
@@ -177,9 +219,23 @@ InventoryIngredientsPanel::InventoryIngredientsPanel(
     build_ui();
     refresh_data();
     CallAfter([this]() {
+        if (destroying_ || IsBeingDeleted()) return;
         update_list_column_widths();
+        update_right_scroll();
         Layout();
     });
+}
+
+InventoryIngredientsPanel::~InventoryIngredientsPanel() {
+    destroying_ = true;
+    Unbind(wxEVT_SIZE, &InventoryIngredientsPanel::on_size, this);
+    if (list_) {
+        list_->Unbind(wxEVT_LIST_ITEM_SELECTED, &InventoryIngredientsPanel::on_list_selected, this);
+    }
+    if (keypad_) {
+        keypad_->hide_keypad(false);
+    }
+    DestroyChildren();
 }
 
 void InventoryIngredientsPanel::build_ui() {
@@ -256,47 +312,53 @@ void InventoryIngredientsPanel::build_ui() {
         ui::apply_touch_row_height(list_);
     }
     list_->Bind(wxEVT_LIST_ITEM_SELECTED, &InventoryIngredientsPanel::on_list_selected, this);
-    left_sizer->Add(list_, 1, wxEXPAND | wxALL, FromDIP(4));
+    left_sizer->Add(list_, 1, wxEXPAND | wxALL, FromDIP(16));
 
     left_card_->SetSizer(left_sizer);
-    body->Add(left_card_, 16, wxEXPAND | wxRIGHT, FromDIP(6));
+    body->Add(left_card_, 16, wxEXPAND | wxRIGHT, FromDIP(8));
 
-    // 3. Tarjeta de detalle derecha
+    // 3. Tarjeta de detalle derecha (envuelta en wxScrolledWindow con relleno interior 16 lógicas)
     right_card_ = new CardPanel(this);
-    right_card_->SetMinSize(FromDIP(wxSize(202, -1)));
+    right_card_->SetMinSize(FromDIP(wxSize(220, -1)));
+    right_scroll_ = new wxScrolledWindow(
+        right_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxVSCROLL
+    );
+    right_scroll_->SetBackgroundColour(Theme::ColorSurface);
+    right_scroll_->ShowScrollbars(wxSHOW_SB_NEVER, wxSHOW_SB_DEFAULT);
+    right_scroll_->SetScrollRate(0, FromDIP(14));
     auto* right_sizer = new wxBoxSizer(wxVERTICAL);
 
-    lbl_form_title_ = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("Ingrediente"));
+    lbl_form_title_ = new wxStaticText(right_scroll_, wxID_ANY, wxString::FromUTF8("Ingrediente"));
     lbl_form_title_->SetFont(Theme::get_font_subtitle());
     lbl_form_title_->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_form_title_, 0, wxEXPAND | wxBOTTOM, FromDIP(2));
+    right_sizer->Add(lbl_form_title_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
-    pnl_warning_ = new wxPanel(right_card_, wxID_ANY);
+    pnl_warning_ = new wxPanel(right_scroll_, wxID_ANY);
     pnl_warning_->SetBackgroundColour(Theme::ColorErrorSoft);
     auto* warn_sizer = new wxBoxSizer(wxHORIZONTAL);
     lbl_warning_ = new wxStaticText(pnl_warning_, wxID_ANY, wxEmptyString);
     lbl_warning_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_warning_->SetForegroundColour(Theme::ColorError);
-    warn_sizer->Add(lbl_warning_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP | wxBOTTOM, FromDIP(4));
+    warn_sizer->Add(lbl_warning_, 1, wxEXPAND | wxALL, FromDIP(6));
     pnl_warning_->SetSizer(warn_sizer);
     pnl_warning_->Hide();
-    right_sizer->Add(pnl_warning_, 0, wxEXPAND | wxBOTTOM, FromDIP(4));
+    right_sizer->Add(pnl_warning_, 0, wxEXPAND | wxBOTTOM, FromDIP(8));
 
-    auto* form_grid = new wxFlexGridSizer(2, FromDIP(3), FromDIP(4));
+    auto* form_grid = new wxFlexGridSizer(2, FromDIP(6), FromDIP(8));
     form_grid->AddGrowableCol(1, 1);
 
     // Nombre
-    auto* lbl_name = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("Nombre:"));
+    auto* lbl_name = new wxStaticText(right_scroll_, wxID_ANY, wxString::FromUTF8("Nombre:"));
     lbl_name->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_name->SetForegroundColour(Theme::ColorText);
     form_grid->Add(lbl_name, 0, wxALIGN_CENTER_VERTICAL);
 
-    wxWindow* name_box = ui::make_text_field(right_card_, txt_name_, field_h_logical, -1, Theme::get_font_body());
+    wxWindow* name_box = ui::make_text_field(right_scroll_, txt_name_, field_h_logical, -1, Theme::get_font_body());
     name_box->SetMinSize(wxSize(FromDIP(90), name_box->GetMinSize().GetHeight()));
     form_grid->Add(name_box, 1, wxEXPAND | wxALIGN_CENTER_VERTICAL);
 
     // Cómo se mide
-    auto* lbl_dim = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("Cómo se\nmide:"));
+    auto* lbl_dim = new wxStaticText(right_scroll_, wxID_ANY, wxString::FromUTF8("Cómo se\nmide:"));
     lbl_dim->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_dim->SetForegroundColour(Theme::ColorText);
     form_grid->Add(lbl_dim, 0, wxALIGN_CENTER_VERTICAL);
@@ -306,13 +368,13 @@ void InventoryIngredientsPanel::build_ui() {
     dim_choices.Add(wxString::FromUTF8("Peso"));
     dim_choices.Add(wxString::FromUTF8("Volumen"));
     dim_choices.Add(wxString::FromUTF8("Piezas"));
-    ch_dimension_ = new wxChoice(right_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, dim_choices);
+    ch_dimension_ = new wxChoice(right_scroll_, wxID_ANY, wxDefaultPosition, wxDefaultSize, dim_choices);
     ch_dimension_->SetFont(Theme::get_font_body());
     ch_dimension_->SetSelection(0);
     ch_dimension_->SetMinSize(wxSize(FromDIP(96), field_h_px));
-    auto sync_touch_choice_height = [choice = ch_dimension_, field_h_px]() {
+    auto sync_touch_choice_height = [this, choice = ch_dimension_, field_h_px]() {
 #ifdef __WXMSW__
-        if (choice == nullptr || !Theme::is_touch()) {
+        if (destroying_ || IsBeingDeleted() || choice == nullptr || !Theme::is_touch()) {
             return;
         }
         HWND hwnd = reinterpret_cast<HWND>(choice->GetHWND());
@@ -353,7 +415,7 @@ void InventoryIngredientsPanel::build_ui() {
     }
     ch_dimension_->Bind(wxEVT_CHOICE, &InventoryIngredientsPanel::on_dimension_changed, this);
 
-    pnl_dimension_ro_ = new wxPanel(right_card_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_SIMPLE);
+    pnl_dimension_ro_ = new wxPanel(right_scroll_, wxID_ANY, wxDefaultPosition, wxDefaultSize, wxBORDER_SIMPLE);
     pnl_dimension_ro_->SetBackgroundColour(Theme::ColorSurfaceSubtle);
     pnl_dimension_ro_->SetMinSize(wxSize(FromDIP(96), field_h_px));
     auto* dim_ro_sizer = new wxBoxSizer(wxVERTICAL);
@@ -373,64 +435,72 @@ void InventoryIngredientsPanel::build_ui() {
     right_sizer->Add(form_grid, 0, wxEXPAND);
 
     // Avisar con menos de (etiqueta encima del campo para caber en 960x600 Touch)
-    auto* lbl_thresh = new wxStaticText(
-        right_card_, wxID_ANY, wxString::FromUTF8("Avisar con menos de:"));
-    lbl_thresh->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_thresh->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_thresh, 0, wxEXPAND | wxTOP, FromDIP(4));
+    lbl_thresh_ = new wxStaticText(
+        right_scroll_, wxID_ANY, wxString::FromUTF8("Avisar con menos de:"));
+    lbl_thresh_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_thresh_->SetForegroundColour(Theme::ColorText);
+    right_sizer->Add(lbl_thresh_, 0, wxEXPAND | wxTOP, FromDIP(8));
 
     auto* thresh_row = new wxBoxSizer(wxHORIZONTAL);
-    wxWindow* thresh_box = ui::make_text_field(right_card_, txt_threshold_, field_h_logical, 60, Theme::get_font_body());
+    wxWindow* thresh_box = ui::make_text_field(right_scroll_, txt_threshold_, field_h_logical, 60, Theme::get_font_body());
     thresh_row->Add(thresh_box, 1, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 
-    lbl_threshold_unit_ = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("gramos"));
+    lbl_threshold_unit_ = new wxStaticText(right_scroll_, wxID_ANY, wxString::FromUTF8("gramos"));
     lbl_threshold_unit_->SetFont(Theme::get_font_body());
     lbl_threshold_unit_->SetForegroundColour(Theme::ColorText);
     thresh_row->Add(lbl_threshold_unit_, 0, wxALIGN_CENTER_VERTICAL);
-    right_sizer->Add(thresh_row, 0, wxEXPAND | wxTOP, FromDIP(2));
+    right_sizer->Add(thresh_row, 0, wxEXPAND | wxTOP, FromDIP(6));
 
-    lbl_threshold_hint_ = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("0 significa sin aviso."));
+    lbl_threshold_hint_ = new wxStaticText(right_scroll_, wxID_ANY, wxString::FromUTF8("0 significa sin aviso."));
     lbl_threshold_hint_->SetFont(Theme::get_font_small());
     lbl_threshold_hint_->SetForegroundColour(Theme::ColorTextSecondary);
-    right_sizer->Add(lbl_threshold_hint_, 0, wxEXPAND | wxTOP, FromDIP(2));
+    right_sizer->Add(lbl_threshold_hint_, 0, wxEXPAND | wxTOP, FromDIP(6));
 
-    // Existencia actual (solo lectura, en su propia línea para evitar recorte en 960x600)
-    auto* lbl_stock_caption = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("Existencia actual:"));
-    lbl_stock_caption->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
-    lbl_stock_caption->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_stock_caption, 0, wxEXPAND | wxTOP, FromDIP(3));
+    // Existencia actual: en una fila cuando cabe; se apila solo si el ancho medido no alcanza
+    stock_row_ = new wxBoxSizer(wxHORIZONTAL);
+    lbl_stock_caption_ = new wxStaticText(right_scroll_, wxID_ANY, wxString::FromUTF8("Existencia actual:"));
+    lbl_stock_caption_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
+    lbl_stock_caption_->SetForegroundColour(Theme::ColorText);
+    stock_row_->Add(lbl_stock_caption_, 0, wxALIGN_CENTER_VERTICAL | wxRIGHT, FromDIP(6));
 
-    lbl_stock_value_ = new wxStaticText(right_card_, wxID_ANY, wxString::FromUTF8("-"));
+    lbl_stock_value_ = new wxStaticText(right_scroll_, wxID_ANY, wxString::FromUTF8("-"));
     lbl_stock_value_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     lbl_stock_value_->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_stock_value_, 0, wxEXPAND | wxTOP, FromDIP(1));
+    stock_row_->Add(lbl_stock_value_, 0, wxALIGN_CENTER_VERTICAL);
+    right_sizer->Add(stock_row_, 0, wxEXPAND | wxTOP, FromDIP(8));
 
     lbl_stock_hint_ = new wxStaticText(
-        right_card_,
+        right_scroll_,
         wxID_ANY,
-        wxString::FromUTF8("Se modifica registrando compras o mermas."));
+        wxString::FromUTF8(kStockHintUtf8));
     lbl_stock_hint_->SetFont(Theme::get_font_small());
     lbl_stock_hint_->SetForegroundColour(Theme::ColorTextSecondary);
-    lbl_stock_hint_->Wrap(FromDIP(180));
-    right_sizer->Add(lbl_stock_hint_, 0, wxEXPAND | wxTOP | wxBOTTOM, FromDIP(2));
+    right_sizer->Add(lbl_stock_hint_, 0, wxEXPAND | wxTOP, FromDIP(6));
 
-    // Botón Guardar siempre visible sin desplazarse
+    right_scroll_->SetSizer(right_sizer);
+
+    // Pie fijo de right_card_ (relleno 16 lógicas en los 4 lados de right_card_)
+    auto* right_outer = new wxBoxSizer(wxVERTICAL);
+    right_outer->Add(right_scroll_, 1, wxEXPAND | wxLEFT | wxRIGHT | wxTOP, FromDIP(16));
+
+    auto* footer_sizer = new wxBoxSizer(wxVERTICAL);
     btn_save_ = new wxButton(right_card_, wxID_ANY, wxString::FromUTF8("Guardar"));
     btn_save_->SetFont(Theme::get_font_body(wxFONTWEIGHT_BOLD));
     Theme::style_button_primary(btn_save_, btn_h_logical);
     Theme::ensure_button_min_size(btn_save_, 120, btn_h_logical);
     btn_save_->Bind(wxEVT_BUTTON, &InventoryIngredientsPanel::on_save, this);
-    right_sizer->Add(btn_save_, 0, wxALIGN_LEFT | wxTOP, FromDIP(2));
+    footer_sizer->Add(btn_save_, 0, wxALIGN_LEFT);
 
     lbl_feedback_ = new wxStaticText(right_card_, wxID_ANY, wxEmptyString);
     lbl_feedback_->SetFont(Theme::get_font_small(wxFONTWEIGHT_BOLD));
     lbl_feedback_->SetForegroundColour(Theme::ColorText);
-    right_sizer->Add(lbl_feedback_, 0, wxEXPAND | wxTOP, FromDIP(2));
+    lbl_feedback_->Hide();
+    footer_sizer->Add(lbl_feedback_, 0, wxEXPAND | wxTOP, FromDIP(6));
 
-    right_sizer->AddStretchSpacer(1);
+    auto* footer_pad = new wxBoxSizer(wxVERTICAL);
+    footer_pad->Add(footer_sizer, 0, wxEXPAND | wxLEFT | wxRIGHT | wxBOTTOM, FromDIP(16));
+    right_outer->Add(footer_pad, 0, wxEXPAND | wxTOP, FromDIP(8));
 
-    auto* right_outer = new wxBoxSizer(wxVERTICAL);
-    right_outer->Add(right_sizer, 1, wxEXPAND | wxALL, FromDIP(touch ? 5 : 12));
     right_card_->SetSizer(right_outer);
     body->Add(right_card_, 8, wxEXPAND);
 
@@ -552,6 +622,7 @@ void InventoryIngredientsPanel::refresh_data(const std::string& keep_selection_i
 
     update_empty_state();
     update_permissions();
+    update_right_scroll();
     Layout();
     update_list_column_widths();
 }
@@ -722,22 +793,96 @@ void InventoryIngredientsPanel::update_list_column_widths() {
     const int pad = 10;
     std::vector<ui::ColumnSpec> specs;
     specs.push_back({wxString::FromUTF8("Nombre"), max_name, 0, pad, 0});
-    specs.push_back({wxString::FromUTF8("Existencia"), max_stock, max_stock, pad, 0});
-    specs.push_back({wxString::FromUTF8("Avisar con menos de"), max_thresh, max_thresh, pad, 0});
-    specs.push_back({wxString::FromUTF8("Estado"), status_w, status_w, pad, 0});
+    specs.push_back({wxString::FromUTF8("Existencia"), max_stock, 0, pad, 0});
+    specs.push_back({wxString::FromUTF8("Avisar con menos de"), max_thresh, 0, pad, 0});
+    specs.push_back({wxString::FromUTF8("Estado"), status_w, 0, pad, 0});
 
     ui::distribute_list_columns(list_, specs, 0);
+    const int cw = list_->GetClientSize().GetWidth();
+    if (cw > 0) {
+        int sum = 0;
+        for (int c = 0; c < 4; ++c) sum += list_->GetColumnWidth(c);
+        int excess = sum - (cw - 2);
+        const int order[4] = {0, 3, 2, 1};
+        for (int idx : order) {
+            if (excess <= 0) break;
+            const int cur_w = list_->GetColumnWidth(idx);
+            const int floor_w = ui::header_text_width(list_, specs[static_cast<std::size_t>(idx)].header) + FromDIP(8);
+            const int cut = std::min(excess, std::max(0, cur_w - floor_w));
+            if (cut > 0) {
+                list_->SetColumnWidth(idx, cur_w - cut);
+                excess -= cut;
+            }
+        }
+    }
     sizing_columns_ = false;
+}
+
+void InventoryIngredientsPanel::update_right_scroll() {
+    if (destroying_ || !right_scroll_ || !right_card_) return;
+    auto run_pass = [&](int sc_w) {
+        const int wrap_w = std::max(FromDIP(130), sc_w - FromDIP(8));
+        if (lbl_warning_ && pnl_warning_ && pnl_warning_->IsShown()) {
+            const wxString warn_txt = load_failed_
+                ? wxString::FromUTF8("Solo lectura: no se pudo consultar el inventario.")
+                : wxString::FromUTF8("Solo lectura: no tienes permiso para modificar ingredientes.");
+            wrap_static_text_deterministic(lbl_warning_, warn_txt, wrap_w - FromDIP(12));
+            pnl_warning_->Layout();
+        }
+        if (lbl_thresh_) {
+            wrap_static_text_deterministic(lbl_thresh_, wxString::FromUTF8("Avisar con menos de:"), wrap_w);
+        }
+        if (stock_row_ && lbl_stock_caption_ && lbl_stock_value_) {
+            wxClientDC sdc(lbl_stock_caption_);
+            sdc.SetFont(lbl_stock_caption_->GetFont());
+            const int cap_w = sdc.GetTextExtent(lbl_stock_caption_->GetLabel()).GetWidth();
+            sdc.SetFont(lbl_stock_value_->GetFont());
+            const int val_w = sdc.GetTextExtent(lbl_stock_value_->GetLabel()).GetWidth();
+            const bool want_stacked = (cap_w + FromDIP(6) + val_w) > wrap_w;
+            if (want_stacked != stock_row_stacked_) {
+                stock_row_stacked_ = want_stacked;
+                stock_row_->SetOrientation(want_stacked ? wxVERTICAL : wxHORIZONTAL);
+                if (auto* ic = stock_row_->GetItem(lbl_stock_caption_)) {
+                    ic->SetFlag(want_stacked ? wxEXPAND : (wxALIGN_CENTER_VERTICAL | wxRIGHT));
+                    ic->SetBorder(want_stacked ? 0 : FromDIP(6));
+                }
+                if (auto* iv = stock_row_->GetItem(lbl_stock_value_)) {
+                    iv->SetFlag(want_stacked ? (wxEXPAND | wxTOP) : wxALIGN_CENTER_VERTICAL);
+                    iv->SetBorder(want_stacked ? FromDIP(2) : 0);
+                }
+            }
+        }
+        if (lbl_stock_hint_) {
+            wrap_static_text_deterministic(lbl_stock_hint_, wxString::FromUTF8(kStockHintUtf8), wrap_w);
+        }
+        if (lbl_feedback_) {
+            const bool has_fb = !last_feedback_.empty();
+            lbl_feedback_->Show(has_fb);
+            if (has_fb) {
+                const int fb_w = std::max(FromDIP(130), right_card_->GetClientSize().GetWidth() - FromDIP(36));
+                lbl_feedback_->SetForegroundColour(last_feedback_is_error_ ? Theme::ColorError : Theme::ColorSuccess);
+                wrap_static_text_deterministic(lbl_feedback_, wxString::FromUTF8(last_feedback_), fb_w);
+            }
+        }
+        right_scroll_->Layout();
+        right_scroll_->FitInside();
+    };
+
+    const int w1 = right_scroll_->GetClientSize().GetWidth();
+    if (w1 > 0) {
+        run_pass(w1);
+        const int w2 = right_scroll_->GetClientSize().GetWidth();
+        if (w2 > 0 && w2 != w1) {
+            run_pass(w2);
+        }
+    }
+    right_card_->Layout();
 }
 
 void InventoryIngredientsPanel::set_feedback(const std::string& message, bool is_error) {
     last_feedback_ = message;
     last_feedback_is_error_ = is_error;
-    lbl_feedback_->SetLabel(wxString::FromUTF8(last_feedback_));
-    lbl_feedback_->SetForegroundColour(last_feedback_is_error_ ? Theme::ColorError : Theme::ColorSuccess);
-    const int wrap_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 14 : 26));
-    lbl_feedback_->Wrap(wrap_w);
-    right_card_->Layout();
+    update_right_scroll();
 }
 
 void InventoryIngredientsPanel::on_new_ingredient(wxCommandEvent& /*event*/) {
@@ -882,26 +1027,10 @@ void InventoryIngredientsPanel::on_save(wxCommandEvent& /*event*/) {
 void InventoryIngredientsPanel::on_size(wxSizeEvent& event) {
     event.Skip();
     CallAfter([this]() {
+        if (destroying_ || IsBeingDeleted()) return;
         update_empty_state();
         update_list_column_widths();
-        if (lbl_warning_ != nullptr && pnl_warning_ != nullptr && pnl_warning_->IsShown() && right_card_ != nullptr) {
-            const int warn_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 18 : 28));
-            const wxString warn_txt = load_failed_
-                ? wxString::FromUTF8("Solo lectura: no se pudo consultar el inventario.")
-                : wxString::FromUTF8("Solo lectura: no tienes permiso para modificar ingredientes.");
-            lbl_warning_->SetLabel(warn_txt);
-            lbl_warning_->Wrap(warn_w);
-        }
-        if (lbl_feedback_ != nullptr && right_card_ != nullptr) {
-            const int wrap_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 14 : 26));
-            lbl_feedback_->SetLabel(wxString::FromUTF8(last_feedback_));
-            lbl_feedback_->Wrap(wrap_w);
-        }
-        if (lbl_stock_hint_ != nullptr && right_card_ != nullptr) {
-            const int wrap_w = std::max(FromDIP(160), right_card_->GetClientSize().GetWidth() - FromDIP(Theme::is_touch() ? 14 : 26));
-            lbl_stock_hint_->SetLabel(wxString::FromUTF8("Se modifica registrando compras o mermas."));
-            lbl_stock_hint_->Wrap(wrap_w);
-        }
+        update_right_scroll();
         Layout();
     });
 }

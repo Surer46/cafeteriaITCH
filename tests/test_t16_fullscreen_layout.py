@@ -99,6 +99,16 @@ ROLES_MIN_FULLSCREEN_TOGGLES = {"Estandar": 10, "Tactil": 7}
 ROLES_MIN_TOUCH_1200_ROWS = 2
 ROLES_SECTION_HEADERS = {"Punto de Venta", "Inventario", "Caja y Reportes", "BackOffice"}
 T16C_SCREENS = {"venta", "productos_y_recetas", "promociones", "combos"}
+WINDOWED_1200_LIST_SCREENS = T16C_SCREENS | {
+    "existencias",
+    "reabastecimiento",
+    "ingredientes",
+    "barra",
+    "caja_corte",
+    "caja_historial",
+    "bitacora",
+    "reportes",
+}
 
 
 def count_visible_permissions_from_db(db_path):
@@ -149,46 +159,27 @@ SCREEN_STATES = {
     "productos_y_recetas": {"estado": "terminada", "bloque": "T16c"},
     "promociones": {"estado": "terminada", "bloque": "T16c"},
     "combos": {"estado": "terminada", "bloque": "T16c"},
-    # Pendientes T16c (resto: Existencias, Reabastecimiento, Ingredientes, Barra, Caja y Reportes)
-    "existencias": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "reabastecimiento": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "ingredientes": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "barra": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "caja_corte": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "caja_historial": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "bitacora": {"estado": "pendiente T16c", "bloque": "T16c"},
-    "reportes": {"estado": "pendiente T16c", "bloque": "T16c"},
+    # Terminadas en T16e (Existencias, Reabastecimiento, Ingredientes, Barra, Caja y Reportes)
+    "existencias": {"estado": "terminada", "bloque": "T16e"},
+    "reabastecimiento": {"estado": "terminada", "bloque": "T16e"},
+    "ingredientes": {"estado": "terminada", "bloque": "T16e"},
+    "barra": {"estado": "terminada", "bloque": "T16e"},
+    "caja_corte": {"estado": "terminada", "bloque": "T16e"},
+    "caja_historial": {"estado": "terminada", "bloque": "T16e"},
+    "bitacora": {"estado": "terminada", "bloque": "T16e"},
+    "reportes": {"estado": "terminada", "bloque": "T16e"},
 }
 
 
 # ---------------------------------------------------------------------------
-# Excepciones conocidas SOLO para pantallas pendientes (T16c).
+# Excepciones conocidas SOLO para pantallas pendientes.
 # Clave: (pantalla, perfil, tamano, metrica)
 #   - tamano: "fullscreen", "1200x720", "960x600" o "toggle_fullscreen"
 #   - metrica: "union_w", "union_h", "gap_h", "gap_v", "vscroll", "hscroll",
 #              "texto_cortado", "lv_cols_fill", "lv_clip_sobra"
 # Prohibido agregar una pantalla con estado "terminada" a esta lista.
 # ---------------------------------------------------------------------------
-KNOWN_EXCEPTIONS = {
-    # --- Pantalla completa ---
-    ("caja_historial", "Estandar", "fullscreen", "vscroll"): {
-        "bloque": "T16c",
-        "detalle": "Historial de cortes muestra barra vertical en pantalla completa Estándar",
-    },
-    ("caja_historial", "Tactil", "fullscreen", "vscroll"): {
-        "bloque": "T16c",
-        "detalle": "Historial de cortes muestra barra vertical en pantalla completa Táctil",
-    },
-    # --- Ventana normal (1200x720 y 960x600) ---
-    ("caja_corte", "Tactil", "960x600", "texto_cortado"): {
-        "bloque": "T16c",
-        "detalle": 'Etiqueta "Motivo de diferencia (oblig..." recortada en 960x600 Táctil',
-    },
-    ("bitacora", "Tactil", "960x600", "texto_cortado"): {
-        "bloque": "T16c",
-        "detalle": 'Etiqueta "Registro cronológico inmuta..." recortada en 960x600 Táctil',
-    },
-}
+KNOWN_EXCEPTIONS = {}
 
 
 def validate_config_integrity():
@@ -757,8 +748,8 @@ def evaluate_checks(fs_rows, win_rows, expected_total_toggles):
             f"medida={w['texto_cortado']} umbral=-",
         )
 
-        # Criterio 4 (T16c): en 1200x720 las listas de las 4 pantallas de T16c llenan >=95% sin WS_HSCROLL y sin CLIP+SOBRA >= 40 log
-        if size_label == "1200x720" and screen in T16C_SCREENS:
+        # Criterio 4 (T16c/T16e): en 1200x720 las listas llenan >=95% sin WS_HSCROLL y sin CLIP+SOBRA >= 40 log
+        if size_label == "1200x720" and screen in WINDOWED_1200_LIST_SCREENS:
             lv_metrics_w = w.get("lv_metrics", [])
             if lv_metrics_w:
                 bad_fill_w = [
